@@ -10,6 +10,17 @@
 *.userosscache
 *.sln.docstates
 
+# .gitignore
+*.log
+*.tmp
+.vscode/
+.idea/
+config/local-settings.json
+**/bin/
+**/obj/
+*.user
+*.suo
+
 # User-specific files (MonoDevelop/Xamarin Studio)
 *.userprefs
 
