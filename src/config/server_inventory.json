@@ -1,0 +1,136 @@
+{
+    "metadata": {
+        "lastUpdated": "2024-01-15T08:00:00Z",
+        "version": "1.0.0",
+        "environment": "Production"
+    },
+    "inventory": {
+        "total": 5234,
+        "regions": {
+            "APAC": {
+                "count": 1200,
+                "datacenters": {
+                    "Singapore": {
+                        "servers": 600,
+                        "subnets": ["10.1.0.0/16", "10.2.0.0/16"],
+                        "proxyServer": "proxy.sg.internal:8080"
+                    },
+                    "Tokyo": {
+                        "servers": 400,
+                        "subnets": ["10.3.0.0/16", "10.4.0.0/16"],
+                        "proxyServer": "proxy.jp.internal:8080"
+                    },
+                    "Sydney": {
+                        "servers": 200,
+                        "subnets": ["10.5.0.0/16"],
+                        "proxyServer": "proxy.au.internal:8080"
+                    }
+                }
+            },
+            "EMEA": {
+                "count": 2300,
+                "datacenters": {
+                    "London": {
+                        "servers": 800,
+                        "subnets": ["172.16.0.0/16", "172.17.0.0/16"],
+                        "proxyServer": "proxy.uk.internal:8080"
+                    },
+                    "Frankfurt": {
+                        "servers": 1000,
+                        "subnets": ["172.18.0.0/16", "172.19.0.0/16"],
+                        "proxyServer": "proxy.de.internal:8080"
+                    },
+                    "Dubai": {
+                        "servers": 500,
+                        "subnets": ["172.20.0.0/16"],
+                        "proxyServer": "proxy.ae.internal:8080"
+                    }
+                }
+            },
+            "Americas": {
+                "count": 1734,
+                "datacenters": {
+                    "Virginia": {
+                        "servers": 800,
+                        "subnets": ["192.168.0.0/16", "192.169.0.0/16"],
+                        "proxyServer": "proxy.us-east.internal:8080"
+                    },
+                    "Texas": {
+                        "servers": 534,
+                        "subnets": ["192.170.0.0/16"],
+                        "proxyServer": "proxy.us-central.internal:8080"
+                    },
+                    "California": {
+                        "servers": 400,
+                        "subnets": ["192.171.0.0/16"],
+                        "proxyServer": "proxy.us-west.internal:8080"
+                    }
+                }
+            }
+        },
+        "environments": {
+            "Production": {
+                "count": 3500,
+                "criticalityLevel": "High",
+                "maintenanceWindow": {
+                    "weekday": "Sunday",
+                    "startTime": "01:00",
+                    "duration": "4h"
+                },
+                "deploymentRules": {
+                    "requireApproval": true,
+                    "maxConcurrent": 50,
+                    "rollbackEnabled": true
+                }
+            },
+            "UAT": {
+                "count": 1000,
+                "criticalityLevel": "Medium",
+                "maintenanceWindow": {
+                    "weekday": "Saturday",
+                    "startTime": "10:00",
+                    "duration": "8h"
+                },
+                "deploymentRules": {
+                    "requireApproval": false,
+                    "maxConcurrent": 100,
+                    "rollbackEnabled": true
+                }
+            },
+            "Development": {
+                "count": 734,
+                "criticalityLevel": "Low",
+                "maintenanceWindow": {
+                    "weekday": "Any",
+                    "startTime": "Any",
+                    "duration": "Any"
+                },
+                "deploymentRules": {
+                    "requireApproval": false,
+                    "maxConcurrent": 200,
+                    "rollbackEnabled": false
+                }
+            }
+        },
+        "serverTypes": {
+            "Windows": {
+                "2019": {
+                    "count": 2000,
+                    "updatePolicy": "Monthly",
+                    "backupPolicy": "Daily"
+                },
+                "2016": {
+                    "count": 2500,
+                    "updatePolicy": "Monthly",
+                    "backupPolicy": "Daily"
+                },
+                "2012R2": {
+                    "count": 734,
+                    "updatePolicy": "Monthly",
+                    "backupPolicy": "Daily",
+                    "endOfSupport": "2023-10-10"
+                }
+            }
+        }
+    }
+}
