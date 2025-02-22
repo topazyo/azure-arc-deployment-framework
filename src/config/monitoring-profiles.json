@@ -1,0 +1,120 @@
+{
+    "profiles": {
+        "production": {
+            "name": "Production Monitoring",
+            "description": "Comprehensive monitoring for production servers",
+            "components": {
+                "arc": {
+                    "healthChecks": {
+                        "frequency": "5m",
+                        "timeout": "30s",
+                        "retries": 3
+                    },
+                    "alerts": {
+                        "connectionLoss": "Critical",
+                        "configurationDrift": "Warning",
+                        "extensionFailure": "Warning"
+                    }
+                },
+                "ama": {
+                    "healthChecks": {
+                        "frequency": "5m",
+                        "timeout": "30s",
+                        "retries": 3
+                    },
+                    "dataCollection": {
+                        "maxLatency": "10m",
+                        "lossThreshold": "1%",
+                        "bufferSize": "50MB"
+                    },
+                    "performance": {
+                        "cpu": {
+                            "warning": 70,
+                            "critical": 90
+                        },
+                        "memory": {
+                            "warning": 80,
+                            "critical": 90
+                        },
+                        "disk": {
+                            "warning": 85,
+                            "critical": 95
+                        }
+                    }
+                }
+            },
+            "alerting": {
+                "email": ["prod-alerts@company.com"],
+                "teams": ["Production Support"],
+                "severity": {
+                    "critical": {
+                        "notificationChannel": ["email", "teams", "sms"],
+                        "escalationAfter": "15m"
+                    },
+                    "warning": {
+                        "notificationChannel": ["email", "teams"],
+                        "escalationAfter": "60m"
+                    }
+                }
+            }
+        },
+        "development": {
+            "name": "Development Monitoring",
+            "description": "Basic monitoring for development servers",
+            "components": {
+                "arc": {
+                    "healthChecks": {
+                        "frequency": "15m",
+                        "timeout": "30s",
+                        "retries": 2
+                    },
+                    "alerts": {
+                        "connectionLoss": "Warning",
+                        "configurationDrift": "Information",
+                        "extensionFailure": "Warning"
+                    }
+                },
+                "ama": {
+                    "healthChecks": {
+                        "frequency": "15m",
+                        "timeout": "30s",
+                        "retries": 2
+                    },
+                    "dataCollection": {
+                        "maxLatency": "30m",
+                        "lossThreshold": "5%",
+                        "bufferSize": "25MB"
+                    },
+                    "performance": {
+                        "cpu": {
+                            "warning": 80,
+                            "critical": 95
+                        },
+                        "memory": {
+                            "warning": 85,
+                            "critical": 95
+                        },
+                        "disk": {
+                            "warning": 90,
+                            "critical": 95
+                        }
+                    }
+                }
+            },
+            "alerting": {
+                "email": ["dev-alerts@company.com"],
+                "teams": ["Development Team"],
+                "severity": {
+                    "critical": {
+                        "notificationChannel": ["email", "teams"],
+                        "escalationAfter": "30m"
+                    },
+                    "warning": {
+                        "notificationChannel": ["email"],
+                        "escalationAfter": "120m"
+                    }
+                }
+            }
+        }
+    }
+}

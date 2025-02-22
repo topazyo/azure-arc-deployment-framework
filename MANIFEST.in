@@ -1,0 +1,7 @@
+include README.md
+include LICENSE
+include requirements.txt
+recursive-include src/Config *.json
+recursive-include src/PowerShell *.ps1 *.psd1 *.psm1
+recursive-include docs *.md
+recursive-include tests *.py *.ps1

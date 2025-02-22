@@ -1,0 +1,125 @@
+{
+    "templates": {
+        "standard": {
+            "name": "Standard Deployment",
+            "description": "Standard Arc and AMA deployment configuration",
+            "components": {
+                "arc": {
+                    "tags": {
+                        "Environment": "{environment}",
+                        "DeploymentType": "Standard",
+                        "ManagementLevel": "Full"
+                    },
+                    "extensions": [
+                        {
+                            "name": "AzureMonitorAgent",
+                            "publisher": "Microsoft.Azure.Monitor",
+                            "type": "AzureMonitorWindowsAgent"
+                        }
+                    ]
+                },
+                "ama": {
+                    "dataCollection": {
+                        "useTemplate": "security.windows.enhanced",
+                        "customization": {
+                            "samplingFrequency": "5m",
+                            "bufferSize": "50MB"
+                        }
+                    },
+                    "workspace": {
+                        "type": "Dedicated",
+                        "retentionDays": 30
+                    }
+                }
+            },
+            "validation": {
+                "preDeployment": [
+                    "Test-ArcPrerequisites",
+                    "Test-NetworkConnectivity",
+                    "Test-WorkspaceAccess"
+                ],
+                "postDeployment": [
+                    "Test-ArcConnection",
+                    "Test-AMAHealth",
+                    "Test-DataCollection"
+                ]
+            }
+        },
+        "minimal": {
+            "name": "Minimal Deployment",
+            "description": "Minimal Arc deployment without AMA",
+            "components": {
+                "arc": {
+                    "tags": {
+                        "Environment": "{environment}",
+                        "DeploymentType": "Minimal",
+                        "ManagementLevel": "Basic"
+                    },
+                    "extensions": []
+                }
+            },
+            "validation": {
+                "preDeployment": [
+                    "Test-ArcPrerequisites",
+                    "Test-NetworkConnectivity"
+                ],
+                "postDeployment": [
+                    "Test-ArcConnection"
+                ]
+            }
+        },
+        "compliance": {
+            "name": "Compliance Deployment",
+            "description": "Compliance-focused deployment with enhanced monitoring",
+            "components": {
+                "arc": {
+                    "tags": {
+                        "Environment": "{environment}",
+                        "DeploymentType": "Compliance",
+                        "ManagementLevel": "Enhanced",
+                        "ComplianceRequired": "True"
+                    },
+                    "extensions": [
+                        {
+                            "name": "AzureMonitorAgent",
+                            "publisher": "Microsoft.Azure.Monitor",
+                            "type": "AzureMonitorWindowsAgent"
+                        },
+                        {
+                            "name": "GuestConfiguration",
+                            "publisher": "Microsoft.GuestConfiguration",
+                            "type": "ConfigurationforWindows"
+                        }
+                    ]
+                },
+                "ama": {
+                    "dataCollection": {
+                        "useTemplate": "security.windows.compliance",
+                        "customization": {
+                            "samplingFrequency": "5m",
+                            "bufferSize": "100MB"
+                        }
+                    },
+                    "workspace": {
+                        "type": "Dedicated",
+                        "retentionDays": 90
+                    }
+                }
+            },
+            "validation": {
+                "preDeployment": [
+                    "Test-ArcPrerequisites",
+                    "Test-NetworkConnectivity",
+                    "Test-WorkspaceAccess",
+                    "Test-ComplianceRequirements"
+                ],
+                "postDeployment": [
+                    "Test-ArcConnection",
+                    "Test-AMAHealth",
+                    "Test-DataCollection",
+                    "Test-ComplianceStatus"
+                ]
+            }
+        }
+    }
+}

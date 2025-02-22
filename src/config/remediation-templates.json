@@ -1,0 +1,131 @@
+{
+    "templates": {
+        "connectivity": {
+            "arcAgent": {
+                "name": "Arc Agent Connectivity",
+                "description": "Remediation steps for Arc agent connectivity issues",
+                "steps": [
+                    {
+                        "name": "Verify Network",
+                        "action": "Test-ArcConnectivity",
+                        "parameters": {
+                            "detailed": true,
+                            "timeout": 30
+                        },
+                        "retryCount": 3,
+                        "continueOnFailure": false
+                    },
+                    {
+                        "name": "Check Proxy",
+                        "action": "Test-ProxyConfiguration",
+                        "parameters": {
+                            "validateConnectivity": true
+                        },
+                        "retryCount": 2,
+                        "continueOnFailure": true
+                    },
+                    {
+                        "name": "Reset Agent",
+                        "action": "Reset-ArcAgent",
+                        "parameters": {
+                            "preserveConfig": true
+                        },
+                        "retryCount": 1,
+                        "continueOnFailure": false
+                    }
+                ],
+                "validation": {
+                    "action": "Test-ArcConnection",
+                    "expectedResult": "Connected"
+                }
+            },
+            "amaAgent": {
+                "name": "AMA Connectivity",
+                "description": "Remediation steps for AMA connectivity issues",
+                "steps": [
+                    {
+                        "name": "Verify Workspace",
+                        "action": "Test-WorkspaceConnectivity",
+                        "parameters": {
+                            "detailed": true
+                        },
+                        "retryCount": 3,
+                        "continueOnFailure": false
+                    },
+                    {
+                        "name": "Reset AMA",
+                        "action": "Reset-AMAAgent",
+                        "parameters": {
+                            "preserveConfig": true
+                        },
+                        "retryCount": 1,
+                        "continueOnFailure": false
+                    }
+                ],
+                "validation": {
+                    "action": "Test-AMAConnection",
+                    "expectedResult": "Connected"
+                }
+            }
+        },
+        "performance": {
+            "highCPU": {
+                "name": "High CPU Usage",
+                "description": "Remediation steps for high CPU usage",
+                "steps": [
+                    {
+                        "name": "Analyze CPU",
+                        "action": "Get-ProcessUtilization",
+                        "parameters": {
+                            "sortBy": "CPU",
+                            "top": 5
+                        },
+                        "retryCount": 1,
+                        "continueOnFailure": true
+                    },
+                    {
+                        "name": "Optimize Collection",
+                        "action": "Optimize-DataCollection",
+                        "parameters": {
+                            "target": "CPU"
+                        },
+                        "retryCount": 1,
+                        "continueOnFailure": false
+                    }
+                ],
+                "validation": {
+                    "action": "Test-CPUUsage",
+                    "expectedResult": "Normal"
+                }
+            },
+            "highMemory": {
+                "name": "High Memory Usage",
+                "description": "Remediation steps for high memory usage",
+                "steps": [
+                    {
+                        "name": "Analyze Memory",
+                        "action": "Get-MemoryUtilization",
+                        "parameters": {
+                            "detailed": true
+                        },
+                        "retryCount": 1,
+                        "continueOnFailure": true
+                    },
+                    {
+                        "name": "Optimize Buffers",
+                        "action": "Optimize-MemoryBuffers",
+                        "parameters": {
+                            "aggressive": false
+                        },
+                        "retryCount": 1,
+                        "continueOnFailure": false
+                    }
+                ],
+                "validation": {
+                    "action": "Test-MemoryUsage",
+                    "expectedResult": "Normal"
+                }
+            }
+        }
+    }
+}
