@@ -4,86 +4,105 @@ function Start-ArcDiagnostics {
         [Parameter(Mandatory)]
         [string]$ServerName,
         [Parameter()]
+        [string]$WorkspaceId,
+        [Parameter()]
         [switch]$DetailedScan,
         [Parameter()]
-        [string]$OutputPath = ".\Diagnostics",
-        [Parameter()]
-        [switch]$CollectLogs,
-        [Parameter()]
-        [int]$TimeoutSeconds = 300
+        [string]$OutputPath = ".\Diagnostics"
     )
-
+    
     begin {
         $diagnosticResults = @{
-            ServerName = $ServerName
             Timestamp = Get-Date
+            ServerName = $ServerName
             SystemState = @{}
+            ArcStatus = @{}
+            AMAStatus = @{}
             Connectivity = @{}
-            Security = @{}
-            AgentHealth = @{}
+            Logs = @{}
             DetailedAnalysis = @{}
-            Recommendations = @()
-            Errors = @()
         }
 
+        # Ensure output directory exists
         if (-not (Test-Path $OutputPath)) {
-            New-Item -Path $OutputPath -ItemType Directory -Force
+            New-Item -Path $OutputPath -ItemType Directory -Force | Out-Null
         }
 
-        Write-Log -Message "Starting diagnostic scan for server: $ServerName" -Level Information
-        $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+        Write-Verbose "Starting diagnostic collection for $ServerName"
     }
 
     process {
         try {
             # System State Collection
-            Write-Progress -Activity "Arc Diagnostics" -Status "Collecting System State" -PercentComplete 20
             $diagnosticResults.SystemState = Get-SystemState -ServerName $ServerName
+            Write-Progress -Activity "Arc Diagnostics" -Status "Collecting System State" -PercentComplete 20
 
-            # Connectivity Analysis with enhanced endpoint checking
-            Write-Progress -Activity "Arc Diagnostics" -Status "Analyzing Connectivity" -PercentComplete 40
-            $diagnosticResults.Connectivity = Test-ArcConnectivity -ServerName $ServerName -TimeoutSeconds $TimeoutSeconds
+            # Arc Agent Status
+            $arcStatus = Get-Service -Name "himds" -ComputerName $ServerName -ErrorAction SilentlyContinue
+            $diagnosticResults.ArcStatus = @{
+                ServiceStatus = $arcStatus.Status
+                StartType = $arcStatus.StartType
+                Dependencies = $arcStatus.DependentServices
+                Configuration = Get-ArcAgentConfig -ServerName $ServerName
+                LastHeartbeat = Get-LastHeartbeat -ServerName $ServerName
+            }
+            Write-Progress -Activity "Arc Diagnostics" -Status "Checking Arc Status" -PercentComplete 40
 
-            # Enhanced Security Assessment
-            Write-Progress -Activity "Arc Diagnostics" -Status "Performing Security Assessment" -PercentComplete 60
-            $diagnosticResults.Security = Test-SecurityState -ServerName $ServerName
-            
-            # Agent Health Check with extended metrics
-            Write-Progress -Activity "Arc Diagnostics" -Status "Checking Agent Health" -PercentComplete 80
-            $diagnosticResults.AgentHealth = Get-ArcAgentHealth -ServerName $ServerName
+            # AMA Status (if workspace provided)
+            if ($WorkspaceId) {
+                $amaStatus = Get-Service -Name "AzureMonitorAgent" -ComputerName $ServerName -ErrorAction SilentlyContinue
+                $diagnosticResults.AMAStatus = @{
+                    ServiceStatus = $amaStatus.Status
+                    StartType = $amaStatus.StartType
+                    Configuration = Get-AMAConfig -ServerName $ServerName
+                    DataCollection = Get-DataCollectionStatus -ServerName $ServerName -WorkspaceId $WorkspaceId
+                    DCRStatus = Get-DCRAssociationStatus -ServerName $ServerName
+                }
+                Write-Progress -Activity "Arc Diagnostics" -Status "Checking AMA Status" -PercentComplete 60
+            }
 
+            # Connectivity Tests
+            $diagnosticResults.Connectivity = @{
+                Arc = Test-ArcConnectivity -ServerName $ServerName
+                AMA = if ($WorkspaceId) { Test-AMAConnectivity -ServerName $ServerName }
+                Proxy = Get-ProxyConfiguration -ServerName $ServerName
+                NetworkPaths = Test-NetworkPaths -ServerName $ServerName
+            }
+            Write-Progress -Activity "Arc Diagnostics" -Status "Testing Connectivity" -PercentComplete 70
+
+            # Log Collection
+            $diagnosticResults.Logs = @{
+                Arc = Get-ArcAgentLogs -ServerName $ServerName
+                AMA = if ($WorkspaceId) { Get-AMALogs -ServerName $ServerName }
+                System = Get-SystemLogs -ServerName $ServerName -LastHours 24
+                Security = Get-SecurityLogs -ServerName $ServerName -LastHours 24
+            }
+            Write-Progress -Activity "Arc Diagnostics" -Status "Collecting Logs" -PercentComplete 80
+
+            # Detailed Analysis if requested
             if ($DetailedScan) {
                 $diagnosticResults.DetailedAnalysis = @{
                     CertificateChain = Test-CertificateTrust -ServerName $ServerName
-                    ProxyConfiguration = Get-ProxyConfiguration -ServerName $ServerName
-                    FirewallRules = Get-ArcFirewallRules -ServerName $ServerName
-                    PerformanceMetrics = Get-DetailedPerformanceMetrics -ServerName $ServerName
-                    NetworkLatency = Test-NetworkLatency -ServerName $ServerName
+                    ProxyConfiguration = Get-DetailedProxyConfig -ServerName $ServerName
+                    FirewallRules = Get-FirewallConfiguration -ServerName $ServerName
+                    PerformanceMetrics = Get-PerformanceMetrics -ServerName $ServerName
+                    SecurityBaseline = Test-SecurityBaseline -ServerName $ServerName
                 }
+                Write-Progress -Activity "Arc Diagnostics" -Status "Performing Detailed Analysis" -PercentComplete 90
             }
 
-            if ($CollectLogs) {
-                $logCollection = Collect-ArcLogs -ServerName $ServerName -OutputPath $OutputPath
-                $diagnosticResults.Logs = $logCollection.Summary
-            }
-
-            # Enhanced Recommendations with severity tracking
-            $diagnosticResults.Recommendations = Get-DiagnosticRecommendations -DiagnosticData $diagnosticResults
+            # Export Results
+            $outputFile = Join-Path $OutputPath "ArcDiagnostics_$($ServerName)_$(Get-Date -Format 'yyyyMMdd_HHmmss').json"
+            $diagnosticResults | ConvertTo-Json -Depth 10 | Out-File $outputFile
+            Write-Verbose "Diagnostic results exported to: $outputFile"
         }
         catch {
-            Write-Error "Diagnostic scan failed: $_"
-            $diagnosticResults.Errors += Convert-ErrorToObject $_
-        }
-        finally {
-            $stopwatch.Stop()
-            $diagnosticResults.ExecutionTime = $stopwatch.Elapsed.TotalSeconds
-
-            # Export Results with timestamp
-            $fileName = "ArcDiagnostics_${ServerName}_$(Get-Date -Format 'yyyyMMddHHmmss').json"
-            $diagnosticResults | ConvertTo-Json -Depth 10 | 
-                Out-File (Join-Path $OutputPath $fileName)
-            
-            Write-Log -Message "Diagnostic scan completed. Results saved to: $fileName" -Level Information
+            Write-Error "Diagnostic collection failed: $_"
+            $diagnosticResults.Error = @{
+                Message = $_.Exception.Message
+                Time = Get-Date
+                Details = $_.Exception.StackTrace
+            }
         }
     }
 
@@ -92,46 +111,96 @@ function Start-ArcDiagnostics {
     }
 }
 
-# Helper function for certificate trust verification
-function Test-CertificateTrust {
-    [CmdletBinding()]
-    param (
-        [Parameter(Mandatory)]
-        [string]$ServerName
-    )
-
-    $results = @{
-        ChainStatus = @()
-        ValidFrom = $null
-        ValidTo = $null
-        Issuer = $null
-        CertificateErrors = @()
-    }
-
+function Get-ArcAgentConfig {
+    param ([string]$ServerName)
+    
     try {
-        $cert = Get-ChildItem Cert:\LocalMachine\My | 
-            Where-Object { $_.Subject -match $ServerName } |
-            Select-Object -First 1
+        $configPath = "\\$ServerName\c$\Program Files\Azure Connected Machine Agent\config"
+        $config = Get-Content "$configPath\agentconfig.json" -ErrorAction Stop | ConvertFrom-Json
+        return $config
+    }
+    catch {
+        Write-Warning "Failed to retrieve Arc agent configuration: $_"
+        return $null
+    }
+}
 
-        if ($cert) {
-            $chain = New-Object -TypeName System.Security.Cryptography.X509Certificates.X509Chain
-            $chain.Build($cert) | Out-Null
+function Get-AMAConfig {
+    param ([string]$ServerName)
+    
+    try {
+        $configPath = "\\$ServerName\c$\Program Files\Azure Monitor Agent\config"
+        $config = Get-Content "$configPath\settings.json" -ErrorAction Stop | ConvertFrom-Json
+        return $config
+    }
+    catch {
+        Write-Warning "Failed to retrieve AMA configuration: $_"
+        return $null
+    }
+}
 
-            $results.ChainStatus = $chain.ChainElements | ForEach-Object {
-                @{
-                    Certificate = $_.Certificate.Subject
-                    Status = $_.Certificate.Verify()
-                    StatusFlags = $_.ChainElementStatus.Status
-                }
-            }
-            
-            $results.ValidFrom = $cert.NotBefore
-            $results.ValidTo = $cert.NotAfter
-            $results.Issuer = $cert.Issuer
+function Get-DataCollectionStatus {
+    param (
+        [string]$ServerName,
+        [string]$WorkspaceId
+    )
+    
+    try {
+        $query = @"
+            Heartbeat
+            | where TimeGenerated > ago(1h)
+            | where Computer == '$ServerName'
+            | summarize LastHeartbeat = max(TimeGenerated)
+"@
+        $result = Invoke-AzOperationalInsightsQuery -WorkspaceId $WorkspaceId -Query $query
+        
+        return @{
+            LastHeartbeat = $result.Results.LastHeartbeat
+            Status = if ($result.Results.LastHeartbeat -gt (Get-Date).AddMinutes(-10)) { "Active" } else { "Inactive" }
         }
     }
     catch {
-        $results.CertificateErrors += $_.Exception.Message
+        Write-Warning "Failed to retrieve data collection status: $_"
+        return $null
+    }
+}
+
+function Test-NetworkPaths {
+    param ([string]$ServerName)
+    
+    $endpoints = @(
+        @{
+            Name = "Arc Management"
+            Host = "management.azure.com"
+            Port = 443
+        },
+        @{
+            Name = "Arc Authentication"
+            Host = "login.microsoftonline.com"
+            Port = 443
+        },
+        @{
+            Name = "AMA Log Analytics"
+            Host = "ods.opinsights.azure.com"
+            Port = 443
+        },
+        @{
+            Name = "AMA Workspace"
+            Host = "oms.opinsights.azure.com"
+            Port = 443
+        }
+    )
+
+    $results = foreach ($endpoint in $endpoints) {
+        $test = Test-NetConnection -ComputerName $endpoint.Host -Port $endpoint.Port -WarningAction SilentlyContinue
+        @{
+            Endpoint = $endpoint.Name
+            Target = $endpoint.Host
+            Port = $endpoint.Port
+            Success = $test.TcpTestSucceeded
+            LatencyMS = $test.PingReplyDetails.RoundtripTime
+            Error = if (-not $test.TcpTestSucceeded) { $test.TcpTestSucceeded } else { $null }
+        }
     }
 
     return $results

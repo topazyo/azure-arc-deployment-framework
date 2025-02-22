@@ -1,103 +1,12 @@
 {
-    "version": "1.0.0",
     "validationMatrix": {
-        "connectivity": {
-            "weight": 0.4,
-            "tests": [
-                {
-                    "name": "AzureManagementEndpoint",
-                    "endpoint": "management.azure.com",
-                    "port": 443,
-                    "protocol": "HTTPS",
-                    "timeout": 30,
-                    "retryCount": 3,
-                    "critical": true,
-                    "validation": {
-                        "type": "TCP",
-                        "expectedResult": "Connected"
-                    }
-                },
-                {
-                    "name": "AzureIdentityEndpoint",
-                    "endpoint": "login.microsoftonline.com",
-                    "port": 443,
-                    "protocol": "HTTPS",
-                    "timeout": 30,
-                    "retryCount": 3,
-                    "critical": true,
-                    "validation": {
-                        "type": "TCP",
-                        "expectedResult": "Connected"
-                    }
-                },
-                {
-                    "name": "ProxyConfiguration",
-                    "testType": "ProxyValidation",
-                    "timeout": 30,
-                    "critical": false,
-                    "validation": {
-                        "type": "Configuration",
-                        "properties": [
-                            "ProxyAddress",
-                            "ProxyPort",
-                            "BypassList"
-                        ]
-                    }
-                }
-            ]
-        },
-        "security": {
+        "amaValidation": {
             "weight": 0.3,
             "tests": [
                 {
-                    "name": "TLSConfiguration",
-                    "testType": "TLSValidation",
-                    "critical": true,
-                    "validation": {
-                        "type": "Version",
-                        "minimumVersion": "1.2",
-                        "cipherSuites": [
-                            "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384",
-                            "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256"
-                        ]
-                    }
-                },
-                {
-                    "name": "CertificateValidation",
-                    "testType": "CertificateChain",
-                    "critical": true,
-                    "validation": {
-                        "type": "Certificate",
-                        "properties": [
-                            "ValidityPeriod",
-                            "ChainTrust",
-                            "RevocationStatus"
-                        ]
-                    }
-                },
-                {
-                    "name": "ServicePrincipal",
-                    "testType": "AADValidation",
-                    "critical": true,
-                    "validation": {
-                        "type": "Authentication",
-                        "properties": [
-                            "ClientId",
-                            "ClientSecret",
-                            "TenantId",
-                            "Permissions"
-                        ]
-                    }
-                }
-            ]
-        },
-        "agent": {
-            "weight": 0.3,
-            "tests": [
-                {
-                    "name": "ServiceStatus",
-                    "testType": "WindowsService",
-                    "serviceName": "himds",
+                    "name": "AMAService",
+                    "testType": "ServiceStatus",
+                    "serviceName": "AzureMonitorAgent",
                     "critical": true,
                     "validation": {
                         "type": "Service",
@@ -106,55 +15,28 @@
                     }
                 },
                 {
-                    "name": "ConfigurationStatus",
-                    "testType": "ConfigValidation",
-                    "critical": false,
+                    "name": "DataCollection",
+                    "testType": "LogIngestion",
+                    "critical": true,
                     "validation": {
-                        "type": "Configuration",
-                        "properties": [
-                            "AgentVersion",
-                            "ConfigVersion",
-                            "LastReported"
-                        ]
+                        "type": "Heartbeat",
+                        "maxLatency": "5m",
+                        "successRate": 99
                     }
                 },
                 {
-                    "name": "ResourceProvider",
-                    "testType": "AzureRP",
+                    "name": "WorkspaceConnection",
+                    "testType": "Connectivity",
                     "critical": true,
                     "validation": {
-                        "type": "Registration",
-                        "properties": [
-                            "ProviderStatus",
-                            "FeatureStatus",
-                            "Permissions"
+                        "type": "Network",
+                        "endpoints": [
+                            "*.ods.opinsights.azure.com",
+                            "*.oms.opinsights.azure.com"
                         ]
                     }
                 }
             ]
-        },
-        "scoring": {
-            "weights": {
-                "critical": 1.0,
-                "normal": 0.5
-            },
-            "thresholds": {
-                "healthy": 0.95,
-                "warning": 0.80,
-                "critical": 0.60
-            }
-        },
-        "remediation": {
-            "automatic": {
-                "enabled": true,
-                "maxAttempts": 3,
-                "delayBetweenAttempts": "30s"
-            },
-            "manual": {
-                "ticketingSystem": "ServiceNow",
-                "template": "ArcValidationFailure",
-                "priority": "High"
-            }
         }
     }
 }

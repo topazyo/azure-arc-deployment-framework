@@ -166,3 +166,78 @@ function Test-ValidationMatrix {
         return [PSCustomObject]$results
     }
 }
+
+function Test-AgentValidation {
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory)]
+        [string]$ServerName,
+        [Parameter()]
+        [string]$WorkspaceId
+    )
+
+    $validation = @{
+        Arc = Test-ArcValidation -ServerName $ServerName
+        AMA = if ($WorkspaceId) { 
+            Test-AMAValidation -ServerName $ServerName -WorkspaceId $WorkspaceId 
+        }
+    }
+
+    return $validation
+}
+
+function Test-ArcValidation {
+    param ([string]$ServerName)
+
+    $results = @{
+        Service = Test-ServiceHealth -ServerName $ServerName -ServiceName "himds"
+        Configuration = Test-ArcConfiguration -ServerName $ServerName
+        Connectivity = Test-ArcConnectivity -ServerName $ServerName
+    }
+
+    return $results
+}
+
+function Test-AMAValidation {
+    param (
+        [string]$ServerName,
+        [string]$WorkspaceId
+    )
+
+    $results = @{
+        Service = Test-ServiceHealth -ServerName $ServerName -ServiceName "AzureMonitorAgent"
+        Configuration = Test-AMAConfiguration -ServerName $ServerName -WorkspaceId $WorkspaceId
+        DataCollection = Test-DataCollection -ServerName $ServerName -WorkspaceId $WorkspaceId
+        DCR = Test-DCRConfiguration -ServerName $ServerName
+    }
+
+    return $results
+}
+
+function Test-ServiceHealth {
+    param (
+        [string]$ServerName,
+        [string]$ServiceName
+    )
+
+    $results = @{
+        Status = "Unknown"
+        Details = @{}
+    }
+
+    try {
+        $service = Get-Service -Name $ServiceName -ComputerName $ServerName
+        $results.Status = $service.Status
+        $results.Details = @{
+            StartType = $service.StartType
+            DependentServices = $service.DependentServices
+            RequiredServices = $service.RequiredServices
+        }
+    }
+    catch {
+        $results.Status = "Error"
+        $results.Error = $_.Exception.Message
+    }
+
+    return $results
+}

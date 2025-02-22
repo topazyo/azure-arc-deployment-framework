@@ -1,127 +1,45 @@
 {
-    "version": "2.0.0",
     "aiComponents": {
         "predictionEngine": {
-            "enabled": true,
-            "modelConfig": {
-                "type": "RandomForest",
-                "parameters": {
-                    "n_estimators": 100,
-                    "max_depth": 10,
-                    "min_samples_split": 5
-                },
-                "featureImportance": {
-                    "networkLatency": 0.3,
-                    "diskSpace": 0.2,
-                    "memoryUsage": 0.2,
-                    "cpuUsage": 0.15,
-                    "errorHistory": 0.15
-                }
-            },
-            "thresholds": {
-                "highRisk": 0.8,
-                "mediumRisk": 0.5,
-                "lowRisk": 0.2
-            }
-        },
-        "patternRecognition": {
-            "enabled": true,
             "patterns": {
-                "networkIssues": {
-                    "keywords": [
-                        "timeout", "connection refused", "network unreachable",
-                        "proxy error", "DNS resolution"
+                "amaHealth": {
+                    "metrics": [
+                        "LogIngestionRate",
+                        "DataCollectionStatus",
+                        "WorkspaceConnectivity",
+                        "AgentHeartbeat"
                     ],
-                    "weight": 0.3,
-                    "remediation": {
-                        "automatic": true,
-                        "maxAttempts": 3,
-                        "actions": [
-                            "Test-NetworkConnection",
-                            "Reset-ProxySettings",
-                            "Clear-DNSCache"
-                        ]
-                    }
-                },
-                "authenticationIssues": {
-                    "keywords": [
-                        "unauthorized", "forbidden", "invalid credentials",
-                        "token expired", "certificate invalid"
-                    ],
-                    "weight": 0.4,
-                    "remediation": {
-                        "automatic": false,
-                        "escalation": {
-                            "team": "Security",
-                            "priority": "High"
-                        }
-                    }
-                },
-                "resourceIssues": {
-                    "keywords": [
-                        "disk full", "out of memory", "CPU threshold",
-                        "resource exhaustion"
-                    ],
-                    "weight": 0.3,
-                    "remediation": {
-                        "automatic": true,
-                        "actions": [
-                            "Clear-TempFiles",
-                            "Restart-Service",
-                            "Optimize-Resources"
-                        ]
+                    "thresholds": {
+                        "ingestionLatency": 300,
+                        "dataLoss": 0.01,
+                        "cpuUsage": 10,
+                        "memoryUsage": 500
                     }
                 }
-            },
-            "learningConfig": {
-                "enabled": true,
-                "updateFrequency": "Daily",
-                "minSampleSize": 100,
-                "confidenceThreshold": 0.8
             }
         },
-        "anomalyDetection": {
-            "enabled": true,
-            "metrics": {
-                "cpu": {
-                    "threshold": 85,
-                    "duration": "5m",
-                    "action": "Alert"
+        "monitoring": {
+            "ama": {
+                "healthChecks": {
+                    "frequency": "5m",
+                    "metrics": [
+                        "ServiceHealth",
+                        "ConfigurationStatus",
+                        "CollectionStatus",
+                        "WorkspaceConnection"
+                    ]
                 },
-                "memory": {
-                    "threshold": 90,
-                    "duration": "5m",
-                    "action": "Alert"
-                },
-                "disk": {
-                    "threshold": 95,
-                    "duration": "15m",
-                    "action": "Alert"
-                },
-                "network": {
-                    "latencyThreshold": 100,
-                    "packetLossThreshold": 5,
-                    "duration": "5m",
-                    "action": "Alert"
+                "alerts": {
+                    "dataCollection": {
+                        "lossThreshold": 5,
+                        "latencyThreshold": 300
+                    },
+                    "performance": {
+                        "cpuThreshold": 80,
+                        "memoryThreshold": 85
+                    }
                 }
             }
         }
-    },
-    "reporting": {
-        "frequency": "Hourly",
-        "retention": "90d",
-        "format": "JSON",
-        "destinations": [
-            {
-                "type": "AzureLogAnalytics",
-                "workspaceId": "workspace-id",
-                "tableName": "ArcAIInsights"
-            },
-            {
-                "type": "LocalFile",
-                "path": "D:\\Logs\\ArcAI",
-                "maxSize": "5GB"
-            }
-        ]
     }
 }

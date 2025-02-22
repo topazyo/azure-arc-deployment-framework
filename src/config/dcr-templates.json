@@ -1,0 +1,138 @@
+{
+    "templates": {
+        "security": {
+            "windows": {
+                "basic": {
+                    "name": "windows-security-basic",
+                    "description": "Basic Windows security monitoring",
+                    "dataSources": {
+                        "windowsEventLogs": [
+                            {
+                                "streams": ["Microsoft-SecurityEvent"],
+                                "xPathQueries": [
+                                    "Security!*[System[(Level=1 or Level=2)]]",
+                                    "System!*[System[(Level=1 or Level=2)]]",
+                                    "Application!*[System[(Level=1 or Level=2)]]"
+                                ]
+                            }
+                        ]
+                    }
+                },
+                "enhanced": {
+                    "name": "windows-security-enhanced",
+                    "description": "Enhanced Windows security monitoring with detailed auditing",
+                    "dataSources": {
+                        "windowsEventLogs": [
+                            {
+                                "streams": ["Microsoft-SecurityEvent"],
+                                "xPathQueries": [
+                                    "Security!*[System[(Level=1 or Level=2 or Level=3)]]",
+                                    "System!*[System[(Level=1 or Level=2 or Level=3)]]",
+                                    "Application!*[System[(Level=1 or Level=2 or Level=3)]]",
+                                    "Microsoft-Windows-Sysmon/Operational!*",
+                                    "Microsoft-Windows-PowerShell/Operational!*"
+                                ]
+                            }
+                        ],
+                        "windowsFirewallLogs": [
+                            {
+                                "streams": ["Microsoft-WindowsFirewall"],
+                                "enabled": true
+                            }
+                        ]
+                    }
+                },
+                "compliance": {
+                    "name": "windows-security-compliance",
+                    "description": "Compliance-focused security monitoring",
+                    "dataSources": {
+                        "windowsEventLogs": [
+                            {
+                                "streams": ["Microsoft-SecurityEvent"],
+                                "xPathQueries": [
+                                    "Security!*[System[(Level=1 or Level=2 or Level=3 or Level=4)]]",
+                                    "System!*",
+                                    "Application!*",
+                                    "Microsoft-Windows-Sysmon/Operational!*",
+                                    "Microsoft-Windows-PowerShell/Operational!*",
+                                    "Microsoft-Windows-GroupPolicy/Operational!*",
+                                    "Microsoft-Windows-BitLocker/BitLocker Management!*"
+                                ]
+                            }
+                        ],
+                        "windowsFirewallLogs": [
+                            {
+                                "streams": ["Microsoft-WindowsFirewall"],
+                                "enabled": true
+                            }
+                        ]
+                    }
+                }
+            }
+        },
+        "performance": {
+            "basic": {
+                "name": "performance-monitoring-basic",
+                "description": "Basic performance monitoring",
+                "dataSources": {
+                    "performanceCounters": [
+                        {
+                            "streams": ["Microsoft-Perf"],
+                            "samplingFrequencyInSeconds": 60,
+                            "counterSpecifiers": [
+                                "\\Processor(_Total)\\% Processor Time",
+                                "\\Memory\\Available Bytes",
+                                "\\LogicalDisk(_Total)\\Free Megabytes",
+                                "\\Network Interface(*)\\Bytes Total/sec"
+                            ]
+                        }
+                    ]
+                }
+            },
+            "detailed": {
+                "name": "performance-monitoring-detailed",
+                "description": "Detailed performance monitoring",
+                "dataSources": {
+                    "performanceCounters": [
+                        {
+                            "streams": ["Microsoft-Perf"],
+                            "samplingFrequencyInSeconds": 30,
+                            "counterSpecifiers": [
+                                "\\Processor(_Total)\\% Processor Time",
+                                "\\Processor(_Total)\\% User Time",
+                                "\\Processor(_Total)\\% Privileged Time",
+                                "\\Memory\\Available Bytes",
+                                "\\Memory\\Pages/sec",
+                                "\\Memory\\Page Faults/sec",
+                                "\\LogicalDisk(*)\\% Free Space",
+                                "\\LogicalDisk(*)\\Avg. Disk sec/Read",
+                                "\\LogicalDisk(*)\\Avg. Disk sec/Write",
+                                "\\Network Interface(*)\\Bytes Total/sec",
+                                "\\Network Interface(*)\\Output Queue Length",
+                                "\\System\\Processor Queue Length"
+                            ]
+                        }
+                    ]
+                }
+            }
+        }
+    },
+    "defaultSettings": {
+        "destinations": {
+            "logAnalytics": {
+                "name": "LA-Destination",
+                "retentionInDays": 30
+            }
+        },
+        "dataFlows": [
+            {
+                "streams": ["Microsoft-SecurityEvent"],
+                "destinations": ["LA-Destination"]
+            },
+            {
+                "streams": ["Microsoft-Perf"],
+                "destinations": ["LA-Destination"]
+            }
+        ]
+    }
+}
