@@ -1,0 +1,760 @@
+{
+    "version": "1.0.0",
+    "lastUpdated": "2024-01-15T00:00:00Z",
+    "description": "Analysis patterns for Azure Arc troubleshooting and diagnostics",
+    "patterns": {
+      "arcAgent": {
+        "service": {
+          "notRunning": {
+            "pattern": "himds service is not running",
+            "severity": "Critical",
+            "impact": "Agent is not functional and server is disconnected",
+            "remediation": {
+              "automatic": true,
+              "actions": [
+                "Restart-Service -Name himds",
+                "if ($LASTEXITCODE -ne 0) { Start-Service -Name himds }"
+              ],
+              "maxAttempts": 3,
+              "type": "ServiceRestart"
+            },
+            "keywords": [
+              "himds", "service", "stopped", "not running", "disabled"
+            ],
+            "weight": 0.9
+          },
+          "crashLoop": {
+            "pattern": "himds service is restarting repeatedly",
+            "severity": "Critical",
+            "impact": "Agent is unstable and connection is intermittent",
+            "remediation": {
+              "automatic": false,
+              "actions": [
+                "Stop-Service -Name himds",
+                "Remove-Item -Path 'C:\\Program Files\\Azure Connected Machine Agent\\data\\lib\\*' -Force",
+                "Start-Service -Name himds"
+              ],
+              "maxAttempts": 1,
+              "type": "ServiceReset"
+            },
+            "keywords": [
+              "himds", "crash", "restart", "loop", "repeatedly", "unstable"
+            ],
+            "weight": 0.95
+          },
+          "dependencyFailure": {
+            "pattern": "himds service dependency failure",
+            "severity": "High",
+            "impact": "Agent cannot start due to dependency issues",
+            "remediation": {
+              "automatic": true,
+              "actions": [
+                "Get-Service -Name himds -DependentServices | Start-Service",
+                "Start-Service -Name himds"
+              ],
+              "maxAttempts": 2,
+              "type": "DependencyFix"
+            },
+            "keywords": [
+              "dependency", "dependent", "service", "failed", "prerequisite"
+            ],
+            "weight": 0.8
+          }
+        },
+        "connectivity": {
+          "endpointUnreachable": {
+            "pattern": "Cannot reach Azure Arc endpoints",
+            "severity": "Critical",
+            "impact": "Agent cannot communicate with Azure",
+            "remediation": {
+              "automatic": false,
+              "actions": [
+                "Test-NetConnection -ComputerName management.azure.com -Port 443",
+                "Test-NetConnection -ComputerName login.microsoftonline.com -Port 443"
+              ],
+              "maxAttempts": 1,
+              "type": "NetworkDiagnostic"
+            },
+            "keywords": [
+              "endpoint", "unreachable", "connection", "timeout", "cannot reach"
+            ],
+            "weight": 0.9
+          },
+          "proxyIssue": {
+            "pattern": "Proxy configuration issue",
+            "severity": "High",
+            "impact": "Agent cannot connect through proxy",
+            "remediation": {
+              "automatic": false,
+              "actions": [
+                "Get-ItemProperty -Path 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings'",
+                "netsh winhttp show proxy"
+              ],
+              "maxAttempts": 1,
+              "type": "ProxyDiagnostic"
+            },
+            "keywords": [
+              "proxy", "configuration", "winhttp", "bypass", "authentication"
+            ],
+            "weight": 0.85
+          },
+          "tlsIssue": {
+            "pattern": "TLS handshake failure",
+            "severity": "High",
+            "impact": "Secure connection cannot be established",
+            "remediation": {
+              "automatic": true,
+              "actions": [
+                "Set-ItemProperty -Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\SecurityProviders\\SCHANNEL\\Protocols\\TLS 1.2\\Client' -Name 'Enabled' -Value 1 -Type DWord",
+                "Set-ItemProperty -Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\SecurityProviders\\SCHANNEL\\Protocols\\TLS 1.2\\Client' -Name 'DisabledByDefault' -Value 0 -Type DWord"
+              ],
+              "maxAttempts": 1,
+              "type": "TLSFix"
+            },
+            "keywords": [
+              "TLS", "handshake", "secure channel", "certificate", "encryption"
+            ],
+            "weight": 0.85
+          }
+        },
+        "configuration": {
+          "corruptConfig": {
+            "pattern": "Agent configuration is corrupted",
+            "severity": "High",
+            "impact": "Agent cannot operate with invalid configuration",
+            "remediation": {
+              "automatic": false,
+              "actions": [
+                "Stop-Service -Name himds",
+                "Rename-Item -Path 'C:\\Program Files\\Azure Connected Machine Agent\\config\\agentconfig.json' -NewName 'agentconfig.json.bak'",
+                "Start-Service -Name himds"
+              ],
+              "maxAttempts": 1,
+              "type": "ConfigReset"
+            },
+            "keywords": [
+              "corrupt", "configuration", "invalid", "json", "parse error"
+            ],
+            "weight": 0.8
+          },
+          "missingIdentity": {
+            "pattern": "Agent identity is missing or invalid",
+            "severity": "Critical",
+            "impact": "Agent cannot authenticate with Azure",
+            "remediation": {
+              "automatic": false,
+              "actions": [
+                "azcmagent disconnect",
+                "azcmagent connect"
+              ],
+              "maxAttempts": 1,
+              "type": "Reconnect"
+            },
+            "keywords": [
+              "identity", "authentication", "token", "credential", "certificate"
+            ],
+            "weight": 0.9
+          },
+          "resourceConflict": {
+            "pattern": "Resource conflict with existing Arc server",
+            "severity": "High",
+            "impact": "Agent cannot register due to name conflict",
+            "remediation": {
+              "automatic": false,
+              "actions": [
+                "azcmagent disconnect",
+                "azcmagent connect --resource-name {uniqueName}"
+              ],
+              "maxAttempts": 1,
+              "type": "Rename"
+            },
+            "keywords": [
+              "conflict", "already exists", "duplicate", "resource name", "registration"
+            ],
+            "weight": 0.8
+          }
+        }
+      },
+      "amaAgent": {
+        "service": {
+          "notRunning": {
+            "pattern": "AzureMonitorAgent service is not running",
+            "severity": "Critical",
+            "impact": "Data collection is not functional",
+            "remediation": {
+              "automatic": true,
+              "actions": [
+                "Restart-Service -Name AzureMonitorAgent",
+                "if ($LASTEXITCODE -ne 0) { Start-Service -Name AzureMonitorAgent }"
+              ],
+              "maxAttempts": 3,
+              "type": "ServiceRestart"
+            },
+            "keywords": [
+              "AzureMonitorAgent", "service", "stopped", "not running", "disabled"
+            ],
+            "weight": 0.85
+          },
+          "highCPU": {
+            "pattern": "AzureMonitorAgent high CPU usage",
+            "severity": "Medium",
+            "impact": "Agent performance is degraded and may impact system",
+            "remediation": {
+              "automatic": true,
+              "actions": [
+                "Restart-Service -Name AzureMonitorAgent"
+              ],
+              "maxAttempts": 1,
+              "type": "ServiceRestart"
+            },
+            "keywords": [
+              "CPU", "high", "performance", "resource", "utilization"
+            ],
+            "weight": 0.7
+          },
+          "highMemory": {
+            "pattern": "AzureMonitorAgent high memory usage",
+            "severity": "Medium",
+            "impact": "Agent may become unstable or crash",
+            "remediation": {
+              "automatic": true,
+              "actions": [
+                "Restart-Service -Name AzureMonitorAgent"
+              ],
+              "maxAttempts": 1,
+              "type": "ServiceRestart"
+            },
+            "keywords": [
+              "memory", "high", "leak", "consumption", "RAM"
+            ],
+            "weight": 0.7
+          }
+        },
+        "dataCollection": {
+          "noHeartbeat": {
+            "pattern": "No heartbeat data received",
+            "severity": "High",
+            "impact": "Cannot verify agent health or data flow",
+            "remediation": {
+              "automatic": true,
+              "actions": [
+                "Restart-Service -Name AzureMonitorAgent",
+                "Test-NetConnection -ComputerName ods.opinsights.azure.com -Port 443"
+              ],
+              "maxAttempts": 2,
+              "type": "ServiceRestart"
+            },
+            "keywords": [
+              "heartbeat", "missing", "no data", "silent", "disconnected"
+            ],
+            "weight": 0.85
+          },
+          "dataLoss": {
+            "pattern": "Data collection gaps detected",
+            "severity": "Medium",
+            "impact": "Incomplete monitoring data",
+            "remediation": {
+              "automatic": false,
+              "actions": [
+                "Get-AMADataCollectionStatus",
+                "Test-LogIngestion"
+              ],
+              "maxAttempts": 1,
+              "type": "DataDiagnostic"
+            },
+            "keywords": [
+              "gap", "missing", "incomplete", "data loss", "collection"
+            ],
+            "weight": 0.75
+          },
+          "configError": {
+            "pattern": "Data collection rule configuration error",
+            "severity": "High",
+            "impact": "Data collection is misconfigured",
+            "remediation": {
+              "automatic": false,
+              "actions": [
+                "Get-DataCollectionRules",
+                "Test-DCRConfiguration"
+              ],
+              "maxAttempts": 1,
+              "type": "ConfigDiagnostic"
+            },
+            "keywords": [
+              "DCR", "rule", "configuration", "invalid", "error"
+            ],
+            "weight": 0.8
+          }
+        },
+        "workspace": {
+          "connectionFailed": {
+            "pattern": "Cannot connect to Log Analytics workspace",
+            "severity": "Critical",
+            "impact": "Data cannot be sent to Log Analytics",
+            "remediation": {
+              "automatic": false,
+              "actions": [
+                "Test-NetConnection -ComputerName ods.opinsights.azure.com -Port 443",
+                "Test-WorkspaceConnectivity"
+              ],
+              "maxAttempts": 1,
+              "type": "NetworkDiagnostic"
+            },
+            "keywords": [
+              "workspace", "connection", "Log Analytics", "failed", "unreachable"
+            ],
+            "weight": 0.85
+          },
+          "authenticationFailed": {
+            "pattern": "Workspace authentication failed",
+            "severity": "Critical",
+            "impact": "Cannot authenticate with Log Analytics",
+            "remediation": {
+              "automatic": false,
+              "actions": [
+                "Reset-AMAWorkspaceKey",
+                "Restart-Service -Name AzureMonitorAgent"
+              ],
+              "maxAttempts": 1,
+              "type": "AuthReset"
+            },
+            "keywords": [
+              "authentication", "workspace key", "unauthorized", "invalid key", "credentials"
+            ],
+            "weight": 0.85
+          },
+          "quotaExceeded": {
+            "pattern": "Workspace data ingestion quota exceeded",
+            "severity": "Medium",
+            "impact": "New data may be throttled or rejected",
+            "remediation": {
+              "automatic": false,
+              "actions": [
+                "Get-WorkspaceUsage",
+                "Optimize-DataCollection"
+              ],
+              "maxAttempts": 1,
+              "type": "UsageDiagnostic"
+            },
+            "keywords": [
+              "quota", "limit", "exceeded", "throttle", "ingestion"
+            ],
+            "weight": 0.7
+          }
+        }
+      },
+      "system": {
+        "resources": {
+          "lowDiskSpace": {
+            "pattern": "Low disk space",
+            "severity": "High",
+            "impact": "Agent may fail to store data or logs",
+            "remediation": {
+              "automatic": false,
+              "actions": [
+                "Get-DiskSpace",
+                "Clear-AgentCache"
+              ],
+              "maxAttempts": 1,
+              "type": "DiskCleanup"
+            },
+            "keywords": [
+              "disk", "space", "storage", "full", "insufficient"
+            ],
+            "weight": 0.8
+          },
+          "highCPUSystem": {
+            "pattern": "System-wide high CPU usage",
+            "severity": "Medium",
+            "impact": "Agent performance may be affected",
+            "remediation": {
+              "automatic": false,
+              "actions": [
+                "Get-ProcessUtilization",
+                "Get-SystemPerformance"
+              ],
+              "maxAttempts": 1,
+              "type": "PerformanceDiagnostic"
+            },
+            "keywords": [
+              "CPU", "system", "performance", "slow", "overloaded"
+            ],
+            "weight": 0.7
+          },
+          "lowMemory": {
+            "pattern": "System low memory condition",
+            "severity": "High",
+            "impact": "Agent may be terminated by OOM killer",
+            "remediation": {
+              "automatic": false,
+              "actions": [
+                "Get-MemoryUtilization",
+                "Optimize-SystemMemory"
+              ],
+              "maxAttempts": 1,
+              "type": "MemoryOptimization"
+            },
+            "keywords": [
+              "memory", "low", "insufficient", "OOM", "pressure"
+            ],
+            "weight": 0.8
+          }
+        },
+        "network": {
+          "dnsResolutionFailure": {
+            "pattern": "DNS resolution failure",
+            "severity": "High",
+            "impact": "Cannot resolve Azure endpoints",
+            "remediation": {
+              "automatic": false,
+              "actions": [
+                "Test-DnsResolution -Hostname management.azure.com",
+                "Test-DnsResolution -Hostname login.microsoftonline.com"
+              ],
+              "maxAttempts": 1,
+              "type": "DnsDiagnostic"
+            },
+            "keywords": [
+              "DNS", "resolution", "name", "lookup", "cannot resolve"
+            ],
+            "weight": 0.85
+          },
+          "firewallBlocking": {
+            "pattern": "Firewall blocking required connections",
+            "severity": "High",
+            "impact": "Agent cannot communicate with Azure",
+            "remediation": {
+              "automatic": false,
+              "actions": [
+                "Get-FirewallRules",
+                "Test-FirewallConfiguration"
+              ],
+              "maxAttempts": 1,
+              "type": "FirewallDiagnostic"
+            },
+            "keywords": [
+              "firewall", "blocking", "port", "443", "outbound"
+            ],
+            "weight": 0.85
+          },
+          "intermittentConnectivity": {
+            "pattern": "Intermittent network connectivity",
+            "severity": "Medium",
+            "impact": "Unreliable agent communication",
+            "remediation": {
+              "automatic": false,
+              "actions": [
+                "Test-NetworkStability",
+                "Get-NetworkStatistics"
+              ],
+              "maxAttempts": 1,
+              "type": "NetworkDiagnostic"
+            },
+            "keywords": [
+              "intermittent", "unstable", "packet loss", "latency", "connectivity"
+            ],
+            "weight": 0.75
+          }
+        },
+        "security": {
+          "certificateExpired": {
+            "pattern": "Certificate expired or invalid",
+            "severity": "Critical",
+            "impact": "Secure communication is not possible",
+            "remediation": {
+              "automatic": false,
+              "actions": [
+                "Test-CertificateValidity",
+                "Update-ArcCertificates"
+              ],
+              "maxAttempts": 1,
+              "type": "CertificateRenewal"
+            },
+            "keywords": [
+              "certificate", "expired", "invalid", "trust", "chain"
+            ],
+            "weight": 0.9
+          },
+          "permissionDenied": {
+            "pattern": "Permission denied for agent operation",
+            "severity": "High",
+            "impact": "Agent cannot perform required actions",
+            "remediation": {
+              "automatic": false,
+              "actions": [
+                "Test-AgentPermissions",
+                "Grant-AgentPermissions"
+              ],
+              "maxAttempts": 1,
+              "type": "PermissionFix"
+            },
+            "keywords": [
+              "permission", "denied", "access", "unauthorized", "forbidden"
+            ],
+            "weight": 0.8
+          },
+          "securitySoftwareConflict": {
+            "pattern": "Security software interfering with agent",
+            "severity": "High",
+            "impact": "Agent functionality is blocked",
+            "remediation": {
+              "automatic": false,
+              "actions": [
+                "Get-SecuritySoftware",
+                "Test-SecurityExclusions"
+              ],
+              "maxAttempts": 1,
+              "type": "SecurityDiagnostic"
+            },
+            "keywords": [
+              "antivirus", "firewall", "security", "blocking", "interference"
+            ],
+            "weight": 0.8
+          }
+        }
+      },
+      "temporal": {
+        "recentChanges": {
+          "systemUpdate": {
+            "pattern": "Recent system update or patch",
+            "severity": "Medium",
+            "impact": "System changes may affect agent",
+            "remediation": {
+              "automatic": false,
+              "actions": [
+                "Get-HotfixHistory",
+                "Get-SystemChangeLog"
+              ],
+              "maxAttempts": 1,
+              "type": "ChangeDiagnostic"
+            },
+            "keywords": [
+              "update", "patch", "hotfix", "Windows Update", "recent change"
+            ],
+            "weight": 0.7
+          },
+          "configurationChange": {
+            "pattern": "Recent configuration change",
+            "severity": "Medium",
+            "impact": "Configuration changes may affect agent",
+            "remediation": {
+              "automatic": false,
+              "actions": [
+                "Get-ConfigurationHistory",
+                "Compare-ConfigurationVersions"
+              ],
+              "maxAttempts": 1,
+              "type": "ConfigDiagnostic"
+            },
+            "keywords": [
+              "configuration", "change", "modified", "settings", "recent"
+            ],
+            "weight": 0.7
+          },
+          "agentUpgrade": {
+            "pattern": "Recent agent upgrade",
+            "severity": "Medium",
+            "impact": "New agent version may have issues",
+            "remediation": {
+              "automatic": false,
+              "actions": [
+                "Get-AgentVersionHistory",
+                "Compare-AgentVersions"
+              ],
+              "maxAttempts": 1,
+              "type": "VersionDiagnostic"
+            },
+            "keywords": [
+              "upgrade", "update", "version", "new", "recent"
+            ],
+            "weight": 0.7
+          }
+        },
+        "recurring": {
+          "dailyFailure": {
+            "pattern": "Daily recurring failure pattern",
+            "severity": "Medium",
+            "impact": "Regular disruption to agent operation",
+            "remediation": {
+              "automatic": false,
+              "actions": [
+                "Get-RecurringPatterns",
+                "Analyze-TimeBasedPatterns"
+              ],
+              "maxAttempts": 1,
+              "type": "PatternAnalysis"
+            },
+            "keywords": [
+              "daily", "recurring", "pattern", "schedule", "time-based"
+            ],
+            "weight": 0.7
+          },
+          "maintenanceConflict": {
+            "pattern": "Conflict with maintenance window",
+            "severity": "Low",
+            "impact": "Scheduled maintenance disrupts agent",
+            "remediation": {
+              "automatic": false,
+              "actions": [
+                "Get-MaintenanceSchedule",
+                "Optimize-MaintenanceTiming"
+              ],
+              "maxAttempts": 1,
+              "type": "ScheduleOptimization"
+            },
+            "keywords": [
+              "maintenance", "window", "schedule", "conflict", "downtime"
+            ],
+            "weight": 0.6
+          }
+        }
+      }
+    },
+    "correlations": {
+      "networkAndService": {
+        "pattern": "Network issues coinciding with service failures",
+        "components": ["connectivity", "service"],
+        "weight": 0.9,
+        "remediation": {
+          "type": "NetworkServiceDiagnostic",
+          "priority": "High"
+        }
+      },
+      "resourceAndPerformance": {
+        "pattern": "Resource constraints affecting performance",
+        "components": ["resources", "performance"],
+        "weight": 0.8,
+        "remediation": {
+          "type": "ResourceOptimization",
+          "priority": "Medium"
+        }
+      },
+      "securityAndConnectivity": {
+        "pattern": "Security settings affecting connectivity",
+        "components": ["security", "connectivity"],
+        "weight": 0.85,
+        "remediation": {
+          "type": "SecurityNetworkDiagnostic",
+          "priority": "High"
+        }
+      }
+    },
+    "recommendations": {
+      "critical": {
+        "service": [
+          "Restart the agent service",
+          "Check service dependencies",
+          "Verify service account permissions",
+          "Check for service conflicts"
+        ],
+        "connectivity": [
+          "Verify network connectivity to Azure endpoints",
+          "Check proxy configuration",
+          "Validate TLS settings",
+          "Test DNS resolution"
+        ],
+        "configuration": [
+          "Reset agent configuration",
+          "Reconnect the agent",
+          "Verify identity configuration",
+          "Check for resource conflicts"
+        ]
+      },
+      "high": {
+        "resources": [
+          "Free up disk space",
+          "Optimize memory usage",
+          "Reduce CPU contention",
+          "Check for resource leaks"
+        ],
+        "security": [
+          "Update certificates",
+          "Configure security software exclusions",
+          "Verify permissions",
+          "Check security policies"
+        ],
+        "dataCollection": [
+          "Verify data collection rules",
+          "Check workspace configuration",
+          "Validate data flow",
+          "Optimize collection settings"
+        ]
+      },
+      "medium": {
+        "performance": [
+          "Optimize agent performance settings",
+          "Adjust collection frequency",
+          "Reduce data volume",
+          "Schedule intensive operations"
+        ],
+        "maintenance": [
+          "Coordinate maintenance windows",
+          "Schedule regular agent restarts",
+          "Implement monitoring for maintenance",
+          "Document maintenance procedures"
+        ]
+      }
+    },
+    "aiFeatures": {
+      "healthPrediction": {
+        "features": [
+          "cpu_usage",
+          "memory_usage",
+          "disk_space",
+          "error_count",
+          "warning_count",
+          "connection_status",
+          "last_heartbeat_minutes"
+        ],
+        "thresholds": {
+          "healthy": 0.7,
+          "warning": 0.4,
+          "critical": 0.2
+        },
+        "weights": {
+          "cpu_usage": 0.15,
+          "memory_usage": 0.15,
+          "disk_space": 0.1,
+          "error_count": 0.2,
+          "warning_count": 0.1,
+          "connection_status": 0.2,
+          "last_heartbeat_minutes": 0.1
+        }
+      },
+      "failurePrediction": {
+        "features": [
+          "service_restarts",
+          "connection_drops",
+          "error_rate",
+          "resource_pressure",
+          "configuration_drift",
+          "security_events"
+        ],
+        "thresholds": {
+          "low_risk": 0.3,
+          "medium_risk": 0.6,
+          "high_risk": 0.8
+        },
+        "weights": {
+          "service_restarts": 0.2,
+          "connection_drops": 0.2,
+          "error_rate": 0.15,
+          "resource_pressure": 0.15,
+          "configuration_drift": 0.15,
+          "security_events": 0.15
+        }
+      },
+      "anomalyDetection": {
+        "features": [
+          "cpu_pattern",
+          "memory_pattern",
+          "network_pattern",
+          "error_pattern",
+          "heartbeat_pattern"
+        ],
+        "sensitivity": 0.8,
+        "baseline_period_days": 7,
+        "detection_window_hours": 24
+      }
+    }
+  }

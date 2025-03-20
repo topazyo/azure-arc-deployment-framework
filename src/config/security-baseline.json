@@ -1,0 +1,415 @@
+{
+    "metadata": {
+        "version": "1.0.0",
+        "lastUpdated": "2024-01-15",
+        "description": "Security baseline for Azure Arc Framework",
+        "complianceFrameworks": [
+            "NIST 800-53",
+            "CIS Benchmarks",
+            "Azure Security Benchmark"
+        ]
+    },
+    "tlsSettings": {
+        "protocols": {
+            "TLS1.0": {
+                "enabled": false,
+                "clientEnabled": false,
+                "serverEnabled": false
+            },
+            "TLS1.1": {
+                "enabled": false,
+                "clientEnabled": false,
+                "serverEnabled": false
+            },
+            "TLS1.2": {
+                "enabled": true,
+                "clientEnabled": true,
+                "serverEnabled": true
+            },
+            "TLS1.3": {
+                "enabled": true,
+                "clientEnabled": true,
+                "serverEnabled": true
+            }
+        },
+        "cipherSuites": {
+            "allowed": [
+                "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384",
+                "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256",
+                "TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384",
+                "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256",
+                "TLS_DHE_RSA_WITH_AES_256_GCM_SHA384",
+                "TLS_DHE_RSA_WITH_AES_128_GCM_SHA256"
+            ],
+            "disallowed": [
+                "TLS_RSA_WITH_3DES_EDE_CBC_SHA",
+                "TLS_RSA_WITH_AES_128_CBC_SHA",
+                "TLS_RSA_WITH_AES_256_CBC_SHA",
+                "TLS_RSA_WITH_AES_128_CBC_SHA256",
+                "TLS_RSA_WITH_AES_256_CBC_SHA256"
+            ]
+        },
+        "dotNetSettings": {
+            "systemDefaultTlsVersions": true,
+            "schUseStrongCrypto": true
+        }
+    },
+    "certificateSettings": {
+        "minimumKeySize": 2048,
+        "preferredKeySize": 4096,
+        "allowedSignatureAlgorithms": [
+            "sha256RSA",
+            "sha384RSA",
+            "sha512RSA",
+            "sha256ECDSA",
+            "sha384ECDSA",
+            "sha512ECDSA"
+        ],
+        "disallowedSignatureAlgorithms": [
+            "md5RSA",
+            "sha1RSA"
+        ],
+        "minimumValidityPeriod": "30.00:00:00",
+        "requiredCertificates": [
+            {
+                "subject": "CN=Baltimore CyberTrust Root",
+                "thumbprint": "d4de20d05e66fc53fe1a50882c78db2852cae474",
+                "purpose": "Root CA"
+            },
+            {
+                "subject": "CN=Microsoft RSA Root Certificate Authority 2017",
+                "thumbprint": "73a5e64a3bff8316ff0edccc618a906e4eae4d74",
+                "purpose": "Root CA"
+            },
+            {
+                "subject": "CN=DigiCert Global Root CA",
+                "thumbprint": "a8985d3a65e5e5c4b2d7d66d40c6dd2fb19c5436",
+                "purpose": "Root CA"
+            }
+        ],
+        "certificateValidation": {
+            "checkRevocation": true,
+            "checkTrustChain": true,
+            "allowUserTrust": false
+        }
+    },
+    "serviceSettings": {
+        "arcAgent": {
+            "serviceName": "himds",
+            "startupType": "Automatic",
+            "requiredPermissions": [
+                "NT AUTHORITY\\SYSTEM"
+            ],
+            "dependencies": [
+                "HTTP"
+            ]
+        },
+        "amaAgent": {
+            "serviceName": "AzureMonitorAgent",
+            "startupType": "Automatic",
+            "requiredPermissions": [
+                "NT AUTHORITY\\SYSTEM"
+            ],
+            "dependencies": [
+                "HTTP"
+            ]
+        },
+        "guestConfig": {
+            "serviceName": "GCService",
+            "startupType": "Automatic",
+            "requiredPermissions": [
+                "NT AUTHORITY\\SYSTEM"
+            ],
+            "dependencies": []
+        }
+    },
+    "firewallRules": {
+        "outbound": [
+            {
+                "name": "Azure Arc Management",
+                "protocol": "TCP",
+                "port": 443,
+                "destination": "*.management.azure.com",
+                "required": true
+            },
+            {
+                "name": "Azure Identity",
+                "protocol": "TCP",
+                "port": 443,
+                "destination": "*.login.microsoftonline.com",
+                "required": true
+            },
+            {
+                "name": "Azure Monitor",
+                "protocol": "TCP",
+                "port": 443,
+                "destination": "*.ods.opinsights.azure.com",
+                "required": true
+            },
+            {
+                "name": "Log Analytics",
+                "protocol": "TCP",
+                "port": 443,
+                "destination": "*.oms.opinsights.azure.com",
+                "required": true
+            },
+            {
+                "name": "Azure Monitor Control",
+                "protocol": "TCP",
+                "port": 443,
+                "destination": "global.handler.control.monitor.azure.com",
+                "required": true
+            }
+        ],
+        "inbound": [
+            {
+                "name": "Remote Management",
+                "protocol": "TCP",
+                "port": 5985,
+                "source": "Management Servers",
+                "required": false
+            }
+        ]
+    },
+    "networkSettings": {
+        "proxy": {
+            "useProxy": false,
+            "proxyServer": "",
+            "bypassList": [
+                "*.azure.com",
+                "*.microsoft.com",
+                "*.windows.net"
+            ],
+            "authentication": {
+                "required": false,
+                "method": "None"
+            }
+        },
+        "dns": {
+            "preferIPv4": true,
+            "dnsCache": true
+        },
+        "ipv6": {
+            "enabled": false
+        }
+    },
+    "auditPolicies": {
+        "accountLogon": {
+            "credentialValidation": "Success,Failure",
+            "kerberosAuthentication": "Success,Failure",
+            "kerberosServiceTicket": "Success,Failure"
+        },
+        "accountManagement": {
+            "computerAccountManagement": "Success,Failure",
+            "securityGroupManagement": "Success,Failure",
+            "userAccountManagement": "Success,Failure"
+        },
+        "detailedTracking": {
+            "dpapi": "Success",
+            "processCreation": "Success",
+            "processTermination": "Success"
+        },
+        "logon": {
+            "logon": "Success,Failure",
+            "logoff": "Success",
+            "specialLogon": "Success"
+        },
+        "objectAccess": {
+            "fileSystem": "Success,Failure",
+            "registry": "Success,Failure",
+            "sam": "Success,Failure"
+        },
+        "policyChange": {
+            "auditPolicyChange": "Success,Failure",
+            "authenticationPolicyChange": "Success",
+            "authorizationPolicyChange": "Success"
+        },
+        "privilegeUse": {
+            "sensitivePrivilegeUse": "Success,Failure"
+        },
+        "system": {
+            "securityStateChange": "Success",
+            "securitySystemExtension": "Success,Failure",
+            "systemIntegrity": "Success,Failure"
+        }
+    },
+    "localSecurityPolicy": {
+        "accountPolicies": {
+            "passwordPolicy": {
+                "maximumPasswordAge": 90,
+                "minimumPasswordAge": 1,
+                "minimumPasswordLength": 14,
+                "passwordComplexity": true,
+                "passwordHistorySize": 24
+            },
+            "accountLockout": {
+                "accountLockoutDuration": 30,
+                "accountLockoutThreshold": 5,
+                "resetAccountLockoutCounter": 30
+            }
+        },
+        "localPolicies": {
+            "userRightsAssignment": {
+                "accessComputerFromNetwork": [
+                    "Administrators",
+                    "Remote Desktop Users"
+                ],
+                "allowLogonLocally": [
+                    "Administrators"
+                ],
+                "denyAccessComputerFromNetwork": [
+                    "Guest"
+                ],
+                "denyLogonLocally": [
+                    "Guest"
+                ]
+            },
+            "securityOptions": {
+                "accounts": {
+                    "limitLocalAccountUseOfBlankPasswords": true,
+                    "renameAdministratorAccount": true,
+                    "renameGuestAccount": true
+                },
+                "networkSecurity": {
+                    "doNotStoreLanManagerHash": true,
+                    "lanManagerAuthenticationLevel": 5,
+                    "minimumSessionSecurity": "RequireNTLMv2,RequireSigning,RequireStrongKey"
+                },
+                "systemCryptography": {
+                    "useFewerCryptographicAlgorithms": true
+                }
+            }
+        }
+    },
+    "registrySettings": {
+        "securityKeys": [
+            {
+                "path": "HKLM:\\SYSTEM\\CurrentControlSet\\Control\\SecurityProviders\\SCHANNEL",
+                "key": "EventLogging",
+                "value": 3,
+                "type": "DWORD"
+            },
+            {
+                "path": "HKLM:\\SOFTWARE\\Microsoft\\.NETFramework\\v4.0.30319",
+                "key": "SchUseStrongCrypto",
+                "value": 1,
+                "type": "DWORD"
+            },
+            {
+                "path": "HKLM:\\SOFTWARE\\Wow6432Node\\Microsoft\\.NETFramework\\v4.0.30319",
+                "key": "SchUseStrongCrypto",
+                "value": 1,
+                "type": "DWORD"
+            },
+            {
+                "path": "HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System",
+                "key": "ConsentPromptBehaviorAdmin",
+                "value": 2,
+                "type": "DWORD"
+            },
+            {
+                "path": "HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System",
+                "key": "EnableLUA",
+                "value": 1,
+                "type": "DWORD"
+            }
+        ]
+    },
+    "windowsFeatures": {
+        "required": [
+            "PowerShell-V2",
+            "WoW64-Support"
+        ],
+        "disabled": [
+            "SMB1Protocol",
+            "TFTP",
+            "TelnetClient"
+        ]
+    },
+    "antiMalware": {
+        "realTimeProtection": true,
+        "scanSchedule": "Daily",
+        "exclusions": {
+            "paths": [
+                "C:\\Program Files\\Azure Connected Machine Agent",
+                "C:\\Program Files\\Azure Monitor Agent"
+            ],
+            "processes": [
+                "himds.exe",
+                "gc_service.exe",
+                "AzureMonitorAgent.exe"
+            ],
+            "extensions": []
+        }
+    },
+    "dataCollection": {
+        "securityEvents": {
+            "level": "Informational",
+            "categories": [
+                "Account Logon",
+                "Account Management",
+                "Detailed Tracking",
+                "DS Access",
+                "Logon/Logoff",
+                "Object Access",
+                "Policy Change",
+                "Privilege Use",
+                "System"
+            ]
+        },
+        "performanceCounters": {
+            "samplingFrequency": "00:05:00",
+            "counters": [
+                "\\Processor(_Total)\\% Processor Time",
+                "\\Memory\\Available MBytes",
+                "\\LogicalDisk(_Total)\\% Free Space",
+                "\\Network Interface(*)\\Bytes Total/sec"
+            ]
+        },
+        "logs": {
+            "applicationLogs": true,
+            "systemLogs": true,
+            "securityLogs": true,
+            "customLogs": [
+                "C:\\Program Files\\Azure Connected Machine Agent\\logs",
+                "C:\\Program Files\\Azure Monitor Agent\\logs"
+            ]
+        }
+    },
+    "remediationActions": {
+        "tlsRemediation": {
+            "script": "Set-TLSConfiguration.ps1",
+            "parameters": {
+                "enforceSettings": true,
+                "backupRegistry": true
+            }
+        },
+        "certificateRemediation": {
+            "script": "Update-CertificateStore.ps1",
+            "parameters": {
+                "updateRootCertificates": true,
+                "validateChain": true
+            }
+        },
+        "firewallRemediation": {
+            "script": "Set-FirewallRules.ps1",
+            "parameters": {
+                "enforceRules": true,
+                "backupRules": true
+            }
+        },
+        "auditPolicyRemediation": {
+            "script": "Set-AuditPolicies.ps1",
+            "parameters": {
+                "enforceSettings": true,
+                "backupSettings": true
+            }
+        }
+    },
+    "complianceChecks": {
+        "frequency": "Daily",
+        "reportPath": "C:\\ProgramData\\AzureArcFramework\\Compliance",
+        "alertOnFailure": true,
+        "remediateAutomatically": false
+    }
+}
