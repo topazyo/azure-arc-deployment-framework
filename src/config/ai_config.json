@@ -16,6 +16,10 @@
                         "memoryUsage": 500
                     }
                 }
+            },
+            "clustering": {
+                "eps": 0.5,
+                "min_samples": 5
             }
         },
         "monitoring": {
@@ -38,6 +42,62 @@
                         "cpuThreshold": 80,
                         "memoryThreshold": 85
                     }
+                }
+            }
+        },
+        "feature_engineering": {
+            "rolling_window": 5,
+            "lags": [1, 3, 5],
+            "selected_k_features": 20
+        },
+        "model_config": {
+            "features": {
+                "health_prediction": {
+                    "required_features": [
+                        "cpu_usage",
+                        "memory_usage",
+                        "disk_usage",
+                        "network_latency",
+                        "error_count",
+                        "warning_count"
+                    ],
+                    "missing_strategy": "mean",
+                    "target_column": "is_healthy"
+                },
+                "anomaly_detection": {
+                    "required_features": [
+                        "cpu_usage",
+                        "memory_usage",
+                        "disk_usage",
+                        "network_latency",
+                        "request_count",
+                        "response_time"
+                    ],
+                    "missing_strategy": "median"
+                },
+                "failure_prediction": {
+                    "required_features": [
+                        "service_restarts",
+                        "error_count",
+                        "cpu_spikes",
+                        "memory_spikes",
+                        "connection_drops"
+                    ],
+                    "missing_strategy": "zero",
+                    "target_column": "will_fail"
+                }
+            },
+            "models": {
+                "health_prediction": {
+                    "n_estimators": 100,
+                    "max_depth": 10
+                },
+                "anomaly_detection": {
+                    "contamination": 0.05
+                },
+                "failure_prediction": {
+                    "n_estimators": 150,
+                    "max_depth": 12
                 }
             }
         }
