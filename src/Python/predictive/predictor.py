@@ -96,7 +96,6 @@ class ArcPredictor:
 
             scaled_features_array = self.scalers[model_type].transform(raw_features_array)
             prediction = self.models[model_type].predict_proba(scaled_features_array)[0]
-
             # Use feature_info for impacts
             current_feature_info = self.feature_info.get(model_type, {})
             importances_map = current_feature_info.get('importances_map')
@@ -136,7 +135,6 @@ class ArcPredictor:
                 return {"error": f"Feature preparation failed or resulted in empty data for {model_type}."}
 
             scaled_features_array = self.scalers[model_type].transform(raw_features_array)
-
             anomaly_scores = self.models[model_type].score_samples(scaled_features_array)
             is_anomaly_prediction = self.models[model_type].predict(scaled_features_array)[0]
 
@@ -232,8 +230,6 @@ class ArcPredictor:
         except Exception as e:
             self.logger.error(f"Feature preparation failed for {model_type}: {str(e)}", exc_info=True)
             return None
-
-
     def calculate_feature_impacts(self,
                                  scaled_features_array_1d: np.ndarray,
                                  feature_importance_dict: Dict[str, float], # This is the map of name:importance
