@@ -36,13 +36,21 @@ $config = @{
 # Initialize the framework
 try {
     Write-Host "Initializing Arc Framework..." -ForegroundColor Cyan
-    Initialize-ArcDeployment -CustomConfig $config # Removed $init = as it was unused
-    Write-Host "Framework initialized successfully" -ForegroundColor Green
+    # The Initialize-ArcDeployment function has been updated to take specific parameters.
+    # Replace "<subscription-id>" with your actual subscription ID.
+    # Other values can be sourced from the $config hash or set directly.
+    Initialize-ArcDeployment -SubscriptionId $config.SubscriptionId -ResourceGroupName $config.ResourceGroup -Location $config.Location -Tags @{Environment="Dev"; Project="ArcFramework"}
+    # Example with placeholder values:
+    # Initialize-ArcDeployment -SubscriptionId "your-sub-id" -ResourceGroupName "arc-rg" -Location "eastus" -Tags @{Environment="Dev"; Project="ArcFramework"}
+    Write-Host "Framework initialized successfully (using placeholder Initialize-ArcDeployment)" -ForegroundColor Green
 }
 catch {
     Write-Error "Framework initialization failed: $_"
     exit 1
 }
+
+# Example for New-ArcDeployment (direct usage)
+# New-ArcDeployment -ServerName "WebAppServer01" -ResourceGroupName "arc-rg"
 
 # Function to deploy Arc to a single server
 function Deploy-SingleServer {
