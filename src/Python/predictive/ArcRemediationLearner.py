@@ -55,7 +55,7 @@ class ArcRemediationLearner:
                 }
 
             # Update model with new data
-            self.model.partial_fit(features, [success])
+            self.model.fit(features, [success])
 
             # Update AI components with new learning
             if self.trainer and success:

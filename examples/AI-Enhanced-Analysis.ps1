@@ -249,6 +249,19 @@ try {
     # Display summary
     Write-Host "`nAI Analysis Summary:" -ForegroundColor Cyan
     Write-Host "Health Score: $($analysis.HealthPrediction.Probability)" -ForegroundColor $(if ($analysis.HealthPrediction.Probability -gt 0.7) { "Green" } else { "Red" })
+
+    # Example of calling the framework's Get-PredictiveInsights
+    Write-Host "Attempting to get framework's predictive insights for $serverName..." -ForegroundColor Cyan
+    try {
+        $frameworkInsights = Get-PredictiveInsights -ServerName $serverName
+        Write-Host "Framework Predictive Insights (Placeholder Data):"
+        $frameworkInsights | Format-List | Out-String | Write-Host
+    } catch {
+        Write-Warning "Could not retrieve framework predictive insights. Ensure AzureArcFramework module is correctly imported and configured."
+        Write-Warning $_.Exception.Message
+    }
+
+    Write-Host "Anomalies Detected: $($analysis.Anomalies.Count)" -ForegroundColor Yellow
     Write-Host "Anomalies Detected: $($analysis.Anomalies.Count)" -ForegroundColor Yellow
     Write-Host "Failure Probability: $($analysis.FailurePrediction.Probability)" -ForegroundColor $(if ($analysis.FailurePrediction.Probability -lt 0.3) { "Green" } else { "Red" })
     Write-Host "Recommendations: $($insights.Recommendations.Count)" -ForegroundColor White
@@ -257,6 +270,8 @@ try {
     # Take action if critical issues found
     if ($insights.Risks | Where-Object { $_.Severity -eq "Critical" }) {
         Write-Host "`nCritical issues detected!" -ForegroundColor Red
+        # Note: Start-AIEnhancedTroubleshooting could also be an option here depending on the desired workflow.
+        # For example: Start-AIEnhancedTroubleshooting -ServerName $serverName -InitialInsights $insights
         $response = Read-Host "Would you like to start automated remediation? (Y/N)"
         if ($response -eq 'Y') {
             Start-AIRemediationWorkflow -ServerName $serverName -Insights $insights
