@@ -64,13 +64,13 @@ function New-ArcDeployment {
     }
 
     process {
-        Write-Verbose "Initiating Azure Arc onboarding for server: $ServerName"
-        Write-Verbose "Target Resource Group: $ResourceGroupName, Subscription: $SubscriptionId, Location: $Location, Tenant: $TenantId"
+        Write-Host "Initiating Azure Arc onboarding for server: $ServerName"
+        Write-Host "Target Resource Group: $ResourceGroupName, Subscription: $SubscriptionId, Location: $Location, Tenant: $TenantId"
 
         # Placeholder for Agent Installation
         if ($AgentInstallationScriptPath) {
             if (Test-Path $AgentInstallationScriptPath) {
-                Write-Verbose "Attempting to execute agent installation script: $AgentInstallationScriptPath"
+                Write-Host "Executing agent installation script: $AgentInstallationScriptPath"
                 if ($PSCmdlet.ShouldProcess("Execute Agent Installation Script '$AgentInstallationScriptPath'", "Execute")) {
                     try {
                         # This is a placeholder for executing the script.

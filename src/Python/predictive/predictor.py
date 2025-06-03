@@ -89,7 +89,7 @@ class ArcPredictor:
             raise
 
     def predict_health(self, telemetry_data: Dict[str, Any]) -> Dict[str, Any]:
-        """[TODO: Add method documentation]"""
+        """Predict health status based on telemetry data."""
         model_type = 'health_prediction'
         try:
             raw_features_array = self.prepare_features(telemetry_data, model_type)
@@ -99,7 +99,6 @@ class ArcPredictor:
 
             scaled_features_array = self.scalers[model_type].transform(raw_features_array)
             prediction = self.models[model_type].predict_proba(scaled_features_array)[0]
-            
             # Use feature_info for impacts
             current_feature_info = self.feature_info.get(model_type, {})
             importances_map = current_feature_info.get('importances_map')
@@ -130,7 +129,7 @@ class ArcPredictor:
             raise
 
     def detect_anomalies(self, telemetry_data: Dict[str, Any]) -> Dict[str, Any]:
-        """[TODO: Add method documentation]"""
+        """Detect anomalies in telemetry data."""
         model_type = 'anomaly_detection'
         try:
             raw_features_array = self.prepare_features(telemetry_data, model_type)
@@ -139,7 +138,6 @@ class ArcPredictor:
                 return {"error": f"Feature preparation failed or resulted in empty data for {model_type}."}
 
             scaled_features_array = self.scalers[model_type].transform(raw_features_array)
-            
             anomaly_scores = self.models[model_type].score_samples(scaled_features_array)
             is_anomaly_prediction = self.models[model_type].predict(scaled_features_array)[0]
 
@@ -160,7 +158,7 @@ class ArcPredictor:
             raise
 
     def predict_failures(self, telemetry_data: Dict[str, Any]) -> Dict[str, Any]:
-        """[TODO: Add method documentation]"""
+        """Predict potential failures based on telemetry data."""
         model_type = 'failure_prediction'
         try:
             raw_features_array = self.prepare_features(telemetry_data, model_type)
@@ -235,14 +233,12 @@ class ArcPredictor:
         except Exception as e:
             self.logger.error(f"Feature preparation failed for {model_type}: {str(e)}", exc_info=True)
             return None
-
-
     def calculate_feature_impacts(self,
                                  scaled_features_array_1d: np.ndarray,
                                  feature_importance_dict: Dict[str, float], # This is the map of name:importance
                                  ordered_feature_names: List[str]
                                  ) -> Dict[str, float]:
-        """[TODO: Add method documentation]"""
+        """Calculate the impact of each feature on the prediction using a definitive feature order."""
         impacts = {}
         if not feature_importance_dict: # Check if the map itself is None or empty
             self.logger.info("Feature importance map is empty or None. Skipping impact calculation.")
