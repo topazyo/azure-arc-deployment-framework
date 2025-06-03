@@ -66,7 +66,7 @@ function Get-PredictiveInsights {
     }
 
     process {
-        Write-Verbose "Retrieving predictive insights for server '$ServerName' (Analysis: $AnalysisType)..."
+        Write-Host "Retrieving predictive insights for server '$ServerName' (Analysis: $AnalysisType)..."
 
         $arguments = @(
             "`"$aiEngineScript`"", # Ensure script path is quoted if it contains spaces

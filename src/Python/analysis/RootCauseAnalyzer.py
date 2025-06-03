@@ -7,9 +7,7 @@ from .pattern_analyzer import PatternAnalyzer
 import re # For keyword searching
 
 class SimpleRCAEstimator:
-    """[TODO: Add class documentation]"""
     def __init__(self, config: Dict[str, Any] = None):
-        """[TODO: Add method documentation]"""
         self.config = config if config else {}
         self.logger = logging.getLogger('SimpleRCAEstimator')
         self.rules = self.config.get('rules', {
@@ -22,7 +20,6 @@ class SimpleRCAEstimator:
         self.default_confidence = self.config.get('default_confidence', 0.75)
 
     def predict_root_cause(self, incident_data: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """[TODO: Add method documentation]"""
         self.logger.info(f"Predicting root cause for incident: {incident_data.get('description', 'No description')}")
         potential_causes = []
 
@@ -79,9 +76,7 @@ class SimpleRCAEstimator:
         return potential_causes
 
 class SimpleRCAExplainer:
-    """[TODO: Add class documentation]"""
     def __init__(self, config: Dict[str, Any] = None):
-        """[TODO: Add method documentation]"""
         self.config = config if config else {}
         self.logger = logging.getLogger('SimpleRCAExplainer')
 
@@ -92,7 +87,6 @@ class SimpleRCAExplainer:
                 f"Recommended action: {cause['recommendation']}")
 
     def explain_prediction(self, causes: List[Dict[str, Any]], incident_data: Dict[str, Any]) -> Dict[str, Any]:
-        """[TODO: Add method documentation]"""
         self.logger.info(f"Generating explanation for {len(causes)} potential causes.")
         primary_explanation_str = "No primary cause identified."
         factor_explanations_list = []
@@ -211,7 +205,7 @@ class RootCauseAnalyzer:
         causes: List[Dict[str, Any]], # Updated to expect list of dicts
         patterns_analysis: Dict[str, Any]
     ) -> List[Dict[str, Any]]:
-        """[TODO: Add method documentation]"""
+        """Generate enhanced recommendations based on causes and patterns."""
         self.logger.info("Generating recommendations...")
         recommendations = []
 
@@ -262,7 +256,7 @@ class RootCauseAnalyzer:
         # This method might be redundant if generate_recommendations directly processes pattern_analysis output.
         # Keeping it for now, but it might need to be adapted or removed.
         # The current generate_recommendations already iterates through pattern_analysis.
-        """[TODO: Add method documentation]"""
+        """Generate recommendations based on identified patterns"""
         recommendations = []
         for pattern in patterns.get('common_causes', []):
             recommendations.append({
