@@ -6,15 +6,22 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report, confusion_matrix
 import joblib
 import logging
+import os # Added os import
 from datetime import datetime
-from typing import Dict, List, Tuple, Any
+from typing import Dict, List, Tuple, Any, Optional # Added Optional
+
+# Ensure all necessary sklearn imports are present
+from sklearn.ensemble import RandomForestClassifier, IsolationForest
+from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import train_test_split
+
 
 class ArcModelTrainer:
     def __init__(self, config: Dict[str, Any]):
         self.config = config
-        self.models = {}
-        self.scalers = {}
-        self.feature_importance = {}
+        self.models: Dict[str, Any] = {}
+        self.scalers: Dict[str, StandardScaler] = {}
+        self.feature_importance: Dict[str, Dict[str, Any]] = {} # Stores names and importances
         self.setup_logging()
 
     def setup_logging(self):
@@ -25,157 +32,252 @@ class ArcModelTrainer:
         )
         self.logger = logging.getLogger('ArcModelTrainer')
 
-    def prepare_data(self, data: pd.DataFrame, model_type: str) -> Tuple[np.ndarray, np.ndarray]:
-        """Prepare data for training specific model types."""
+    def prepare_data(self, data: pd.DataFrame, model_type: str) -> Tuple[Optional[np.ndarray], Optional[pd.Series], List[str]]:
+        """Prepare data for training specific model types.
+        Returns scaled features, target, and the list of feature names used, in order.
+        Returns (None, None, []) if preparation fails.
+        """
         try:
             # Select features based on model type
             feature_config = self.config['features'][model_type]
-            features = data[feature_config['required_features']]
+
+            # Ensure required_features are present in data's columns
+            actual_features_to_use = [f for f in feature_config['required_features'] if f in data.columns]
+            if len(actual_features_to_use) != len(feature_config['required_features']):
+                self.logger.warning(f"Not all required_features for {model_type} found in input data columns. "
+                                    f"Missing: {set(feature_config['required_features']) - set(actual_features_to_use)}")
+
+            if not actual_features_to_use:
+                self.logger.error(f"No required features for {model_type} found in data. Cannot prepare data.")
+                return None, None, []
+
+            features_df = data[actual_features_to_use].copy() # Use .copy() to avoid SettingWithCopyWarning later
             
             # Handle missing values
-            features = self.handle_missing_values(features, feature_config['missing_strategy'])
+            features_df = self.handle_missing_values(features_df, feature_config['missing_strategy'])
             
             # Create scaler for this model type
             scaler = StandardScaler()
-            scaled_features = scaler.fit_transform(features)
+            scaled_features = scaler.fit_transform(features_df)
             self.scalers[model_type] = scaler
             
             # Prepare target variable if not anomaly detection
             if model_type != 'anomaly_detection':
+                if feature_config['target_column'] not in data.columns:
+                    self.logger.error(f"Target column '{feature_config['target_column']}' for {model_type} not found in data.")
+                    return None, None, []
                 target = data[feature_config['target_column']]
-                return scaled_features, target
+                return scaled_features, target, actual_features_to_use
             
-            return scaled_features, None
+            return scaled_features, None, actual_features_to_use
 
         except Exception as e:
             self.logger.error(f"Data preparation failed for {model_type}: {str(e)}")
-            raise
+            self.logger.error(f"Data preparation failed for {model_type}: {str(e)}", exc_info=True)
+            return None, None, []
+
+
+    def handle_missing_values(self, df: pd.DataFrame, strategy: str, model_type: str) -> pd.DataFrame:
+        """Handle missing values in features DataFrame."""
+        self.logger.info(f"Handling missing values for {model_type} using strategy: {strategy}")
+        original_nan_counts = df.isnull().sum().sum()
+
+        if df.empty:
+            self.logger.warning(f"DataFrame for {model_type} is empty before handling missing values.")
+            return df
+
+        numeric_cols = df.select_dtypes(include=np.number).columns
+
+        if strategy == 'mean':
+            for col in numeric_cols: # Iterate explicitly to log per column if needed
+                 fill_value = df[col].mean()
+                 if pd.isna(fill_value): # If mean is NaN (e.g. all values were NaN)
+                     fill_value = 0 # Fallback to 0
+                     self.logger.warning(f"Mean for column {col} in {model_type} is NaN. Filling with 0.")
+                 df[col].fillna(fill_value, inplace=True)
+        elif strategy == 'median':
+            for col in numeric_cols:
+                 fill_value = df[col].median()
+                 if pd.isna(fill_value):
+                     fill_value = 0
+                     self.logger.warning(f"Median for column {col} in {model_type} is NaN. Filling with 0.")
+                 df[col].fillna(fill_value, inplace=True)
+        elif strategy == 'zero':
+            df.fillna(0, inplace=True)
+        elif strategy == 'dropna': # Not generally recommended for feature sets unless handled carefully
+            df.dropna(inplace=True)
+            self.logger.info(f"Dropped rows with NaNs for {model_type}. Original rows: {original_nan_counts}, After drop: {len(df)}")
+        else:
+            self.logger.warning(f"Unknown missing value strategy '{strategy}' for {model_type}. Not handling NaNs.")
+            return df # Return as is if strategy is unknown
+
+        nan_counts_after = df.isnull().sum().sum()
+        self.logger.info(f"Missing values handled for {model_type}. Original NaNs: {original_nan_counts}, Remaining NaNs: {nan_counts_after}")
+        return df
 
     def train_health_prediction_model(self, data: pd.DataFrame) -> None:
-        """Train model for predicting Arc agent health issues."""
+        model_type = 'health_prediction'
+        self.logger.info(f"Starting training for {model_type} model...")
         try:
-            X, y = self.prepare_data(data, 'health_prediction')
-            X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+            # Configuration for this model type
+            model_params = self.config.get('models', {}).get(model_type, {})
+            test_split_ratio = self.config.get('test_split_ratio', 0.2)
+            random_state = self.config.get('random_state', 42)
+
+            X_scaled, y, feature_names = self.prepare_data(data, model_type)
+
+            if X_scaled is None or y is None:
+                self.logger.error(f"Data preparation failed for {model_type}. Skipping training.")
+                return
+            if len(np.unique(y)) < 2 :
+                 self.logger.error(f"Target variable for {model_type} has less than 2 unique classes. Classification model cannot be trained. Unique values: {np.unique(y)}")
+                 return
+
+            X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=test_split_ratio, random_state=random_state, stratify=y if np.unique(y).size > 1 else None)
 
             model = RandomForestClassifier(
-                n_estimators=self.config['models']['health_prediction']['n_estimators'],
-                max_depth=self.config['models']['health_prediction']['max_depth'],
-                random_state=42
+                n_estimators=model_params.get('n_estimators', 100),
+                max_depth=model_params.get('max_depth', None),
+                class_weight=model_params.get('class_weight', None),
+                random_state=random_state
             )
 
             model.fit(X_train, y_train)
-            self.models['health_prediction'] = model
+            self.models[model_type] = model
 
-            # Calculate and store feature importance
-            feature_names = self.config['features']['health_prediction']['required_features']
-            self.feature_importance['health_prediction'] = dict(zip(feature_names, model.feature_importances_))
+            self.feature_importance[model_type] = {
+                'names': feature_names,
+                'importances': model.feature_importances_.tolist() if hasattr(model, 'feature_importances_') else None
+            }
 
-            # Evaluate model
             y_pred = model.predict(X_test)
-            self.logger.info("Health Prediction Model Performance:")
-            self.logger.info("\n" + classification_report(y_test, y_pred))
+            self.logger.info(f"{model_type} Model Performance:\n{classification_report(y_test, y_pred)}")
+            self.logger.info(f"{model_type} Confusion Matrix:\n{confusion_matrix(y_test, y_pred)}")
+            self.logger.info(f"{model_type} model training completed successfully.")
 
         except Exception as e:
-            self.logger.error(f"Health prediction model training failed: {str(e)}")
-            raise
+            self.logger.error(f"{model_type} model training failed: {str(e)}", exc_info=True)
 
     def train_anomaly_detection_model(self, data: pd.DataFrame) -> None:
-        """Train model for detecting anomalous behavior."""
+        model_type = 'anomaly_detection'
+        self.logger.info(f"Starting training for {model_type} model...")
         try:
-            X, _ = self.prepare_data(data, 'anomaly_detection')
+            model_params = self.config.get('models', {}).get(model_type, {})
+            random_state = self.config.get('random_state', 42)
+
+            X_scaled, _, feature_names = self.prepare_data(data, model_type)
+            if X_scaled is None:
+                self.logger.error(f"Data preparation failed for {model_type}. Skipping training.")
+                return
+            if X_scaled.shape[0] == 0:
+                self.logger.error(f"No data available for training {model_type} after preparation. Skipping.")
+                return
 
             model = IsolationForest(
-                contamination=self.config['models']['anomaly_detection']['contamination'],
-                random_state=42
+                n_estimators=model_params.get('n_estimators', 100), # n_estimators added
+                contamination=model_params.get('contamination', 'auto'),
+                random_state=random_state
             )
 
-            model.fit(X)
-            self.models['anomaly_detection'] = model
+            model.fit(X_scaled)
+            self.models[model_type] = model
 
-            # Evaluate model
-            scores = model.score_samples(X)
-            self.logger.info(f"Anomaly Detection Model trained. Score range: {scores.min():.2f} to {scores.max():.2f}")
+            self.feature_importance[model_type] = {'names': feature_names, 'importances': None} # IF doesn't have direct feature_importances_
+
+            scores = model.score_samples(X_scaled)
+            self.logger.info(f"{model_type} Model trained. Anomaly scores range: {scores.min():.2f} to {scores.max():.2f} (lower is more anomalous).")
+            self.logger.info(f"{model_type} model training completed successfully.")
 
         except Exception as e:
-            self.logger.error(f"Anomaly detection model training failed: {str(e)}")
-            raise
+            self.logger.error(f"{model_type} model training failed: {str(e)}", exc_info=True)
 
     def train_failure_prediction_model(self, data: pd.DataFrame) -> None:
-        """Train model for predicting potential failures."""
+        model_type = 'failure_prediction'
+        self.logger.info(f"Starting training for {model_type} model...")
         try:
-            X, y = self.prepare_data(data, 'failure_prediction')
-            X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+            model_params = self.config.get('models', {}).get(model_type, {})
+            test_split_ratio = self.config.get('test_split_ratio', 0.2)
+            random_state = self.config.get('random_state', 42)
+
+            X_scaled, y, feature_names = self.prepare_data(data, model_type)
+            if X_scaled is None or y is None:
+                self.logger.error(f"Data preparation failed for {model_type}. Skipping training.")
+                return
+            if len(np.unique(y)) < 2 :
+                 self.logger.error(f"Target variable for {model_type} has less than 2 unique classes. Classification model cannot be trained. Unique values: {np.unique(y)}")
+                 return
+
+            X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=test_split_ratio, random_state=random_state, stratify=y if np.unique(y).size > 1 else None)
 
             model = RandomForestClassifier(
-                n_estimators=self.config['models']['failure_prediction']['n_estimators'],
-                max_depth=self.config['models']['failure_prediction']['max_depth'],
-                class_weight='balanced',
-                random_state=42
+                n_estimators=model_params.get('n_estimators', 100),
+                max_depth=model_params.get('max_depth', None),
+                class_weight=model_params.get('class_weight', 'balanced'), # Default to balanced for failure prediction
+                random_state=random_state
             )
 
             model.fit(X_train, y_train)
-            self.models['failure_prediction'] = model
+            self.models[model_type] = model
 
-            # Calculate and store feature importance
-            feature_names = self.config['features']['failure_prediction']['required_features']
-            self.feature_importance['failure_prediction'] = dict(zip(feature_names, model.feature_importances_))
+            self.feature_importance[model_type] = {
+                'names': feature_names,
+                'importances': model.feature_importances_.tolist() if hasattr(model, 'feature_importances_') else None
+            }
 
-            # Evaluate model
             y_pred = model.predict(X_test)
-            self.logger.info("Failure Prediction Model Performance:")
-            self.logger.info("\n" + classification_report(y_test, y_pred))
+            self.logger.info(f"{model_type} Model Performance:\n{classification_report(y_test, y_pred)}")
+            self.logger.info(f"{model_type} Confusion Matrix:\n{confusion_matrix(y_test, y_pred)}")
+            self.logger.info(f"{model_type} model training completed successfully.")
 
         except Exception as e:
-            self.logger.error(f"Failure prediction model training failed: {str(e)}")
-            raise
+            self.logger.error(f"{model_type} model training failed: {str(e)}", exc_info=True)
 
     def save_models(self, output_dir: str) -> None:
-        """Save trained models and scalers."""
+        """Save trained models, scalers, and feature importance data."""
         try:
-            for model_type, model in self.models.items():
-                model_path = f"{output_dir}/{model_type}_model.pkl"
-                scaler_path = f"{output_dir}/{model_type}_scaler.pkl"
-                
-                joblib.dump(model, model_path)
-                joblib.dump(self.scalers[model_type], scaler_path)
-                
-                # Save feature importance if available
-                if model_type in self.feature_importance:
-                    importance_path = f"{output_dir}/{model_type}_feature_importance.pkl"
-                    joblib.dump(self.feature_importance[model_type], importance_path)
+            os.makedirs(output_dir, exist_ok=True)
+            self.logger.info(f"Saving models to directory: {output_dir}")
 
-            self.logger.info(f"Models and scalers saved to {output_dir}")
+            for model_type, model in self.models.items():
+                model_path = os.path.join(output_dir, f"{model_type}_model.pkl")
+                joblib.dump(model, model_path)
+                self.logger.info(f"Saved {model_type} model to {model_path}")
+
+                if model_type in self.scalers:
+                    scaler_path = os.path.join(output_dir, f"{model_type}_scaler.pkl")
+                    joblib.dump(self.scalers[model_type], scaler_path)
+                    self.logger.info(f"Saved {model_type} scaler to {scaler_path}")
+                
+                if model_type in self.feature_importance and self.feature_importance[model_type] is not None:
+                    importance_path = os.path.join(output_dir, f"{model_type}_feature_importance.pkl")
+                    joblib.dump(self.feature_importance[model_type], importance_path)
+                    self.logger.info(f"Saved {model_type} feature importance to {importance_path}")
+
+            self.logger.info(f"All models, scalers, and feature importance data saved to {output_dir}")
 
         except Exception as e:
-            self.logger.error(f"Failed to save models: {str(e)}")
-            raise
-
-    def handle_missing_values(self, features: pd.DataFrame, strategy: str) -> pd.DataFrame:
-        """Handle missing values in features."""
-        if strategy == 'mean':
-            return features.fillna(features.mean())
-        elif strategy == 'median':
-            return features.fillna(features.median())
-        elif strategy == 'zero':
-            return features.fillna(0)
-        else:
-            return features.dropna()
+            self.logger.error(f"Failed to save models: {str(e)}", exc_info=True)
+            raise # Re-raise to indicate failure in saving
 
     def update_models_with_remediation(self, remediation_data: Dict[str, Any]) -> None:
         """Placeholder for updating models with new remediation data."""
         try:
-            self.logger.info(f"Placeholder: Received remediation data for learning: {remediation_data.get('action')}")
-            # In a real scenario, this would involve:
-            # 1. Preprocessing remediation_data into features and target.
-            # 2. Deciding which model(s) to update (e.g., failure_prediction, health_prediction).
-            # 3. Potentially retraining or fine-tuning the relevant model(s).
-            # For example, if 'failure_prediction' model exists and data is relevant:
-            # if 'failure_prediction' in self.models:
-            #     features, target = self.prepare_data_for_remediation(remediation_data, 'failure_prediction')
-            #     if features is not None and target is not None:
-            #         self.models['failure_prediction'].fit(features, target) # Or partial_fit if applicable and model supports it
-            #         self.logger.info("Placeholder: 'failure_prediction' model updated with remediation data.")
-            pass # Keep it as a simple pass for now
+            self.logger.info(f"Received remediation data for learning: {remediation_data.get('action')}")
+            self.logger.warning("Full retraining logic for models with new remediation data is not yet implemented. Models were not updated.")
+            # Pseudocode from prompt:
+            # model_type_to_update = "failure_prediction" # or determine based on remediation_data
+            # if model_type_to_update in self.models:
+            #     self.logger.info(f"Attempting to update {model_type_to_update} model with remediation data.")
+            #     # 1. Convert remediation_data to feature vector and target
+            #     # This is highly dependent on the structure of remediation_data and model features
+            #     # X_sample, y_sample = self._preprocess_remediation_for_model(remediation_data, model_type_to_update)
+            #
+            #     # 2. If valid sample obtained:
+            #     # self.logger.info("New sample processed. Retraining model (simulation).")
+            #     # This would require access to the original full dataset to append and retrain,
+            #     # or a strategy for online learning if the model supports it.
+            # else:
+            #     self.logger.warning(f"Model type {model_type_to_update} not found for updating.")
         except Exception as e:
-            self.logger.error(f"Failed to update models with remediation data: {str(e)}")
+            self.logger.error(f"Failed to process remediation data for model update: {str(e)}", exc_info=True)
             # Do not re-raise, as this is a background learning process in the placeholder
