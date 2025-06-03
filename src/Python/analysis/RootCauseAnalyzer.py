@@ -112,31 +112,6 @@ class SimpleRCAExplainer:
             'factor_explanations': factor_explanations_list
         }
 
-class MLModelPlaceholder:
-    def predict_root_cause(self, incident_data: Dict[str, Any]) -> List[Any]:
-        # Placeholder implementation
-        class MockCause:
-            def __init__(self, _type, confidence, recommendation, impact):
-                self.type = _type
-                self.confidence = confidence
-                self.recommendation = recommendation
-                self.impact = impact
-
-        return [
-            MockCause("Network Issue", 0.7, "Check network connectivity", 0.5),
-            MockCause("CPU Overload", 0.5, "Reduce CPU load", 0.8)
-        ]
-
-class ExplainerPlaceholder:
-    def explain_prediction(self, causes: List[Any]) -> Any:
-        # Placeholder implementation
-        class MockExplanation:
-            def __init__(self):
-                self.primary = "Primary explanation placeholder"
-            def get_factor_explanation(self, cause: Any) -> str:
-                return f"Factor explanation for {cause.type}"
-        return MockExplanation()
-
 class RootCauseAnalyzer:
     def __init__(self, config: Dict[str, Any]):
         self.config = config

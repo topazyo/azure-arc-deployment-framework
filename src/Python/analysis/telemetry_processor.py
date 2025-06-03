@@ -494,53 +494,6 @@ class TelemetryProcessor:
             return [{'type': 'error', 'priority': 'high', 'message': 'Trend insight generation failed', 'details': str(e)}]
 
 
-    def _generate_anomaly_insights(self, anomalies: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """Generate insights from detected anomalies."""
-        insights = []
-        try:
-            self.logger.info("Generating anomaly insights...")
-            if anomalies.get('detected'):
-                for detail in anomalies.get('details', []):
-                    insights.append({
-                        'type': 'anomaly',
-                        'priority': 'high', # Placeholder
-                        'message': f"Anomaly detected at index {detail.get('index')}",
-                        'details': f"Distance: {detail.get('distance', 0):.2f}, Anomalous Features: {detail.get('features', {})}"
-                    })
-            return insights
-        except Exception as e:
-            self.logger.error(f"Anomaly insight generation failed: {str(e)}")
-            return []
-
-    def _generate_trend_insights(self, trends: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """Generate insights from detected trends."""
-        insights = []
-        try:
-            self.logger.info("Generating trend insights...")
-            # Example: Insight for a strong trend in CPU usage (short-term)
-            if 'short_term' in trends and 'cpu_usage' in trends['short_term']:
-                cpu_trend = trends['short_term']['cpu_usage']
-                if abs(cpu_trend.get('slope', 0)) > 0.5 and cpu_trend.get('r_squared', 0) > 0.7: # Strong trend
-                    insights.append({
-                        'type': 'trend',
-                        'priority': 'medium', # Placeholder
-                        'message': f"Significant short-term trend in CPU usage: slope {cpu_trend['slope']:.2f}",
-                        'details': cpu_trend
-                    })
-            # Example: Insight for a periodic pattern
-            if 'patterns' in trends and 'periodic' in trends['patterns']:
-                 for pattern_name, detail in trends['patterns']['periodic'].items():
-                    insights.append({
-                        'type': 'pattern',
-                        'priority': 'low', # Placeholder
-                        'message': f"Detected periodic pattern: {pattern_name} - {detail}",
-                        'details': trends['patterns']['periodic']
-                    })
-            return insights
-        except Exception as e:
-            self.logger.error(f"Trend insight generation failed: {str(e)}")
-            return []
-
     def _generate_insights(
         self,
         # 'features' here is the flat dictionary from _extract_features
@@ -609,7 +562,6 @@ class TelemetryProcessor:
         except Exception as e:
             self.logger.error(f"Error in _calculate_trend for series of length {len(series)}: {e}", exc_info=True)
             return {'slope': 0.0, 'intercept': 0.0, 'r_value': 0.0, 'p_value': 1.0, 'stderr': 0.0, 'significant': False, 'direction': 'stable'}
-
 
 
     def _calculate_mahalanobis_distance(self, features: np.ndarray) -> np.ndarray:

@@ -234,7 +234,6 @@ class FeatureEngineer:
                     interaction_features[f'{col1_name}_div_{col2_name}_ratio'] = ratio_series.replace([np.inf, -np.inf], np.nan)
                     interaction_features[f'{col1_name}_plus_{col2_name}_sum'] = col1 + col2
                     interaction_features[f'{col1_name}_minus_{col2_name}_diff'] = col1 - col2
-
             # Clipping extreme values is generally good, but might be better handled by robust scalers or transformations later.
             # For now, keeping it simple. NaNs from ratios or products will be handled by _handle_missing_values.
         except Exception as e:
@@ -450,14 +449,11 @@ class FeatureEngineer:
                  k_actual_for_selector = min(numeric_features.shape[1], num_available_features) if k_to_select == 'all' else min(k_to_select, numeric_features.shape[1])
             else:
                  k_actual_for_selector = min(k_to_select, numeric_features.shape[1])
-
-
             if k_actual_for_selector == 0 and numeric_features.shape[1] > 0: # If k is 0 but features exist
                  self.logger.warning("k_actual_for_selector is 0. SelectKBest might fail. Returning original numeric features.")
                  return numeric_features # Or features, depending on desired fallback
 
             selector_key = f"selector_k{k_actual_for_selector}_{self.feature_selection_score_func_name}"
-
             current_selector: SelectKBest
             if selector_key not in self.feature_selectors:
                 self.logger.info(f"Fitting new SelectKBest (k={k_actual_for_selector}, score_func={self.feature_selection_score_func_name}).")
