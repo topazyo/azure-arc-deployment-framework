@@ -154,11 +154,37 @@ class ArcPredictor:
             self.logger.error(f"Feature preparation failed: {str(e)}")
             raise
 
-    def calculate_feature_impacts(self, features: np.ndarray, feature_importance: Dict[str, float]) -> Dict[str, float]:
-        """Calculate the impact of each feature on the prediction."""
+    def calculate_feature_impacts(self, prepared_features_array: np.ndarray, feature_importance: Dict[str, float]) -> Dict[str, float]:
+        """Calculate the impact of each feature on the prediction.
+        Note: This implementation assumes that the order of features in
+        `feature_importance.keys()` matches the order of columns in `prepared_features_array`.
+        """
         impacts = {}
-        for feature_name, importance in feature_importance.items():
-            impacts[feature_name] = float(features[feature_name] * importance)
+        # Assuming prepared_features_array is 1D array for a single prediction (e.g., shape (num_features,))
+        # or a 2D array for multiple predictions (e.g., shape (num_samples, num_features)).
+        # We are typically interested in the impacts for a single sample.
+
+        # If prepared_features_array is 2D (e.g. from self.scalers[...].transform(features))
+        # and we are predicting for one sample at a time, it would be features_1d = prepared_features_array[0]
+        # However, the input `scaled_features[0]` to this method in `predict_health` and `predict_failures`
+        # suggests `prepared_features_array` is already the 1D array for the single sample.
+
+        feature_names_in_order = list(feature_importance.keys()) # Assumed order
+
+        for i, feature_name in enumerate(feature_names_in_order):
+            if i < prepared_features_array.shape[0]: # Check if index is within bounds
+                importance_value = feature_importance[feature_name]
+                feature_value = prepared_features_array[i]
+                impacts[feature_name] = float(feature_value * importance_value)
+            else:
+                self.logger.warning(f"Feature index {i} for feature '{feature_name}' is out of bounds for prepared_features_array.")
+
+        if len(feature_names_in_order) != prepared_features_array.shape[0]:
+             self.logger.warning(
+                f"Mismatch in length between feature names ({len(feature_names_in_order)}) "
+                f"and prepared features array ({prepared_features_array.shape[0]}). "
+                "Impact calculation might be incomplete or incorrect."
+            )
         return impacts
 
     def calculate_risk_level(self, failure_probability: float) -> str:
