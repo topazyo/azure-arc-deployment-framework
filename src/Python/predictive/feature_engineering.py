@@ -102,18 +102,18 @@ class FeatureEngineer:
             for col in numerical_columns:
                 # Rolling statistics
                 rolling_window = data[col].rolling(window=self.config.get('rolling_window', 5))
-                statistical_features[f'{col}_rolling_mean'] = rolling_window.mean()
-                statistical_features[f'{col}_rolling_std'] = rolling_window.std()
-                statistical_features[f'{col}_rolling_max'] = rolling_window.max()
-                statistical_features[f'{col}_rolling_min'] = rolling_window.min()
+                statistical_features[f'{col}_rolling_mean'] = rolling_window.mean().fillna(0)
+                statistical_features[f'{col}_rolling_std'] = rolling_window.std().fillna(0)
+                statistical_features[f'{col}_rolling_max'] = rolling_window.max().fillna(0)
+                statistical_features[f'{col}_rolling_min'] = rolling_window.min().fillna(0)
                 
                 # Lag features
                 for lag in self.config.get('lags', [1, 3, 5]):
-                    statistical_features[f'{col}_lag_{lag}'] = data[col].shift(lag)
+                    statistical_features[f'{col}_lag_{lag}'] = data[col].shift(lag).fillna(0)
                 
                 # Difference features
-                statistical_features[f'{col}_diff'] = data[col].diff()
-                statistical_features[f'{col}_pct_change'] = data[col].pct_change()
+                statistical_features[f'{col}_diff'] = data[col].diff().fillna(0)
+                statistical_features[f'{col}_pct_change'] = data[col].pct_change().fillna(0)
 
         except Exception as e:
             self.logger.error(f"Statistical feature creation failed: {str(e)}")
@@ -179,7 +179,7 @@ class FeatureEngineer:
             
             for col in categorical_columns:
                 if col not in self.encoders:
-                    self.encoders[col] = OneHotEncoder(sparse=False, handle_unknown='ignore')
+                    self.encoders[col] = OneHotEncoder(sparse_output=False, handle_unknown='ignore')
                     encoded_values = self.encoders[col].fit_transform(features[[col]])
                 else:
                     encoded_values = self.encoders[col].transform(features[[col]])
