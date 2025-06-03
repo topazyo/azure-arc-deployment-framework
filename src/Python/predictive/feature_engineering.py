@@ -360,8 +360,6 @@ class FeatureEngineer:
                     new_feature_names = self.encoders[encoder_key].get_feature_names_out([col])
                 except AttributeError: # older sklearn versions might use categories_
                      new_feature_names = [f"{col}_{val}" for val in self.encoders[encoder_key].categories_[0]]
-
-
                 encoded_part = pd.DataFrame(encoded_values, columns=new_feature_names, index=encoded_df.index)
 
                 encoded_df = pd.concat([encoded_df.drop(columns=[col]), encoded_part], axis=1)
