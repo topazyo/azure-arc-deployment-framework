@@ -708,7 +708,7 @@ class PatternAnalyzer:
     # For now, I'll keep them as they were, assuming they might be used by other parts or future enhancements.
 
     def analyze_cluster_characteristics(self, cluster_points: np.ndarray) -> Dict[str, Any]:
-        """[TODO: Add method documentation]"""
+        """Analyze characteristics of a cluster."""
         # This method might be too generic. If features_array has named columns, this could be more specific.
         # For now, it calculates generic stats.
         if cluster_points.ndim == 1: cluster_points = cluster_points.reshape(-1,1) # Ensure 2D for ptp
@@ -721,12 +721,12 @@ class PatternAnalyzer:
         }
 
     def calculate_cluster_stability(self, cluster_points: np.ndarray) -> float:
-        """[TODO: Add method documentation]"""
+        """Calculate stability metric for a cluster (mean of standard deviations of its features)."""
         if cluster_points.shape[0] < 2: return 0.0 # Std dev not meaningful for single point
         return float(np.std(cluster_points, axis=0).mean())
 
     def calculate_cluster_density(self, cluster_points: np.ndarray) -> float:
-        """[TODO: Add method documentation]"""
+        """Calculate density metric for a cluster. Crude measure."""
         if cluster_points.shape[0] == 0: return 0.0
         if cluster_points.ndim == 1: cluster_points = cluster_points.reshape(-1,1)
 
@@ -736,7 +736,7 @@ class PatternAnalyzer:
         return float(len(cluster_points) / volume)
 
     def calculate_cluster_isolation(self, cluster_points: np.ndarray) -> float:
-        """[TODO: Add method documentation]"""
+        """Calculate isolation metric for a cluster (mean distance from its center)."""
         if cluster_points.shape[0] == 0: return 0.0
         center = np.mean(cluster_points, axis=0)
         distances = np.linalg.norm(cluster_points - center, axis=1)

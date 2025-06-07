@@ -30,7 +30,7 @@ DEFAULT_MODEL_DIR = os.path.join(PROJECT_ROOT_ASSUMED, "data", "models", "latest
 
 
 def generate_sample_telemetry(server_name: str, feature_names: list) -> dict:
-    """[TODO: Add method documentation]"""
+    """Generates sample telemetry data for a given server based on expected feature names."""
     data = {"server_name": server_name}
     # Based on feature names used in training (from model_metadata['feature_order'])
     for feature in feature_names:
