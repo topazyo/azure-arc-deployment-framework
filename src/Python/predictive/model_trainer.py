@@ -270,7 +270,7 @@ class ArcModelTrainer:
             self.logger.error(f"{model_type} model training failed: {str(e)}", exc_info=True)
 
     def save_models(self, output_dir: str) -> None:
-        """[TODO: Add method documentation]"""
+        """Save trained models, scalers, and feature importance data."""
         try:
             os.makedirs(output_dir, exist_ok=True)
             self.logger.info(f"Saving models to directory: {output_dir}")
@@ -297,7 +297,7 @@ class ArcModelTrainer:
             raise # Re-raise to indicate failure in saving
 
     def update_models_with_remediation(self, remediation_data: Dict[str, Any]) -> None:
-        """[TODO: Add method documentation]"""
+        """Placeholder for updating models with new remediation data."""
         try:
             self.logger.info(f"Received remediation data for learning: {remediation_data.get('action')}")
             self.logger.warning("Full retraining logic for models with new remediation data is not yet implemented. Models were not updated.")

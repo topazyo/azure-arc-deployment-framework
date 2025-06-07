@@ -313,7 +313,7 @@ class RootCauseAnalyzer:
         causes: List[Dict[str, Any]], # Updated to expect list of dicts
         patterns_analysis: Dict[str, Any]
     ) -> List[Dict[str, Any]]:
-        """[TODO: Add method documentation]"""
+        """Generate enhanced recommendations based on causes and patterns."""
         self.logger.info("Generating recommendations...")
         recommendations = []
 
@@ -364,7 +364,7 @@ class RootCauseAnalyzer:
         # This method might be redundant if generate_recommendations directly processes pattern_analysis output.
         # Keeping it for now, but it might need to be adapted or removed.
         # The current generate_recommendations already iterates through pattern_analysis.
-        """[TODO: Add method documentation]"""
+        """Generate recommendations based on identified patterns"""
         recommendations = []
         for pattern in patterns.get('common_causes', []):
             recommendations.append({

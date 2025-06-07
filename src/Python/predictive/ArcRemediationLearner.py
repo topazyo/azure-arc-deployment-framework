@@ -43,7 +43,7 @@ class ArcRemediationLearner:
     # _initialize_model method removed as self.model is removed
 
     def initialize_ai_components(self, global_ai_config: Dict[str, Any], model_dir: str):
-        """[TODO: Add method documentation]"""
+        """Initialize AI components (Trainer and Predictor)."""
         try:
             # Pass relevant parts of the global_ai_config to trainer and predictor
             # Assuming model_trainer and predictor can pick their configs from global_ai_config
@@ -56,7 +56,7 @@ class ArcRemediationLearner:
             raise
 
     def learn_from_remediation(self, remediation_data: Dict[str, Any]):
-        """[TODO: Add method documentation]"""
+        """Process remediation actions to update success patterns and inform model trainer."""
         try:
             error_type = remediation_data.get('error_type', 'UnknownError')
             action_taken = remediation_data.get('action', 'UnknownAction')
@@ -124,7 +124,7 @@ class ArcRemediationLearner:
             # Do not re-raise, allow learner to continue if one entry fails
 
     def get_recommendation(self, error_context: Dict[str, Any]) -> Dict[str, Any]:
-        """[TODO: Add method documentation]"""
+        """Generate remediation recommendations based on learned success patterns and AI predictions."""
         self.logger.info(f"Getting recommendation for error_context: {error_context.get('error_type', 'Unknown')}")
         recommendations = []
 
@@ -218,5 +218,5 @@ class ArcRemediationLearner:
     # _get_alternative_actions is also implicitly handled by the new get_recommendation logic.
 
     def get_all_success_patterns(self) -> Dict[tuple, Dict[str, Any]]:
-        """[TODO: Add method documentation]"""
+        """Returns all learned success patterns."""
         return self.success_patterns
