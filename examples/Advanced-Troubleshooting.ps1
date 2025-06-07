@@ -107,12 +107,28 @@ function Invoke-IssueAnalysis {
 
     try {
         # Basic analysis
+        # Note: The AzureArcFramework module provides Start-ArcTroubleshooter, which could be used
+        # as a more integrated entry point for such advanced troubleshooting scenarios.
+        # This script implements a custom workflow but could leverage module functions.
         $analysis = Invoke-ArcAnalysis -DiagnosticData $DiagnosticData
 
         # AI-enhanced analysis if available
         if ($AI) {
-            $aiInsights = $AI.AnalyzeDiagnostics($DiagnosticData)
+            $aiInsights = $AI.AnalyzeDiagnostics($DiagnosticData) # This seems to be a custom/local AI object
             $analysis.AIInsights = $aiInsights
+
+            # Additionally, let's try to get insights from the framework's Get-PredictiveInsights
+            try {
+                Write-Host "Fetching predictive insights via framework function for $($DiagnosticData.ServerName)..." -ForegroundColor Cyan
+                $frameworkPredictiveInsights = Get-PredictiveInsights -ServerName $DiagnosticData.ServerName
+                if ($frameworkPredictiveInsights) {
+                    $analysis.FrameworkPredictiveInsights = $frameworkPredictiveInsights
+                    Write-Host "Framework predictive insights (placeholder) added to analysis."
+                }
+            } catch {
+                Write-Warning "Could not retrieve framework predictive insights during advanced troubleshooting."
+                Write-Warning $_.Exception.Message
+            }
         }
 
         # Comprehensive analysis for deeper issues
