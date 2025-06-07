@@ -20,7 +20,7 @@
         # Core Functions
         'Initialize-ArcDeployment',
         'New-ArcDeployment',
-        'Start-ArcTroubleshooting',
+        'Start-ArcTroubleshooter',
         'Test-ArcPrerequisites',
         'Deploy-ArcAgent',
         'Start-ArcDiagnostics',
