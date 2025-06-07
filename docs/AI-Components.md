@@ -156,37 +156,128 @@ Start-AIRemediationWorkflow -ServerName $ServerName -Insights $insights
 Invoke-AIDecision -Context $context -Options $options
 ```
 
-## Model Training Process (Conceptual)
+## Model Training
 
-The model training process, primarily managed by `ArcModelTrainer` and orchestrated potentially by higher-level scripts, involves:
-1.  **Data Collection**: Gathering historical telemetry and operational data.
-2.  **Feature Engineering**: Using `FeatureEngineer` to process raw data into features suitable for model training. The specific features engineered are guided by `feature_engineering` and `model_config.features` sections in `ai_config.json`.
-3.  **Data Preparation**: `ArcModelTrainer.prepare_data` takes the (potentially already engineered) data, selects the final set of features required for a specific model, handles any remaining missing values, scales numerical features, and separates the target variable.
-4.  **Model Training**: For each model type (health, failure, anomaly), `ArcModelTrainer` initializes the scikit-learn model with hyperparameters from `ai_config.json` and fits it to the prepared data.
-5.  **Evaluation**: Basic evaluation metrics are logged (e.g., classification reports).
-6.  **Model Saving**: Trained models, scalers, and feature information (ordered names and importances) are saved to disk using `joblib` by `ArcModelTrainer.save_models`. These artifacts are then used by `ArcPredictor` at inference time.
+### 1. Training Process
 
-# This section was replaced by the detailed Python AI Engine Details above.
-# The old content is removed by the diff.
+```mermaid
+graph LR
+    A[Data Collection] -->|Historical Data| B[Data Preparation]
+    B -->|Clean Data| C[Feature Engineering]
+    C -->|Features| D[Model Training]
+    D -->|Trained Model| E[Validation]
+    E -->|Validated Model| F[Deployment]
+```
 
-## Configuration (`src/config/ai_config.json`)
+### 2. Model Updates
 
-The behavior of the Python AI engine components is heavily driven by `src/config/ai_config.json`. This file contains detailed configurations for:
--   **Telemetry Processing**: Feature lists for anomaly detection, trends, FFT, correlations; thresholds for various detections.
--   **Pattern Analysis**: Feature lists for behavioral clustering, DBSCAN parameters, performance metrics to track, bottleneck rules.
--   **Root Cause Analysis**: Rules for `SimpleRCAEstimator` (keywords, metric thresholds, cause strings, recommendations, impacts).
--   **Feature Engineering**: Lists of original features to use, columns for statistical and interaction feature generation, NaN fill strategies, feature selection parameters (k, score function).
--   **Model Training (`model_config`)**:
-    *   `features`: Defines, per model type, the list of required input features (which can be the output of `FeatureEngineer`), target column name, and missing value strategy for `ArcModelTrainer`'s `prepare_data` step.
-    *   `models`: Specifies scikit-learn model types and their hyperparameters (e.g., `n_estimators`, `max_depth`, `contamination`, `class_weight`) for health prediction, anomaly detection, and failure prediction.
--   **Remediation Learning**: Features for context logging, success rate thresholds for recommending from patterns.
+```python
+def update_model(new_data):
+    """
+    Updates model with new training data
+    
+    Parameters:
+    - new_data: New training data
+    
+    Returns:
+    - Updated model metrics
+    """
+```
 
-This centralized configuration allows for fine-tuning the AI engine's behavior without code changes. (The generic JSON examples previously in this document have been removed in favor of this description of the actual configuration file).
+## Python AI Engine Details
 
-## Best Practices & Troubleshooting
-(Sections on Best Practices, Troubleshooting, Performance Optimization, Security, Monitoring, and Future Enhancements can be reviewed and updated in subsequent iterations as the framework matures beyond the current focus on core component implementation.)
-# The old "Feature Configuration" and its JSON example are removed by this replacement.
-# The generic "AI Configuration" JSON example is also removed.
+This section details recent updates to the core Python classes forming the AI engine. Many of these components are currently using placeholder logic and data, serving as a structural foundation for future full-fledged AI model integration.
+
+### RootCauseAnalyzer
+The `RootCauseAnalyzer` now initializes with placeholder instances for its machine learning model (`ml_model = MLModelPlaceholder()`) and its explanation component (`explainer = ExplainerPlaceholder()`). These placeholders simulate the behavior of a trained ML model and an explainable AI component, allowing the overall workflow to be tested.
+
+### PatternAnalyzer
+The `PatternAnalyzer` has been significantly expanded with several new methods to identify various types of patterns in telemetry data. These methods currently implement placeholder logic and return simulated pattern data:
+- `analyze_daily_patterns`: Analyzes for daily trends and seasonality.
+- `analyze_weekly_patterns`: Analyzes for weekly trends.
+- `analyze_monthly_patterns`: Analyzes for monthly cycles.
+- `identify_common_failure_causes`: Identifies frequent causes of failures.
+- `identify_failure_precursors`: Detects sequences of events that may lead to failures.
+- `analyze_failure_impact`: Assesses the potential impact of identified failures.
+- `analyze_resource_usage_patterns`: Analyzes how resources are utilized over time.
+- `identify_bottlenecks`: Pinpoints potential performance bottlenecks.
+- `analyze_performance_trends`: Tracks trends in performance metrics.
+
+The parent methods `analyze_failure_patterns` and `analyze_performance_patterns` have also been updated to include a `recommendations` key in their output, populated with placeholder recommendations.
+
+### TelemetryProcessor
+The `TelemetryProcessor` includes several new internal methods for processing telemetry data. These methods currently use placeholder logic:
+- `_handle_missing_values`: Fills or removes missing data points.
+- `_prepare_feature_matrix`: Transforms features into a numerical matrix for model input.
+- `_get_anomalous_features`: Identifies features contributing to an anomaly.
+- `_calculate_period_trends`: Calculates trends over specific time periods.
+- `_detect_periodic_patterns`: Detects recurring patterns.
+- `_detect_correlations`: Finds correlations between different metrics.
+- `_detect_anomalous_patterns`: Identifies unusual sequences or combinations of events.
+- `_generate_anomaly_insights`: Creates human-readable insights from detected anomalies.
+- `_generate_trend_insights`: Creates insights from detected trends.
+- `_calculate_derived_features`: Computes new features from existing data (e.g., error rates).
+
+### ArcRemediationLearner & ArcModelTrainer
+- **ArcRemediationLearner**: In the `learn_from_remediation` method, the model update call has been changed from `self.model.partial_fit(...)` to `self.model.fit(...)`. This reflects an iterative single-sample update approach suitable for the current placeholder model.
+- **ArcModelTrainer**: A new placeholder method `update_models_with_remediation` has been added. This method is intended to eventually allow models to learn from the outcomes of remediation actions.
+
+### FeatureEngineer
+The `FeatureEngineer` component has received the following updates:
+- In `_encode_categorical_features`, the `OneHotEncoder` initialization was changed from `sparse=False` to `sparse_output=False` to align with updated scikit-learn parameter names.
+- In `_create_statistical_features`, methods for calculating rolling statistics (mean, std, max, min), lag features, difference features, and percentage change features now include `.fillna(0)` to handle NaN values that can arise at the beginning of series or from certain calculations.
+
+### Predictor
+The `Predictor` component's `calculate_feature_impacts` method has been updated to correctly use numerical indices when accessing feature values from the `prepared_features_array` (NumPy array). Previously, it attempted to use feature names, which would fail. The method now assumes the order of features in the `feature_importance` dictionary matches the column order in `prepared_features_array`. Warnings have been added to log potential issues if this order assumption is violated or if array dimensions don't match. The `prepare_features` method still uses hardcoded feature lists, and this dependency is acknowledged as a risk.
+
+## Configuration
+
+### 1. AI Configuration
+The main AI configuration file, `src/config/ai_config.json`, has been updated to include new sections essential for the expanded AI capabilities:
+- **`clustering`**: Configuration for pattern analysis clustering (e.g., `eps`, `min_samples` for DBSCAN in `PatternAnalyzer`).
+- **`feature_engineering`**: Parameters for the `FeatureEngineer` (e.g., `rolling_window` size, `lags` to generate).
+- **`model_config`**: Contains detailed configurations for model training, structured into:
+    - `features`: Defines required features, missing value strategies, and target columns for different model types (`health_prediction`, `anomaly_detection`, `failure_prediction`).
+    - `models`: Specifies hyperparameters for each model type (e.g., `n_estimators`, `max_depth` for Random Forest models, `contamination` for Isolation Forest).
+
+```json
+{
+    "models": {
+        "health_prediction": {
+            "type": "RandomForest",
+            "threshold": 0.7,
+            "features": ["cpu", "memory", "network"]
+        },
+        "anomaly_detection": {
+            "type": "IsolationForest",
+            "contamination": 0.1
+        }
+    },
+    "training": {
+        "batch_size": 1000,
+        "epochs": 10,
+        "validation_split": 0.2
+    }
+}
+```
+
+### 2. Feature Configuration
+
+```json
+{
+    "features": {
+        "performance": {
+            "cpu_usage": {"type": "numeric", "range": [0, 100]},
+            "memory_usage": {"type": "numeric", "range": [0, 100]},
+            "disk_usage": {"type": "numeric", "range": [0, 100]}
+        },
+        "health": {
+            "service_status": {"type": "categorical", "values": ["Running", "Stopped"]},
+            "connection_status": {"type": "categorical", "values": ["Connected", "Disconnected"]}
+        }
+    }
+}
+```
 
 ## Best Practices
 

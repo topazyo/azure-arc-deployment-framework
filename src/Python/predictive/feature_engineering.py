@@ -234,7 +234,7 @@ class FeatureEngineer:
                     interaction_features[f'{col1_name}_div_{col2_name}_ratio'] = ratio_series.replace([np.inf, -np.inf], np.nan)
                     interaction_features[f'{col1_name}_plus_{col2_name}_sum'] = col1 + col2
                     interaction_features[f'{col1_name}_minus_{col2_name}_diff'] = col1 - col2
-            
+
             # Clipping extreme values is generally good, but might be better handled by robust scalers or transformations later.
             # For now, keeping it simple. NaNs from ratios or products will be handled by _handle_missing_values.
         except Exception as e:
