@@ -20,11 +20,16 @@ class ArcRemediationLearner:
         self.success_patterns: Dict[tuple, Dict[str, Any]] = {} # Key: (error_type, action)
         self.predictor: Optional[ArcPredictor] = None
         self.trainer: Optional[ArcModelTrainer] = None
-        self.setup_logging()
+
+        # Attributes for retraining trigger
+        self.new_data_counter: Dict[str, int] = {}
+        self.retraining_threshold = self.config.get('retraining_data_threshold', 50) # Default to 50
+
+        self.setup_logging() # Call after all attributes potentially used in setup_logging are set
+
         # Feature list for context summarization, configurable
         self.context_features_to_log = self.config.get('remediation_learner_context_features',
                                                       ['cpu_usage', 'memory_usage', 'error_count'])
-
 
     def setup_logging(self):
         logging.basicConfig(
@@ -99,6 +104,20 @@ class ArcRemediationLearner:
                 self.trainer.update_models_with_remediation(remediation_data)
             else:
                 self.logger.warning("Trainer not initialized. Cannot pass remediation data for model updates.")
+
+            # Retraining trigger logic
+            # For simplicity, categorize any successful remediation for a known error as data for failure_prediction improvement
+            if outcome_success and error_type != 'UnknownError':
+                data_category_key = "failure_prediction_data" # Example category
+                self.new_data_counter[data_category_key] = self.new_data_counter.get(data_category_key, 0) + 1
+                self.logger.debug(f"New data point for '{data_category_key}', count: {self.new_data_counter[data_category_key]}")
+
+                if self.new_data_counter[data_category_key] >= self.retraining_threshold:
+                    self.logger.info(
+                        f"Sufficient new data ({self.new_data_counter[data_category_key]} points) gathered for '{data_category_key}'. "
+                        f"Consider retraining the relevant predictive models."
+                    )
+                    self.new_data_counter[data_category_key] = 0 # Reset counter
 
         except Exception as e:
             self.logger.error(f"Failed to learn from remediation: {str(e)}", exc_info=True)

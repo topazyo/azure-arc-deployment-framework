@@ -56,11 +56,11 @@ function Initialize-ArcDeployment {
     }
 
     process {
-        Write-Host "Initializing Azure environment for Arc deployment..."
-        Write-Host "Target Subscription ID: $SubscriptionId"
-        Write-Host "Target Resource Group Name: $ResourceGroupName"
-        Write-Host "Target Location: $Location"
-        if ($TenantId) { Write-Host "Target Tenant ID (informational): $TenantId" }
+        Write-Verbose "Initializing Azure environment for Arc deployment..."
+        Write-Verbose "Target Subscription ID: $SubscriptionId"
+        Write-Verbose "Target Resource Group Name: $ResourceGroupName"
+        Write-Verbose "Target Location: $Location"
+        if ($TenantId) { Write-Verbose "Target Tenant ID (informational): $TenantId" }
 
         $rgExists = $false
         try {
@@ -79,10 +79,10 @@ function Initialize-ArcDeployment {
 
         if (-not $rgExists) {
             if ($PSCmdlet.ShouldProcess("Resource Group '$ResourceGroupName' in location '$Location'", "Create")) {
-                Write-Host "Creating resource group '$ResourceGroupName' in location '$Location'..."
+                Write-Verbose "Creating resource group '$ResourceGroupName' in location '$Location'..."
                 try {
                     New-AzResourceGroup -Name $ResourceGroupName -Location $Location -Tag $Tags -ErrorAction Stop | Out-Null
-                    Write-Host "Resource group '$ResourceGroupName' created successfully."
+                    Write-Verbose "Resource group '$ResourceGroupName' created successfully."
                     $resourceGroup = Get-AzResourceGroup -Name $ResourceGroupName
                 }
                 catch {
@@ -117,7 +117,7 @@ function Initialize-ArcDeployment {
             InitializationTime = Get-Date
         }
 
-        Write-Host "Arc Deployment Initialization complete for resource group '$($resourceGroup.ResourceGroupName)'."
+        Write-Verbose "Arc Deployment Initialization complete for resource group '$($resourceGroup.ResourceGroupName)'."
         return $output
     }
 

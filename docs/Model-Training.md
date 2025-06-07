@@ -24,7 +24,7 @@ The primary goal of the training process is to produce reliable models that can 
             *   Applies `StandardScaler` to numerical features.
             *   Separates the target variable (e.g., `is_healthy`, `will_fail`) for supervised learning tasks.
         *   **Data Splitting**: For supervised models, splits the data into training and testing sets using `train_test_split` (configurable `test_split_ratio` and `random_state`).
-        *   **Model Initialization**: Initializes scikit-learn models (e.g., `RandomForestClassifier`, `IsolationForest`) with hyperparameters specified in `model_config.models[model_type]`.
+        *   **Model Initialization**: Initializes scikit-learn models based on the `algorithm` specified in `model_config.models[model_type]` (e.g., `RandomForestClassifier`, `GradientBoostingClassifier` for health prediction; `IsolationForest` for anomaly detection). Hyperparameters are drawn from the corresponding parameter block (e.g., `random_forest_params`, `gradient_boosting_params`).
         *   **Model Fitting**: Trains the model on the prepared training data.
         *   **Evaluation**: For classification models, logs a `classification_report` and `confusion_matrix` based on the test set. For `IsolationForest`, logs score ranges.
         *   **Artifact Saving (`save_models` method)**: Saves the trained model, the fitted `StandardScaler` instance, and feature information (an ordered list of feature names and their importance scores, if applicable) to a specified output directory. These artifacts are essential for the `ArcPredictor` at inference time.
@@ -169,11 +169,12 @@ print(f"Models, scalers, and feature information saved to: {output_model_directo
 
 When `ArcModelTrainer.save_models()` is called, it saves the following for each trained model type (e.g., `health_prediction`):
 
-*   **`[model_type]_model.pkl`**: The trained scikit-learn model object itself (e.g., a RandomForestClassifier).
+    *   **`[model_type]_model.pkl`**: The trained scikit-learn model object itself (e.g., a `RandomForestClassifier` or `GradientBoostingClassifier`).
 *   **`[model_type]_scaler.pkl`**: The fitted `StandardScaler` object used for this model's features.
 *   **`[model_type]_feature_importance.pkl`**: A Python dictionary containing:
     *   `'names'`: An ordered list of feature names that the model was trained on. This order is crucial for consistent feature preparation at prediction time.
-    *   `'importances'`: A list of feature importance scores corresponding to the feature names (if the model type supports feature importances, like RandomForest). For models like IsolationForest, this might be `None`.
+        *   `'importances'`: A list of feature importance scores corresponding to the feature names (if the model algorithm supports feature importances, like RandomForest or GradientBoosting). For models like IsolationForest, this might be `None`.
+        *   `'algorithm'`: A string specifying the algorithm used for training (e.g., `"RandomForestClassifier"`, `"GradientBoostingClassifier"`).
 
 ## Using Trained Models
 

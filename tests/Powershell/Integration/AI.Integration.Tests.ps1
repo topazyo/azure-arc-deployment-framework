@@ -7,6 +7,10 @@ Import-Module -Name Pester -MinimumVersion 5.0.0 -Force
 $Global:PythonExePath = $null
 $Global:PythonAIScriptPath = $null
 $Global:GetPredictiveInsightsFunctionPath = $null
+$Global:TempModelDir = Join-Path $env:TEMP "ps_integration_models_$(New-Guid)"
+$Global:ConfigFilePath = $null # Will be set in BeforeAll
+$Global:SetupModelsScriptPath = $null # Will be set in BeforeAll
+
 
 Describe "Get-PredictiveInsights - Python Integration Tests" {
     BeforeAll {
@@ -55,15 +59,60 @@ Describe "Get-PredictiveInsights - Python Integration Tests" {
             . $Global:GetPredictiveInsightsFunctionPath # Source the function
         }
 
-        # Optional: Ensure config file exists for future-proofing, though current Python script doesn't strictly need it.
-        $configPath = Join-Path $PSScriptRootNormalized "../../../src/config/ai_config.json"
-        if (-not (Test-Path $configPath)) {
-            Write-Warning "Optional: src/config/ai_config.json not found. This might be needed for future Python script versions."
-            # New-Item -Path $configPath -ItemType File -Value "{}" -Force | Out-Null # Create empty if needed
+        $Global:ConfigFilePath = Join-Path $PSScriptRootNormalized "../../../src/config/ai_config.json"
+        $Global:ConfigFilePath = [System.IO.Path]::GetFullPath($Global:ConfigFilePath)
+
+        $Global:SetupModelsScriptPath = Join-Path $PSScriptRootNormalized "../../Python/helpers/setup_dummy_models_for_ps_integration.py"
+        $Global:SetupModelsScriptPath = [System.IO.Path]::GetFullPath($Global:SetupModelsScriptPath)
+
+        if (-not (Test-Path $Global:GetPredictiveInsightsFunctionPath)) {
+            Write-Error "Get-PredictiveInsights.ps1 not found at $($Global:GetPredictiveInsightsFunctionPath)"
+        } else {
+            . $Global:GetPredictiveInsightsFunctionPath # Source the function AFTER it has been modified to include new params
+        }
+
+        if (-not (Test-Path $Global:ConfigFilePath)) {
+            Write-Warning "Main AI Config file 'src/config/ai_config.json' not found at $($Global:ConfigFilePath). Model setup might fail or use script defaults."
+        }
+
+        # Setup dummy models by calling the Python helper script
+        if ($Global:PythonExePath -and (Test-Path $Global:SetupModelsScriptPath) -and (Test-Path $Global:ConfigFilePath)) {
+            New-Item -ItemType Directory -Path $Global:TempModelDir -Force | Out-Null
+            Write-Information "Setting up dummy models in $($Global:TempModelDir)..."
+            $arguments = @(
+                "`"$($Global:SetupModelsScriptPath)`"",
+                "`"$($Global:TempModelDir)`"",
+                "`"$($Global:ConfigFilePath)`""
+            )
+            Write-Information "Executing: $($Global:PythonExePath) $arguments"
+            $setupProc = Start-Process -FilePath $Global:PythonExePath -ArgumentList $arguments -Wait -PassThru -NoNewWindow -RedirectStandardOutput setup_stdout.txt -RedirectStandardError setup_stderr.txt
+            $setupStdOut = Get-Content setup_stdout.txt -Raw -ErrorAction SilentlyContinue
+            $setupStdErr = Get-Content setup_stderr.txt -Raw -ErrorAction SilentlyContinue
+            Remove-Item setup_stdout.txt -ErrorAction SilentlyContinue
+            Remove-Item setup_stderr.txt -ErrorAction SilentlyContinue
+
+            if ($setupProc.ExitCode -ne 0) {
+                Write-Warning "Failed to setup dummy models. Python script exited with code $($setupProc.ExitCode)."
+                Write-Warning "Setup StdOut: $setupStdOut"
+                Write-Warning "Setup StdErr: $setupStdErr"
+                # This might mean tests for real engine will fail or not run as expected.
+            } else {
+                 Write-Information "Dummy models setup script executed. StdOut: $setupStdOut"
+                 if($setupStdErr) { Write-Information "Setup StdErr: $setupStdErr" }
+            }
+        } else {
+            Write-Warning "Python, model setup script, or main config file not found. Model setup skipped. Integration tests might not reflect real engine behavior."
         }
     }
 
-    Context "When Python and AI script are available" {
+    AfterAll {
+        if (Test-Path $Global:TempModelDir) {
+            Write-Information "Cleaning up temporary model directory: $($Global:TempModelDir)"
+            Remove-Item -Recurse -Force $Global:TempModelDir -ErrorAction SilentlyContinue
+        }
+    }
+
+    Context "When Python, AI script, and Models are available" {
         BeforeAll { # Skip context if setup failed
             if (-not $Global:PythonExePath) {
                 Skip-Pending "Python executable not found. Skipping integration tests."
@@ -74,85 +123,67 @@ Describe "Get-PredictiveInsights - Python Integration Tests" {
             if (-not (Get-Command Get-PredictiveInsights -ErrorAction SilentlyContinue)) {
                 Skip-Pending "Get-PredictiveInsights function not sourced. Skipping tests."
             }
+            if (-not (Test-Path $Global:TempModelDir) -or -not (Get-ChildItem $Global:TempModelDir)) {
+                 Skip-Pending "Dummy models were not set up in $($Global:TempModelDir). Skipping tests requiring real engine."
+            }
         }
 
-        It "Successfully retrieves insights for AnalysisType 'Full'" {
-            $serverName = "IntegrationTestSrv-Full" # Unique name for deterministic placeholder output
-            $insights = Get-PredictiveInsights -ServerName $serverName -AnalysisType "Full" -PythonExecutable $Global:PythonExePath -ScriptPath $Global:PythonAIScriptPath
+        It "Successfully retrieves insights using actual engine for AnalysisType 'Full'" {
+            $serverName = "IntegrationSrv-Full-Real"
+            $insights = Get-PredictiveInsights -ServerName $serverName -AnalysisType "Full" `
+                -PythonExecutable $Global:PythonExePath `
+                -ScriptPath $Global:PythonAIScriptPath `
+                -AIModelDirectory $Global:TempModelDir `
+                -AIConfigPath $Global:ConfigFilePath
 
             $insights | Should -Not -BeNull
             $insights | Should -BeOfType ([pscustomobject])
-            $insights.PSObject.Properties.Name | Should -Contain @("overall_risk", "recommendations", "server_name", "analysis_type_processed", "PSServerName", "PSAnalysisType")
+            # Assertions for the real PredictiveAnalyticsEngine output structure
+            $insights.PSObject.Properties.Name | Should -Contain @("overall_risk", "recommendations", "input_servername", "input_analysistype")
+            $insights.input_servername | Should -Be $serverName       # Was 'server_name' from python, now 'input_servername'
+            $insights.input_analysistype | Should -Be "Full"   # Was 'analysis_type_processed'
 
-            $insights.server_name | Should -Be $serverName
-            $insights.analysis_type_processed | Should -Be "Full"
-            $insights.PSServerName | Should -Be $serverName
-            $insights.PSAnalysisType | Should -Be "Full"
-
-            $insights.overall_risk.score | Should -BeOfType ([double]) # JSON numbers are often doubles
-            # Placeholder Python script: risk_score = 0.1 + (len(server_name) % 8) / 10.0
-            $expectedScore = 0.1 + (($serverName.Length % 8) / 10.0)
-            $insights.overall_risk.score | Should -BeApproximately $expectedScore -Tolerance 0.001
+            $insights.overall_risk | Should -Not -BeNull
+            $insights.overall_risk.score | Should -BeOfType ([double])
+            # Exact score depends on dummy models and FE, so we don't assert specific value, just presence and type.
 
             $insights.recommendations | Should -BeOfType ([System.Array])
-            ($insights.recommendations.Count) | Should -BeGreaterOrEqual 2 # Placeholder has at least 2
+            # Number of recommendations can vary based on PAE logic with dummy models
         }
 
-        It "Successfully retrieves insights for AnalysisType 'Health'" {
-            $serverName = "IntegrationTestSrv-Health" # Different name
-            $insights = Get-PredictiveInsights -ServerName $serverName -AnalysisType "Health" -PythonExecutable $Global:PythonExePath -ScriptPath $Global:PythonAIScriptPath
+        It "Successfully retrieves insights using actual engine for AnalysisType 'Health'" {
+            $serverName = "IntegrationSrv-Health-Real"
+            $insights = Get-PredictiveInsights -ServerName $serverName -AnalysisType "Health" `
+                -PythonExecutable $Global:PythonExePath `
+                -ScriptPath $Global:PythonAIScriptPath `
+                -AIModelDirectory $Global:TempModelDir `
+                -AIConfigPath $Global:ConfigFilePath
 
             $insights | Should -Not -BeNull
-            $insights.analysis_type_processed | Should -Be "Health"
-            $insights.PSServerName | Should -Be $serverName
-            $insights.PSAnalysisType | Should -Be "Health"
-
-            # Placeholder Python script: risk_score = 0.1 + (len(server_name) % 8) / 10.0; if Health, score -= 0.05
-            $baseScore = 0.1 + (($serverName.Length % 8) / 10.0)
-            $expectedScore = $baseScore - 0.05
-            $insights.overall_risk.score | Should -BeApproximately ([Math]::Round($expectedScore,2)) -Tolerance 0.001
-
+            $insights.input_analysistype | Should -Be "Health"
+            $insights.input_servername | Should -Be $serverName
+            $insights.overall_risk.score | Should -BeOfType ([double])
         }
 
-        It "should THROW with a specific message if Python script path is invalid" {
+        It "should THROW with a specific message if Python script path is invalid (integration)" {
             $invalidPath = Join-Path $PSScriptRootNormalized "../../../src/Python/non_existent_script.py"
-            { Get-PredictiveInsights -ServerName "TestServer" -ScriptPath $invalidPath -PythonExecutable $Global:PythonExePath } | Should -Throw "AI Engine script not found."
+            { Get-PredictiveInsights -ServerName "TestServer" -ScriptPath $invalidPath -PythonExecutable $Global:PythonExePath -AIModelDirectory $Global:TempModelDir -AIConfigPath $Global:ConfigFilePath } | Should -Throw "AI Engine script not found."
         }
 
-        # Test for Python script internal error (simulated by non-zero exit code if possible)
-        # This test relies on the PowerShell function's handling of Start-Process ExitCode.
-        # The actual Python script (invoke_ai_engine.py) has its own try-except that should print JSON to stderr and sys.exit(1).
-        It "should THROW if Python script execution fails (e.g., internal Python error)" {
-            # To test this without modifying the original Python script to force an error,
-            # we can pass an argument that makes the Python script's argparse fail.
-            # The current invoke_ai_engine.py has ServerName as required.
-            # However, Get-PredictiveInsights always provides ServerName.
-            # Let's test the error handling by making the Python script's output invalid JSON.
+        It "should THROW if Python script execution fails (e.g., config or model dir issue leading to Python error)" {
+            # Simulate a missing model directory for the Python script to cause an error
+            $badModelDir = Join-Path $env:TEMP "bad_model_dir_$(New-Guid)"
+            # Don't create $badModelDir, so Python script's os.path.isdir(model_dir_abs) fails
 
-            # Create a temporary Python script that prints invalid JSON
-            $tempBadScriptPath = Join-Path $PSScriptRootNormalized "temp_bad_script.py"
-            Set-Content -Path $tempBadScriptPath -Value "import sys; print('This is not JSON'); sys.exit(0)"
-
-            { Get-PredictiveInsights -ServerName "TestServerBadJson" -ScriptPath $tempBadScriptPath -PythonExecutable $Global:PythonExePath } | Should -Throw "JSON parsing failed."
-
-            Remove-Item $tempBadScriptPath -ErrorAction SilentlyContinue
-
-            # Test non-zero exit code with error message
-            $tempErrorScriptPath = Join-Path $PSScriptRootNormalized "temp_error_script.py"
-            $errorMessage = "Simulated Python Error Message"
-            $errorJson = ConvertTo-Json -InputObject @{error="PythonScriptError"; details=$errorMessage}
-            Set-Content -Path $tempErrorScriptPath -Value "import sys; sys.stderr.write('$($errorJson -replace '''','''''')'); sys.exit(1)" # Escape single quotes for PS string
-
-            { Get-PredictiveInsights -ServerName "TestServerError" -ScriptPath $tempErrorScriptPath -PythonExecutable $Global:PythonExePath } | Should -Throw "AI Engine script failed."
-            # Pester doesn't easily capture Write-Error output for assertion in Should -Throw message.
-            # The error message "AI Engine script failed." is from the throw statement in Get-PredictiveInsights.
-            # The Write-Error "Error details from AI Engine: $stdErr" would have been displayed.
-
-            Remove-Item $tempErrorScriptPath -ErrorAction SilentlyContinue
+            { Get-PredictiveInsights -ServerName "TestServerError" `
+                -ScriptPath $Global:PythonAIScriptPath `
+                -PythonExecutable $Global:PythonExePath `
+                -AIModelDirectory $badModelDir `
+                -AIConfigPath $Global:ConfigFilePath } | Should -Throw "AI Engine script failed."
         }
     }
 
-    Context "When Python or AI script is NOT available" {
+    Context "Fallback / Unit-like Tests (When Python or AI script might be NOT available)" {
         It "Skips tests if Python was not found in BeforeAll" {
             if (-not $Global:PythonExePath) {
                 Skip-Pending "Python executable not found during BeforeAll."

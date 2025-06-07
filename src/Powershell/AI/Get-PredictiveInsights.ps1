@@ -12,7 +12,13 @@ function Get-PredictiveInsights {
         [string]$PythonExecutable = "python", # Or "python3". User can specify full path.
 
         [Parameter()]
-        [string]$ScriptPath # Optional: Full path to invoke_ai_engine.py. If not provided, script will try to find it.
+        [string]$ScriptPath, # Optional: Full path to invoke_ai_engine.py. If not provided, script will try to find it.
+
+        [Parameter()]
+        [string]$AIModelDirectory, # To pass to invoke_ai_engine.py --modeldir
+
+        [Parameter()]
+        [string]$AIConfigPath     # To pass to invoke_ai_engine.py --configpath
     )
 
     begin {
@@ -66,13 +72,20 @@ function Get-PredictiveInsights {
     }
 
     process {
-        Write-Host "Retrieving predictive insights for server '$ServerName' (Analysis: $AnalysisType)..."
+        Write-Verbose "Retrieving predictive insights for server '$ServerName' (Analysis: $AnalysisType)..."
 
         $arguments = @(
             "`"$aiEngineScript`"", # Ensure script path is quoted if it contains spaces
             "--servername", "`"$ServerName`"",
             "--analysistype", "`"$AnalysisType`""
         )
+
+        if ($AIModelDirectory) {
+            $arguments += @("--modeldir", "`"$AIModelDirectory`"")
+        }
+        if ($AIConfigPath) {
+            $arguments += @("--configpath", "`"$AIConfigPath`"")
+        }
 
         Write-Verbose "Executing: $PythonExecutable $arguments"
 

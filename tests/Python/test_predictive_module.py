@@ -65,9 +65,10 @@ def comprehensive_predictive_config() -> Dict[str, Any]:
         "remediation_learner_config": {
              "remediation_learner_features": ['cpu_usage', 'memory_usage', 'error_count'], # For context summary
              "success_pattern_threshold": 0.7,
-             "success_pattern_min_attempts": 3, # Lowered for testing
+             "success_pattern_min_attempts": 3,
              "ai_predictor_failure_threshold": 0.6,
-             "log_level": "DEBUG" # Example of a sub-component specific config
+             "log_level": "DEBUG",
+             "retraining_data_threshold": 3 # Added for testing the trigger
         },
         # PredictiveAnalyticsEngine specific (if any, besides passing sub-configs)
         "pae_config": {
@@ -219,6 +220,57 @@ class TestArcRemediationLearner:
         arl = ArcRemediationLearner(config=comprehensive_predictive_config.get("remediation_learner_config"))
         arl.success_patterns[("ErrorA", "ActionX")] = {"rate": 0.9}
         assert arl.get_all_success_patterns() == {("ErrorA", "ActionX"): {"rate": 0.9}}
+
+    def test_arl_retraining_trigger(self, full_ai_config_dict, sample_remediation_data):
+        # Get the remediation_learner_config, ensuring the threshold is set for the test
+        # The full_ai_config_dict fixture should now have retraining_data_threshold: 3
+        arl_config = full_ai_config_dict['aiComponents'].get("remediation_learner_config", {})
+
+        arl = ArcRemediationLearner(config=arl_config)
+        arl.trainer = MagicMock(spec=ArcModelTrainer) # Mock trainer
+
+        data_category_key = "failure_prediction_data" # As used in ArcRemediationLearner
+
+        with patch.object(arl.logger, 'info') as mock_logger_info:
+            # Call 1 and 2: Should not trigger
+            arl.learn_from_remediation({**sample_remediation_data, "error_type": "ErrorType1", "outcome": "success"})
+            assert arl.new_data_counter.get(data_category_key, 0) == 1
+            arl.learn_from_remediation({**sample_remediation_data, "error_type": "ErrorType2", "outcome": "success"})
+            assert arl.new_data_counter.get(data_category_key, 0) == 2
+
+            retraining_message_found_early = False
+            for call_args in mock_logger_info.call_args_list:
+                if "Consider retraining the relevant predictive models" in call_args[0][0]:
+                    retraining_message_found_early = True
+                    break
+            assert not retraining_message_found_early, "Retraining message logged too early"
+
+            # Call 3: Should trigger
+            arl.learn_from_remediation({**sample_remediation_data, "error_type": "ErrorType3", "outcome": "success"})
+            assert arl.new_data_counter.get(data_category_key, 0) == 0 # Counter reset
+
+            retraining_message_found_on_trigger = False
+            # Using the threshold from the config for the log message check
+            expected_threshold_for_log = arl_config.get("retraining_data_threshold", 3)
+            expected_log_message_part = f"Sufficient new data ({expected_threshold_for_log} points) gathered for '{data_category_key}'. Consider retraining"
+
+            for call_args in mock_logger_info.call_args_list:
+                if isinstance(call_args[0], tuple) and len(call_args[0]) > 0 and expected_log_message_part in call_args[0][0]:
+                    retraining_message_found_on_trigger = True
+                    break
+            assert retraining_message_found_on_trigger, f"Retraining message not logged after reaching threshold. Logs: {mock_logger_info.call_args_list}"
+
+            # Call 4 (after reset) - counter should be 1 again, no new log
+            mock_logger_info.reset_mock() # Reset mock to check for new calls only
+            arl.learn_from_remediation({**sample_remediation_data, "error_type": "ErrorType4", "outcome": "success"})
+            assert arl.new_data_counter.get(data_category_key, 0) == 1
+
+            new_retraining_message_after_reset = False
+            for call_args in mock_logger_info.call_args_list:
+                if expected_log_message_part in call_args[0][0]:
+                    new_retraining_message_after_reset = True
+                    break
+            assert not new_retraining_message_after_reset, "Retraining message logged again before reaching threshold after reset"
 
 
 class TestFeatureEngineer:

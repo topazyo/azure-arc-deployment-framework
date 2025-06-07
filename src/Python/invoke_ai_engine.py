@@ -8,104 +8,114 @@ from datetime import datetime
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../')))
 
 # Placeholder for actual AI engine import and usage
-# from Python.predictive.predictive_analytics_engine import PredictiveAnalyticsEngine
-# from Python.config.ai_config_loader import AIConfig  # Assuming a config loader
+from Python.predictive.predictive_analytics_engine import PredictiveAnalyticsEngine
+# from Python.common.ai_config_loader import AIConfig # Assuming a config loader for future
+# Ensure json is imported if not already by other imports
+# import json # Already imported by the script
 
-class PlaceholderPredictiveAnalyticsEngine:
-    """[TODO: Add class documentation]"""
-    def __init__(self, config, model_dir):
-        """[TODO: Add method documentation]"""
-        self.config = config
-        self.model_dir = model_dir
-        # In a real engine, models would be loaded here or on demand
-
-    def analyze_deployment_risk(self, server_data: dict) -> dict:
-        """[TODO: Add method documentation]"""
-        # This is a placeholder mimicking the real engine's output structure
-        server_name = server_data.get("server_name", "UnknownServer")
-        analysis_type = server_data.get("analysis_type", "Full")
-
-        # Simulate some risk calculation
-        risk_score = 0.1 + (len(server_name) % 8) / 10.0 # Simple deterministic risk based on name
-        if analysis_type == "Health":
-            risk_score -= 0.05
-        elif analysis_type == "Failure":
-            risk_score += 0.1
-
-        risk_level_map = {
-            (0.0, 0.2): "Minimal", (0.2, 0.4): "Low",
-            (0.4, 0.6): "Medium", (0.6, 0.8): "High", (0.8, 1.0): "Critical"
-        }
-        risk_level = "Unknown"
-        for r_range, level in risk_level_map.items():
-            if r_range[0] <= risk_score < r_range[1]:
-                risk_level = level
-                break
-
-        recommendations = [
-            {"action": f"Review resource utilization for {server_name}", "priority": risk_score * 0.8, "details": "Placeholder detail 1"},
-            {"action": "Apply latest security patches", "priority": 0.7, "details": "Placeholder detail 2"}
-        ]
-        if risk_score > 0.6:
-            recommendations.append(
-                 {"action": "Investigate high risk score factors", "priority": 0.9, "details": "High risk detected."}
-            )
-
-        return {
-            "overall_risk": {
-                "score": round(risk_score, 2),
-                "level": risk_level,
-                "confidence": 0.85, # Placeholder
-                "contributing_factors": [{"factor": "PlaceholderFactor1", "impact": 0.5, "category": "Health"}]
-            },
-            "health_status": {"status": "Good", "probability": 0.8}, # Placeholder
-            "failure_risk": {"probability": round(risk_score / 2, 2), "predicted_failures": []}, # Placeholder
-            "anomalies": {"is_anomaly": risk_score > 0.7, "anomaly_score": round(risk_score * 0.9, 2)}, # Placeholder
-            "patterns": {"identified_patterns": ["PatternA", "PatternB"]}, # Placeholder
-            "recommendations": recommendations,
-            "timestamp": datetime.now().isoformat(),
-            "server_name": server_name,
-            "analysis_type_processed": analysis_type
-        }
+# PlaceholderPredictiveAnalyticsEngine class removed
 
 def main():
-    """[TODO: Add method documentation]"""
+    """
+    Main entry point for the Azure Arc AI Engine script.
+    Parses command-line arguments, loads configuration, initializes the
+    PredictiveAnalyticsEngine, processes the input, and prints results as JSON.
+    """
     parser = argparse.ArgumentParser(description="Azure Arc AI Engine Interface")
     parser.add_argument("--servername", required=True, help="Name of the server to analyze")
     parser.add_argument("--analysistype", default="Full", help="Type of analysis (Full, Health, Failure, Anomaly)")
-    # In a real scenario, you'd pass config paths, model paths, etc.
-    # parser.add_argument("--configpath", default="../config/ai_config.json", help="Path to AI configuration file")
-    # parser.add_argument("--modeldir", default="../models", help="Directory containing trained models")
-
+    parser.add_argument("--modeldir", default=os.path.join(os.path.dirname(__file__), '../../models'), help="Directory containing trained models. Defaults to a 'models' folder relative to 'src'.")
+    parser.add_argument("--configpath", default=os.path.join(os.path.dirname(__file__), '../../config/ai_config.json'), help="Path to AI configuration file. Defaults to 'config/ai_config.json' relative to 'src'.")
 
     args = parser.parse_args()
+    ai_components_config = {} # Initialize
 
     try:
-        # Placeholder: Load config and initialize engine
-        # config = AIConfig.load(args.configpath)
-        # engine = PredictiveAnalyticsEngine(config=config.get('aiComponents'), model_dir=args.modeldir)
+        # Load configuration from JSON file
+        config_path = os.path.abspath(args.configpath)
+        if not os.path.exists(config_path):
+            raise FileNotFoundError(f"Configuration file not found at: {config_path}")
 
-        # Using placeholder engine for now
-        engine = PlaceholderPredictiveAnalyticsEngine(config={}, model_dir="")
+        with open(config_path, 'r') as f:
+            config_data = json.load(f)
+        ai_components_config = config_data.get('aiComponents', {})
+        if not ai_components_config:
+             raise ValueError(f"Invalid configuration format in {config_path}. Missing 'aiComponents' key.")
 
-        server_data_input = {"server_name": args.servername, "analysis_type": args.analysistype}
+        # Ensure model directory exists, or ArcPredictor will fail to load
+        model_dir_abs = os.path.abspath(args.modeldir)
+        if not os.path.isdir(model_dir_abs):
+             # For this script, if models dir doesn't exist, it's a fatal error as Predictor needs it.
+             # In a real scenario, PAE might handle this more gracefully or have a 'no-model' mode.
+             raise FileNotFoundError(f"Model directory not found at: {model_dir_abs}. Please ensure models are trained and available.")
 
-        # The method called on the engine might vary based on analysis_type
-        # For this placeholder, analyze_deployment_risk can serve as a generic entrypoint
+        # Instantiate the real PredictiveAnalyticsEngine
+        engine = PredictiveAnalyticsEngine(
+            config=ai_components_config, # Pass the 'aiComponents' section
+            model_dir=model_dir_abs
+        )
+
+        # Construct dummy server_data_input based on config
+        # This is because this script is a simple entry point and doesn't collect real telemetry.
+        # The real data would be collected by PowerShell and passed to more specialized Python functions if needed.
+        fe_config = ai_components_config.get('feature_engineering', {})
+        num_features = fe_config.get('original_numerical_features', [])
+        cat_features = fe_config.get('original_categorical_features', [])
+
+        server_data_input = {"server_name_id": args.servername, "timestamp": datetime.now().isoformat()}
+        # Add 'timestamp' as FeatureEngineer might use it.
+
+        for f in num_features:
+            # Provide some default values for features that might be used by models via FeatureEngineer
+            if f == "cpu_usage" or f == "cpu_usage_avg": # Example common features
+                server_data_input[f] = 50.0 + (len(args.servername) % 10)
+            elif f == "memory_usage" or f == "memory_usage_avg":
+                 server_data_input[f] = 70.0 - (len(args.servername) % 10)
+            elif "error_count" in f or "errors" in f: # Broader match for error related counts
+                server_data_input[f] = float(len(args.servername) % 5)
+            elif "count" in f: # For other counts
+                server_data_input[f] = float(len(args.servername) % 20) * 5.0
+            elif "time" in f: # For time related metrics
+                 server_data_input[f] = 100.0 + (len(args.servername) % 50)
+            else: # Generic default for other numerical
+                server_data_input[f] = 0.0
+
+        for f in cat_features:
+            # Provide a consistent default or vary slightly if needed for diverse testing
+            server_data_input[f] = "default_category_value" # Example default
+            if f == "region": # Example specific categorical feature
+                server_data_input[f] = ['eastus', 'westus', 'northeurope'][len(args.servername) % 3]
+
+
+        # analyze_deployment_risk expects a dictionary representing a single server's raw data snapshot
         results = engine.analyze_deployment_risk(server_data_input)
 
-        print(json.dumps(results))
+        # Add input servername and analysistype to the results for clarity in PS
+        results['input_servername'] = args.servername
+        results['input_analysistype'] = args.analysistype # analysis_type is not directly used by PAE.analyze_deployment_risk
+                                                         # but can be useful for PS to confirm what it requested.
+
+        print(json.dumps(results, indent=4)) # Added indent for readability if run manually
         sys.exit(0)
 
     except Exception as e:
+        # Ensure args are available for error reporting
+        # If error happens before args parsing, they won't be.
+        servername_for_error = "Unknown"
+        analysistype_for_error = "Unknown"
+        if 'args' in locals():
+            servername_for_error = args.servername if args.servername else "Unknown"
+            analysistype_for_error = args.analysistype if args.analysistype else "Unknown"
+
         error_output = {
-            "error": str(e),
+            "error": type(e).__name__, # More specific error type
+            "message": str(e),
             "details": "An error occurred in the AI engine.",
-            "server_name": args.servername if 'args' in locals() and args.servername else "Unknown",
-            "analysis_type_processed": args.analysistype if 'args' in locals() and args.analysistype else "Unknown",
+            "input_servername": servername_for_error,
+            "input_analysistype": analysistype_for_error,
             "timestamp": datetime.now().isoformat()
         }
-        print(json.dumps(error_output), file=sys.stderr)
+        print(json.dumps(error_output, indent=4), file=sys.stderr)
         sys.exit(1)
 
 if __name__ == "__main__":
