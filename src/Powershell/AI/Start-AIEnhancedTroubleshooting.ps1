@@ -1,4 +1,5 @@
 function Start-AIEnhancedTroubleshooting {
+    [CmdletBinding()]
     param (
         [string]$ServerName,
         [switch]$AutoRemediate
