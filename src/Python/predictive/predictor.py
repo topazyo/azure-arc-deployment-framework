@@ -56,30 +56,40 @@ class ArcPredictor:
                 
                 self.feature_info[model_type] = {} # Initialize for the type
                 try:
-                    loaded_importance_data = joblib.load(feature_info_path)
-                    if isinstance(loaded_importance_data, dict):
-                        self.feature_info[model_type]['ordered_features'] = loaded_importance_data.get('names', [])
-                        # Store the raw importances list/array if present, or None
-                        raw_importances = loaded_importance_data.get('importances')
-                        if raw_importances is not None:
-                             # Create the name:importance map for calculate_feature_impacts
-                            self.feature_info[model_type]['importances_map'] = dict(zip(self.feature_info[model_type]['ordered_features'], raw_importances))
+                    loaded_feature_info = joblib.load(feature_info_path) # Changed variable name
+                    if isinstance(loaded_feature_info, dict):
+                        self.feature_info[model_type]['ordered_features'] = loaded_feature_info.get('names', [])
+                        raw_importances = loaded_feature_info.get('importances') # List of importance values
+                        # Algorithm used during training
+                        self.feature_info[model_type]['algorithm'] = loaded_feature_info.get('algorithm', 'RandomForestClassifier') # Default if not found
+
+                        if raw_importances is not None and self.feature_info[model_type]['ordered_features']:
+                            if len(self.feature_info[model_type]['ordered_features']) == len(raw_importances):
+                                self.feature_info[model_type]['importances_map'] = dict(zip(self.feature_info[model_type]['ordered_features'], raw_importances))
+                            else:
+                                self.logger.error(f"Mismatch between number of feature names and importances for {model_type}. Cannot create importance map.")
+                                self.feature_info[model_type]['importances_map'] = None
                         else:
-                            self.feature_info[model_type]['importances_map'] = None
-                        self.logger.info(f"Loaded feature info for {model_type}. Features: {self.feature_info[model_type]['ordered_features']}")
-                    else: # Legacy: if it's just a dict of name:importance (order might be an issue)
-                        self.logger.warning(f"Legacy feature importance format loaded for {model_type}. Order might not be guaranteed if Python < 3.7 was used for saving.")
-                        self.feature_info[model_type]['ordered_features'] = list(loaded_importance_data.keys())
-                        self.feature_info[model_type]['importances_map'] = loaded_importance_data
+                            self.feature_info[model_type]['importances_map'] = None # No importances available or no names
+
+                        self.logger.info(f"Loaded feature info for {model_type}. Algorithm: {self.feature_info[model_type]['algorithm']}. Features: {len(self.feature_info[model_type]['ordered_features'])}.")
+                    else:
+                        self.logger.warning(f"Feature info file at {feature_info_path} for {model_type} is not a dictionary. Cannot parse.")
+                        self.feature_info[model_type]['ordered_features'] = []
+                        self.feature_info[model_type]['importances_map'] = None
+                        self.feature_info[model_type]['algorithm'] = 'Unknown'
+
 
                 except FileNotFoundError:
-                    self.logger.warning(f"Feature info file not found for {model_type} at {feature_info_path}. Prediction may fail or be unreliable.")
+                    self.logger.warning(f"Feature info file not found for {model_type} at {feature_info_path}. Prediction may rely on defaults or fail if features mismatch.")
                     self.feature_info[model_type]['ordered_features'] = []
                     self.feature_info[model_type]['importances_map'] = None
+                    self.feature_info[model_type]['algorithm'] = 'Unknown' # Default if file not found
                 except Exception as e_fi:
                     self.logger.error(f"Error loading feature info for {model_type} from {feature_info_path}: {e_fi}", exc_info=True)
                     self.feature_info[model_type]['ordered_features'] = []
                     self.feature_info[model_type]['importances_map'] = None
+                    self.feature_info[model_type]['algorithm'] = 'Unknown'
 
 
             self.logger.info("Models, scalers, and feature info loaded.")
@@ -233,6 +243,8 @@ class ArcPredictor:
         except Exception as e:
             self.logger.error(f"Feature preparation failed for {model_type}: {str(e)}", exc_info=True)
             return None
+
+
     def calculate_feature_impacts(self,
                                  scaled_features_array_1d: np.ndarray,
                                  feature_importance_dict: Dict[str, float], # This is the map of name:importance

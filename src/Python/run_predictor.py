@@ -46,6 +46,7 @@ def generate_sample_telemetry(server_name: str, feature_names: list) -> dict:
     return data
 
 def main():
+    """[TODO: Add method documentation]"""
     parser = argparse.ArgumentParser(description="ArcPredictor AI Engine Interface")
     parser.add_argument("--server-name", type=str, required=True, help="Name of the server for prediction.")
     parser.add_argument("--analysis-type", type=str, default="Full",

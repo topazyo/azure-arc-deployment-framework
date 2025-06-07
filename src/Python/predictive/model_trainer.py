@@ -11,7 +11,7 @@ from datetime import datetime
 from typing import Dict, List, Tuple, Any, Optional # Added Optional
 
 # Ensure all necessary sklearn imports are present
-from sklearn.ensemble import RandomForestClassifier, IsolationForest
+from sklearn.ensemble import RandomForestClassifier, IsolationForest, GradientBoostingClassifier
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
 
@@ -124,9 +124,14 @@ class ArcModelTrainer:
         self.logger.info(f"Starting training for {model_type} model...")
         try:
             # Configuration for this model type
-            model_params = self.config.get('models', {}).get(model_type, {})
+            model_type_config = self.config.get('models', {}).get(model_type, {})
+            if not model_type_config:
+                self.logger.error(f"No configuration found for model type: {model_type}. Skipping training.")
+                return
+
             test_split_ratio = self.config.get('test_split_ratio', 0.2)
             random_state = self.config.get('random_state', 42)
+            model_algorithm = model_type_config.get('algorithm', 'RandomForestClassifier') # Default to RF
 
             X_scaled, y, feature_names = self.prepare_data(data, model_type)
 
@@ -139,19 +144,45 @@ class ArcModelTrainer:
 
             X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=test_split_ratio, random_state=random_state, stratify=y if np.unique(y).size > 1 else None)
 
-            model = RandomForestClassifier(
-                n_estimators=model_params.get('n_estimators', 100),
-                max_depth=model_params.get('max_depth', None),
-                class_weight=model_params.get('class_weight', None),
-                random_state=random_state
-            )
+            model = None
+            self.logger.info(f"Training {model_type} model using algorithm: {model_algorithm}")
+
+            if model_algorithm == 'RandomForestClassifier':
+                algo_params = model_type_config.get('random_forest_params', {})
+                model = RandomForestClassifier(
+                    n_estimators=algo_params.get('n_estimators', 100),
+                    max_depth=algo_params.get('max_depth', None),
+                    class_weight=algo_params.get('class_weight', None),
+                    random_state=random_state # Use global random_state for model
+                )
+            elif model_algorithm == 'GradientBoostingClassifier':
+                algo_params = model_type_config.get('gradient_boosting_params', {})
+                model = GradientBoostingClassifier(
+                    n_estimators=algo_params.get('n_estimators', 100),
+                    learning_rate=algo_params.get('learning_rate', 0.1),
+                    max_depth=algo_params.get('max_depth', 3),
+                    subsample=algo_params.get('subsample', 1.0),
+                    random_state=random_state # Use global random_state for model
+                )
+            else:
+                self.logger.error(f"Unsupported algorithm '{model_algorithm}' specified for {model_type}. Defaulting to RandomForestClassifier.")
+                # Default to RandomForest if algorithm specified is unknown
+                algo_params = model_type_config.get('random_forest_params', {})
+                model = RandomForestClassifier(
+                    n_estimators=algo_params.get('n_estimators', 100),
+                    max_depth=algo_params.get('max_depth', None),
+                    class_weight=algo_params.get('class_weight', None),
+                    random_state=random_state
+                )
+                model_algorithm = 'RandomForestClassifier' # Update to actual used algorithm
 
             model.fit(X_train, y_train)
             self.models[model_type] = model
 
             self.feature_importance[model_type] = {
                 'names': feature_names,
-                'importances': model.feature_importances_.tolist() if hasattr(model, 'feature_importances_') else None
+                'importances': model.feature_importances_.tolist() if hasattr(model, 'feature_importances_') else None,
+                'algorithm': model_algorithm # Store the algorithm used
             }
 
             y_pred = model.predict(X_test)

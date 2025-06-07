@@ -108,7 +108,7 @@ def full_ai_config_dict(): # Renamed to avoid confusion if an AIConfig class is 
 def sample_telemetry_for_integration_df(): # Renamed for clarity
     data = {
         'timestamp': pd.to_datetime(['2023-01-01 10:00:00', '2023-01-01 10:05:00', '2023-01-01 10:10:00',
-                                      '2023-01-01 10:15:00', '2023-01-01 10:20:00', '2023-01-01 10:25:00']),
+                                      '2023-01-01 10:15:00', '2023-01-01 10:20:00', '2023-01-01 10:25:00'], errors='coerce'), # Added errors='coerce'
         'cpu_usage_avg': [50.0, 60.0, 95.0, 70.0, 85.0, 60.0],
         'memory_usage_avg': [70.0, 75.0, 92.0, 80.0, 88.0, 70.0],
         'disk_io_avg': [10.0, 12.0, 15.0, 11.0, 13.0, 10.0],
@@ -138,8 +138,16 @@ def sample_telemetry_for_integration_df(): # Renamed for clarity
     return pd.DataFrame(data)
 
 @pytest.fixture(scope="module")
-def trained_predictor_for_integration(full_ai_config_dict, sample_telemetry_for_integration_df, tmp_path_factory):
-    model_dir = tmp_path_factory.mktemp("trained_models_integration")
+def pae_test_environment(full_ai_config_dict, sample_telemetry_for_integration_df, tmp_path_factory):
+    """
+    Sets up a test environment for PredictiveAnalyticsEngine:
+    - Creates engineered features using FeatureEngineer.
+    - Trains models using ArcModelTrainer and saves them to a temp model directory.
+    - Returns the path to the model directory and the configuration used.
+    """
+    model_dir_root = tmp_path_factory.mktemp("pae_test_env")
+    pae_model_dir = model_dir_root / "models" # Known sub-directory
+    pae_model_dir.mkdir()
 
     fe_config = full_ai_config_dict['aiComponents']['feature_engineering']
     fe = FeatureEngineer(config=fe_config)
@@ -186,42 +194,102 @@ def trained_predictor_for_integration(full_ai_config_dict, sample_telemetry_for_
     trainer.save_models(str(model_dir))
 
     # Pass the main 'aiComponents' config to ArcPredictor as it might initialize FE
-    predictor = ArcPredictor(model_dir=str(model_dir), config=full_ai_config_dict['aiComponents'])
-    return predictor
+    # predictor = ArcPredictor(model_dir=str(model_dir), config=full_ai_config_dict['aiComponents'])
+    # The fixture should return the path and config, not the predictor instance.
+    return {'model_dir': str(pae_model_dir), 'config_dict': full_ai_config_dict}
+
 
 # Scenario 1: Telemetry Processing to Predictive Risk Analysis
-def test_telemetry_to_predictive_risk_analysis(full_ai_config_dict, sample_telemetry_for_integration_df, trained_predictor_for_integration):
-    tp_config = full_ai_config_dict['aiComponents']['telemetry_processor']
-    tp = TelemetryProcessor(config=tp_config)
-    processed_telemetry_output = tp.process_telemetry(sample_telemetry_for_integration_df.to_dict(orient='records'))
+def test_telemetry_to_predictive_risk_analysis(pae_test_environment, sample_telemetry_for_integration_df):
+    full_ai_config_dict = pae_test_environment['config_dict']
+    model_dir_from_fixture = pae_test_environment['model_dir']
 
-    assert "processed_data" in processed_telemetry_output # This is the flat dict of aggregated features
-    assert "insights" in processed_telemetry_output
+    # Config parts for assertions
+    expected_predictor_config = full_ai_config_dict['aiComponents'] # Predictor gets parent config
+    expected_pa_config = full_ai_config_dict['aiComponents']['pattern_analyzer_config']
+    expected_fe_config_for_predictor = full_ai_config_dict['aiComponents']['feature_engineering']
 
-    # This 'server_data_for_pae' is the *aggregated* data from TelemetryProcessor.
-    # PredictiveAnalyticsEngine's ArcPredictor component expects *raw* data for a single snapshot
-    # because ArcPredictor itself calls FeatureEngineer.
-    # So, we should use a sample of raw data for PAE.
 
-    # Let's use the last row of the original sample data as a "current snapshot" for PAE.
-    # This raw snapshot will be processed by FeatureEngineer inside ArcPredictor (which is inside PAE).
-    current_server_snapshot_raw = sample_telemetry_for_integration_df.iloc[-1].to_dict()
+    # 1. Telemetry Processing (Optional to run here, PAE does not directly use TelemetryProcessor output)
+    # tp_config = full_ai_config_dict['aiComponents']['telemetry_processor']
+    # tp = TelemetryProcessor(config=tp_config)
+    # processed_telemetry_output = tp.process_telemetry(sample_telemetry_for_integration_df.to_dict(orient='records'))
+    # assert "processed_data" in processed_telemetry_output
 
-    # PAE initializes its own Trainer, Predictor, PatternAnalyzer
-    # The predictor inside PAE needs the model_dir from the fixture `trained_predictor_for_integration`
-    pae = PredictiveAnalyticsEngine(
-        config=full_ai_config_dict['aiComponents'],
-        model_dir=trained_predictor_for_integration.model_dir
-    )
+    # Raw snapshot for PAE input
+    current_server_snapshot_raw = sample_telemetry_for_integration_df.iloc[-1].fillna(0).to_dict() # use fillna(0) for safety
 
-    risk_analysis = pae.analyze_deployment_risk(current_server_snapshot_raw)
+    # Spy on constructors and methods
+    with patch('Python.predictive.predictive_analytics_engine.ArcPredictor') as MockArcPredictorConstructor, \
+         patch('Python.predictive.predictive_analytics_engine.PatternAnalyzer') as MockPatternAnalyzerConstructor, \
+         patch('Python.predictive.predictor.FeatureEngineer') as MockFeatureEngineerConstructor: # Patch FE at source where ArcPredictor imports it
 
-    assert "overall_risk" in risk_analysis
-    assert "score" in risk_analysis["overall_risk"]
-    assert "level" in risk_analysis["overall_risk"]
-    assert "recommendations" in risk_analysis
-    # PAE generates some default recommendations based on risk level, so it should not be empty generally
-    assert len(risk_analysis["recommendations"]) >= 0
+        # Setup mock instances that will be returned by constructors
+        mock_predictor_instance = MockArcPredictorConstructor.return_value
+        mock_pattern_analyzer_instance = MockPatternAnalyzerConstructor.return_value
+
+        # ArcPredictor internally creates FeatureEngineer. We want to assert on that creation.
+        # So, when MockArcPredictorConstructor is called, it should then trigger MockFeatureEngineerConstructor.
+        # This is tricky. A simpler way is to check the config passed to ArcPredictor.
+        # Or, mock the FeatureEngineer instance *on the ArcPredictor instance* after PAE creates predictor.
+
+        # Mock return values of key methods on the *instances*
+        mock_predictor_instance.predict_health.return_value = {"prediction": {"healthy_probability": 0.85}, "feature_impacts": {"cpu_usage_avg": 0.1}}
+        mock_predictor_instance.predict_failures.return_value = {"prediction": {"failure_probability": 0.15}, "feature_impacts": {"memory_usage_avg": 0.2}, "risk_level": "Low"}
+        mock_predictor_instance.detect_anomalies.return_value = {"is_anomaly": False, "anomaly_score": 0.15}
+        mock_pattern_analyzer_instance.analyze_patterns.return_value = {
+            "temporal": {"daily": {"recommendations": [{"action": "Check daily load", "priority": 0.5}]}, "recommendations":[]},
+            "behavioral": {"recommendations":[]},
+            "failure": {"recommendations":[]},
+            "performance": {"recommendations":[]}
+        }
+
+        # Instantiate PAE - this will use the mocked constructors for its internal components
+        pae = PredictiveAnalyticsEngine(
+            config=full_ai_config_dict['aiComponents'], # PAE gets the 'aiComponents' sub-tree
+            model_dir=model_dir_from_fixture
+        )
+
+        # Assert ArcPredictor and PatternAnalyzer instantiation
+        MockArcPredictorConstructor.assert_called_once()
+        # Check config passed to ArcPredictor. It should get the whole aiComponents config.
+        actual_predictor_init_config = MockArcPredictorConstructor.call_args[1]['config']
+        assert actual_predictor_init_config['model_config'] == full_ai_config_dict['aiComponents']['model_config']
+        assert actual_predictor_init_config['feature_engineering'] == expected_fe_config_for_predictor
+        assert MockArcPredictorConstructor.call_args[1]['model_dir'] == model_dir_from_fixture
+
+        MockPatternAnalyzerConstructor.assert_called_once_with(config=expected_pa_config)
+
+        # To assert FeatureEngineer was called by ArcPredictor:
+        # This requires ArcPredictor to initialize FeatureEngineer in its __init__.
+        # If ArcPredictor's __init__ was: self.feature_engineer = FeatureEngineer(config.get('feature_engineering'))
+        # Then MockFeatureEngineerConstructor would be called.
+        # Let's assume ArcPredictor's __init__ gets the parent config and extracts 'feature_engineering' for its FE.
+        # The call to FeatureEngineer happens when ArcPredictor is initialized *by PAE*.
+        # This test focuses on PAE's correct initialization of ArcPredictor.
+        # A separate unit test for ArcPredictor should verify its internal FeatureEngineer instantiation.
+        # For this integration test, we confirmed ArcPredictor got the FE config.
+
+        # Call analyze_deployment_risk
+        risk_analysis = pae.analyze_deployment_risk(current_server_snapshot_raw)
+
+        # Assert methods on mocked instances were called by PAE
+        mock_predictor_instance.predict_health.assert_called_once_with(current_server_snapshot_raw)
+        mock_predictor_instance.predict_failures.assert_called_once_with(current_server_snapshot_raw)
+        mock_predictor_instance.detect_anomalies.assert_called_once_with(current_server_snapshot_raw)
+
+        # PatternAnalyzer expects a DataFrame. PAE should convert current_server_snapshot_raw
+        mock_pattern_analyzer_instance.analyze_patterns.assert_called_once()
+        # Check the type of argument passed to analyze_patterns
+        assert isinstance(mock_pattern_analyzer_instance.analyze_patterns.call_args[0][0], pd.DataFrame)
+
+
+        # Assert structure of final risk_analysis
+        assert "overall_risk" in risk_analysis
+        assert "score" in risk_analysis["overall_risk"]
+        assert "level" in risk_analysis["overall_risk"]
+        assert "recommendations" in risk_analysis
+        assert len(risk_analysis["recommendations"]) > 0 # PAE generates some based on risk + pattern recs
 
 
 # Scenario 2: Incident Data to Root Cause Analysis

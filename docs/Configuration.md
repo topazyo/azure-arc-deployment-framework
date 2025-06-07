@@ -112,13 +112,24 @@ Configures the `ArcModelTrainer` class (`src/Python/predictive/model_trainer.py`
     *   `target_column`: Name of the target variable for supervised models.
     *   `missing_strategy`: Fallback NaN handling strategy within `ArcModelTrainer.prepare_data`.
 *   **`models` (nested object, per model type)**:
-    *   Specifies hyperparameters for scikit-learn models. Example for `health_prediction` (RandomForestClassifier):
+    *   Specifies hyperparameters for scikit-learn models. The `algorithm` key within each model type's configuration determines which algorithm is used and which corresponding parameter block (e.g., `random_forest_params`, `gradient_boosting_params`) is referenced.
+    *   Example for `health_prediction`:
         ```json
         "health_prediction": {
-            "n_estimators": 100,
-            "max_depth": 10,
-            "random_state": 42,
-            "class_weight": "balanced"
+            "algorithm": "RandomForestClassifier", // Can be "GradientBoostingClassifier"
+            "random_forest_params": {
+                "n_estimators": 100,
+                "max_depth": 10,
+                "random_state": 42,
+                "class_weight": "balanced"
+            },
+            "gradient_boosting_params": {
+                "n_estimators": 100,
+                "learning_rate": 0.1,
+                "max_depth": 3,
+                "subsample": 0.8,
+                "random_state": 42
+            }
         }
         ```
     *   Example for `anomaly_detection` (IsolationForest):
