@@ -330,7 +330,7 @@ class RootCauseAnalyzer:
                 # This might not be ideal for all pattern types but prevents errors.
                 # Consider which fields from incident_data are relevant for patterns.
                 df_for_patterns = pd.DataFrame([incident_data])
-            
+
             # Ensure 'timestamp' column exists for pattern analyzer if possible
             if 'timestamp' not in df_for_patterns.columns and 'timestamp' in incident_data:
                  # If single incident_data has a timestamp, apply it to all rows in df_for_patterns
@@ -342,14 +342,14 @@ class RootCauseAnalyzer:
 
 
             patterns = self.pattern_analyzer.analyze_patterns(df_for_patterns)
-            
+
             # Predict root causes using the simple rule-based estimator
             # incident_data itself is passed, as it contains description and metrics.
             predicted_causes = self.ml_model.predict_root_cause(incident_data) # List of Cause dicts
-            
+
             # Generate explanation using the simple explainer
             explanation_details = self.explainer.explain_prediction(predicted_causes, incident_data) # Explanation dict
-            
+
             analysis_result = {
                 'incident_description': incident_data.get('description', 'N/A'),
                 'predicted_root_causes': [], # Will be populated below

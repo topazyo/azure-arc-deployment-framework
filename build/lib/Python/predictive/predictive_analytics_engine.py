@@ -31,9 +31,9 @@ class PredictiveAnalyticsEngine:
     def initialize_components(self):
         """Initialize all AI components"""
         try:
-            self.trainer = ArcModelTrainer(self.config) # This already passes the PAE's config
-            self.predictor = ArcPredictor(model_dir=self.model_dir, config=self.config) # Pass PAE's config to ArcPredictor
-            self.pattern_analyzer = PatternAnalyzer(self.config) # This already passes the PAE's config
+            self.trainer = ArcModelTrainer(self.config)
+            self.predictor = ArcPredictor(self.model_dir)
+            self.pattern_analyzer = PatternAnalyzer(self.config)
             self.logger.info("All components initialized successfully")
         except Exception as e:
             self.logger.error(f"Component initialization failed: {str(e)}")

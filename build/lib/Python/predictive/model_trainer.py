@@ -55,15 +55,15 @@ class ArcModelTrainer:
                 return None, None, []
 
             features_df = data[actual_features_to_use].copy() # Use .copy() to avoid SettingWithCopyWarning later
-            
+
             # Handle missing values
-            features_df = self.handle_missing_values(features_df, feature_config['missing_strategy'], model_type)
-            
+            features_df = self.handle_missing_values(features_df, feature_config['missing_strategy'])
+
             # Create scaler for this model type
             scaler = StandardScaler()
             scaled_features = scaler.fit_transform(features_df)
             self.scalers[model_type] = scaler
-            
+
             # Prepare target variable if not anomaly detection
             if model_type != 'anomaly_detection':
                 if feature_config['target_column'] not in data.columns:
@@ -71,7 +71,7 @@ class ArcModelTrainer:
                     return None, None, []
                 target = data[feature_config['target_column']]
                 return scaled_features, target, actual_features_to_use
-            
+
             return scaled_features, None, actual_features_to_use
 
         except Exception as e:
@@ -284,7 +284,7 @@ class ArcModelTrainer:
                     scaler_path = os.path.join(output_dir, f"{model_type}_scaler.pkl")
                     joblib.dump(self.scalers[model_type], scaler_path)
                     self.logger.info(f"Saved {model_type} scaler to {scaler_path}")
-                
+
                 if model_type in self.feature_importance and self.feature_importance[model_type] is not None:
                     importance_path = os.path.join(output_dir, f"{model_type}_feature_importance.pkl")
                     joblib.dump(self.feature_importance[model_type], importance_path)

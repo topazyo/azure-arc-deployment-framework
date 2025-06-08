@@ -4,7 +4,7 @@ from sklearn.cluster import DBSCAN
 from sklearn.preprocessing import StandardScaler
 from scipy.stats import linregress
 from pandas.api.types import is_numeric_dtype
-from typing import Dict, List, Any, Optional, Tuple
+from typing import Dict, List, Any, Optional
 import logging
 from datetime import datetime
 import pandas as pd # Ensure pandas is imported if not already
