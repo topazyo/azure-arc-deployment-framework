@@ -1,6 +1,6 @@
 import pytest
 import numpy as np
-from src.Python.predictive.model_trainer import ArcModelTrainer
+from Python.predictive.model_trainer import ArcModelTrainer
 
 def test_model_initialization(sample_config):
     trainer = ArcModelTrainer(sample_config)
@@ -65,13 +65,13 @@ def test_handle_missing_values(sample_training_data, sample_config):
     sample_training_data.loc[0:10, 'cpu_usage'] = np.nan
     
     # Test different strategies
-    mean_result = trainer.handle_missing_values(sample_training_data, 'mean')
+    mean_result = trainer.handle_missing_values(sample_training_data.copy(), 'mean', 'test_type_mean')
     assert not mean_result.isna().any().any()
     
-    median_result = trainer.handle_missing_values(sample_training_data, 'median')
+    median_result = trainer.handle_missing_values(sample_training_data.copy(), 'median', 'test_type_median')
     assert not median_result.isna().any().any()
     
-    zero_result = trainer.handle_missing_values(sample_training_data, 'zero')
+    zero_result = trainer.handle_missing_values(sample_training_data.copy(), 'zero', 'test_type_zero')
     assert not zero_result.isna().any().any()
 
 def test_error_handling(sample_config):

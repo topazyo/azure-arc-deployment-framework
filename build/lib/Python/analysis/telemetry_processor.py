@@ -28,16 +28,16 @@ class TelemetryProcessor:
         try:
             # Convert raw data to DataFrame
             df = self._prepare_data(telemetry_data)
-            
+
             # Extract features
             features = self._extract_features(df)
-            
+
             # Detect anomalies
             anomalies = self._detect_anomalies(features)
-            
+
             # Analyze trends
             trends = self._analyze_trends(df)
-            
+
             # Generate insights
             insights = self._generate_insights(features, anomalies, trends)
 
@@ -58,17 +58,17 @@ class TelemetryProcessor:
         try:
             # Convert to DataFrame
             df = pd.DataFrame(telemetry_data)
-            
+
             # Handle missing values
             df = self._handle_missing_values(df)
-            
+
             # Convert timestamps
             if 'timestamp' in df.columns:
                 df['timestamp'] = pd.to_datetime(df['timestamp'])
-            
+
             # Remove duplicates
             df = df.drop_duplicates()
-            
+
             # Sort by timestamp if available
             if 'timestamp' in df.columns:
                 df = df.sort_values('timestamp')
@@ -108,7 +108,7 @@ class TelemetryProcessor:
     def _extract_features(self, df: pd.DataFrame) -> Dict[str, Any]:
         """Extract relevant features from telemetry data."""
         features = {}
-        
+
         try:
             # Performance metrics
             if 'cpu_usage' in df.columns:
@@ -261,12 +261,12 @@ class TelemetryProcessor:
                 self.logger.warning("Skipping anomaly detection due to empty or invalid feature matrix.")
                 anomalies['details'].append({"error": "Feature matrix could not be prepared."})
                 return anomalies
-            
+
             # Fit the scaler and PCA only if they haven't been fitted, or if fitting per batch is intended.
             # For now, let's assume fit_transform for simplicity, implying they are refitted each call.
             # In production, scalers/PCA should be fitted on a representative training set and then only transform used.
             scaled_features = self.scaler.fit_transform(feature_matrix)
-            
+
             if scaled_features.shape[0] == 0:
                  self.logger.warning("Scaled features are empty. Skipping PCA.")
                  pca_features = scaled_features
@@ -284,9 +284,9 @@ class TelemetryProcessor:
                 self.logger.warning("PCA features are empty, skipping Mahalanobis distance calculation.")
                 anomalies['details'].append({"error": "PCA resulted in empty features."})
                 return anomalies
-            
+
             distances = self._calculate_mahalanobis_distance(pca_features)
-            
+
             # Use a configured percentile or a default if not specified
             anomaly_threshold_percentile = self.config.get('anomaly_threshold_percentile', 95.0)
             threshold_value = np.percentile(distances, anomaly_threshold_percentile)
@@ -386,9 +386,15 @@ class TelemetryProcessor:
             return {}
 
     def _analyze_trends(self, df: pd.DataFrame) -> Dict[str, Any]:
+        """Analyze trends in telemetry data for short and long term."""
         """Analyze trends in telemetry data."""
-        # Removed duplicate docstring and initial trends definition.
-        # The trends dictionary is initialized before the main try block.
+        trends = {
+            'short_term': {},
+            'long_term': {},
+            'patterns': {}
+        }
+
+        try:
         trends = {
             'short_term': {}, # Default empty dict
             'long_term': {}   # Default empty dict
@@ -396,7 +402,7 @@ class TelemetryProcessor:
         try:
             if 'timestamp' not in df.columns:
                 self.logger.warning("Timestamp column missing, cannot perform time-based trend analysis.")
-                return trends
+                return trends # patterns will be empty or based on non-time data if _identify_patterns is adapted
 
             now = datetime.now() # Use a consistent 'now' for period calculations
             short_term_hours = self.config.get('trend_short_term_hours', 1)
@@ -577,7 +583,7 @@ class TelemetryProcessor:
                 inv_covariance = np.linalg.pinv(covariance)
             else:
                 inv_covariance = np.linalg.inv(covariance)
-            
+
             mean = np.mean(features, axis=0)
 
             distances = []
@@ -793,7 +799,7 @@ class TelemetryProcessor:
                             "description": rule.get('description', f"Pattern '{rule_name}' detected."),
                             "severity": rule.get('severity', 'medium'),
                             "count": int(combined_condition.sum()),
-                            "occurrences_timestamps": occurrences['timestamp'].apply(lambda dt: dt.isoformat()).tolist() if 'timestamp' in occurrences.columns and not occurrences['timestamp'].empty else occurrences.index.tolist()
+                            "occurrences_timestamps": occurrences['timestamp'].dt.isoformat().tolist() if 'timestamp' in occurrences else occurrences.index.tolist()
                         }
                         self.logger.info(f"Detected pattern '{rule_name}' at {len(occurrences)} locations.")
                     else: # No timestamp, just count
@@ -901,7 +907,7 @@ class TelemetryProcessor:
     def _generate_performance_insights(self, features: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Generate insights related to performance metrics."""
         insights = []
-        
+
         # CPU insights
         cpu_features = features.get('cpu', {})
         if cpu_features.get('average', 0) > 80:

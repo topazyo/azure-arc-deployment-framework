@@ -3,8 +3,8 @@
 
 # Module Variables
 $script:ModuleRoot = $PSScriptRoot
-$script:ConfigPath = Join-Path $PSScriptRoot "Config"
-$script:LogPath = Join-Path $PSScriptRoot "Logs"
+$script:ConfigPath = Join-Path $PSScriptRoot "../../config"
+$script:LogPath = Join-Path $PSScriptRoot "../../Logs/AzureArcFramework" # Centralized log path
 
 # Import Configuration
 $script:Config = @{}
@@ -40,7 +40,7 @@ $functionFolders = @(
 )
 
 foreach ($folder in $functionFolders) {
-    $folderPath = Join-Path $PSScriptRoot $folder
+    $folderPath = Join-Path (Split-Path -Path $PSScriptRoot -Parent) $folder
     if (Test-Path $folderPath) {
         $functions = Get-ChildItem -Path $folderPath -Filter "*.ps1"
         foreach ($function in $functions) {
@@ -92,7 +92,7 @@ function Initialize-ArcDeployment {
 
         # Merge custom configuration
         if ($CustomConfig) {
-            $script:DefaultConfig = Merge-Hashtables $script:DefaultConfig $CustomConfig
+            $script:DefaultConfig = Internal_MergeHashtables $script:DefaultConfig $CustomConfig
         }
 
         # Initialize logging
@@ -212,21 +212,20 @@ function Start-ArcTroubleshooting {
 
 # Helper Functions
 function Initialize-Logging {
+    # Ensure the base log directory exists
     if (-not (Test-Path $script:LogPath)) {
-        New-Item -Path $script:LogPath -ItemType Directory -Force | Out-Null
+        New-Item -Path $script:LogPath -ItemType Directory -Force -ErrorAction SilentlyContinue | Out-Null
     }
 
-    # Set up logging configuration
-    $logConfig = @{
-        Path = Join-Path $script:LogPath "ArcDeployment.log"
-        Level = $script:DefaultConfig.LogLevel
-        Format = "{0:yyyy-MM-dd HH:mm:ss} [{1}] {2}"
-    }
+    # Set global variables for Write-Log to use
+    $global:AzureArcFramework_LogPath = Join-Path $script:LogPath "ArcDeployment.log"
+    $global:AzureArcFramework_LogLevel = $script:DefaultConfig.LogLevel
 
-    $script:LogConfig = $logConfig
+    # Optional: Confirmation message
+    Write-Host "Logging initialized. Path: $($global:AzureArcFramework_LogPath), Level: $($global:AzureArcFramework_LogLevel)"
 }
 
-function Merge-Hashtables {
+function Internal_MergeHashtables {
     param (
         [hashtable]$Original,
         [hashtable]$Update
