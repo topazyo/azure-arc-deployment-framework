@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import os
 import joblib # For loading any pre-trained models if used
+from unittest.mock import patch # Added for mocking
 
 # Add src to path
 import sys
@@ -20,89 +21,7 @@ from Python.predictive.model_trainer import ArcModelTrainer
 from Python.predictive.predictor import ArcPredictor
 from Python.predictive.predictive_analytics_engine import PredictiveAnalyticsEngine
 
-# Comprehensive Configuration Fixture
-@pytest.fixture(scope="module")
-def full_ai_config_dict(): # Renamed to avoid confusion if an AIConfig class is used
-    config = {
-        "aiComponents": {
-            "telemetry_processor": {
-                "anomaly_detection_features": ["cpu_usage_avg", "memory_usage_avg", "error_count_sum"],
-                "trend_features": ["cpu_usage_avg", "response_time_avg"],
-                "fft_features": ["cpu_usage_avg"],
-                "correlation_features": ["cpu_usage_avg", "memory_usage_avg", "disk_io_avg"],
-                "correlation_threshold": 0.8,
-                "trend_p_value_threshold": 0.05,
-                "trend_slope_threshold": 0.01, # Adjusted for more sensitivity in tests
-                "fft_num_top_frequencies": 1,
-                "fft_min_amplitude_threshold": 0.1,
-                "multi_metric_anomaly_rules": [{
-                    "name": "HighCpuAndError",
-                    "conditions": [
-                        {"metric": "cpu_usage_avg", "operator": ">", "threshold": 80.0}, # Use float for thresholds
-                        {"metric": "error_count_sum", "operator": ">", "threshold": 5.0}
-                    ],
-                     "description": "High CPU usage concurrent with high error count.",
-                     "severity": "high"
-                }]
-            },
-            "pattern_analyzer_config": { # Used by RootCauseAnalyzer and PAE for their PatternAnalyzer
-                "behavioral_features": ["cpu_usage_avg", "memory_usage_avg", "error_count_sum"],
-                "dbscan_eps": 0.5, "dbscan_min_samples": 2, # Adjusted for small test data
-                "performance_metrics": ["cpu_usage_avg", "response_time_avg"],
-                "precursor_window": "30T", # Shorter window for test data
-                "precursor_significance_threshold_pct": 10,
-                "sustained_high_usage_percentile": 0.8, # Adjusted
-                "sustained_high_usage_min_points": 2, # Adjusted
-                 "bottleneck_rules": [{
-                    "name": "CPU_Bottleneck_Test",
-                    "conditions": [{"metric": "cpu_usage_avg", "operator": ">", "threshold": 90.0}],
-                    "description": "CPU usage exceeds 90%",
-                    "severity": "high"
-                }]
-            },
-            "rca_estimator_config": {
-                 "rules": { # Simplified rules for testing
-                    "cpu": {"cause": "CPU Overload Test", "recommendation": "Test Rec: Scale CPU.", "impact_score": 0.7, "metric_threshold": 0.75}, # Matched against cpu_usage_avg typically
-                    "memory": {"cause": "Memory Exhaustion Test", "recommendation": "Test Rec: Add Memory.", "impact_score": 0.8, "metric_threshold": 0.85},
-                    "network error": {"cause": "Network Error Test", "recommendation": "Test Rec: Check Network.", "impact_score": 0.9} # Keyword based
-                },
-                "default_confidence": 0.6
-            },
-            "rca_explainer_config": {},
-            "feature_engineering": {
-                "original_numerical_features": ["cpu_usage_avg", "memory_usage_avg", "disk_io_avg", "error_count_sum", "response_time_avg",
-                                                "cpu_usage", "memory_usage", "disk_usage", "network_latency", "error_count", "warning_count",
-                                                "request_count", "response_time", "service_restarts", "cpu_spikes", "memory_spikes", "connection_drops"], # Expanded
-                "original_categorical_features": ["region"],
-                "statistical_feature_columns": ["cpu_usage_avg", "memory_usage_avg"],
-                "rolling_window_sizes": [2], "lags": [1], # Adjusted for small data
-                "interaction_feature_columns": ["cpu_usage_avg", "memory_usage_avg"],
-                "numerical_nan_fill_strategy": "mean",
-                "categorical_nan_fill_strategy": "unknown",
-                "feature_selection_k": 'all',
-                "feature_selection_score_func": "f_classif" # Though target might not always be classification type for all models
-            },
-            "model_config": { # For ArcModelTrainer
-                "test_split_ratio": 0.25, "random_state": 42,
-                "features": { # ArcModelTrainer will use these to select columns from FeatureEngineer's output
-                    "health_prediction": {"required_features_is_output_of_fe": True, "target_column": "is_healthy", "missing_strategy": "mean"},
-                    "anomaly_detection": {"required_features_is_output_of_fe": True, "missing_strategy": "mean"}, # No target_column
-                    "failure_prediction": {"required_features_is_output_of_fe": True, "target_column": "will_fail", "missing_strategy": "mean"}
-                },
-                "models": { # Params for scikit-learn models
-                    "health_prediction": {"n_estimators": 10, "max_depth": 3, "random_state": 42, "class_weight": "balanced"},
-                    "anomaly_detection": {"contamination": 'auto', "random_state": 42, "n_estimators":10}, # Reduced n_estimators
-                    "failure_prediction": {"n_estimators": 10, "max_depth": 3, "random_state": 42, "class_weight": "balanced"}
-                }
-            },
-             "remediation_learner_config": {
-                 "context_features_to_log": ["cpu_usage_avg", "error_count_sum"],
-                 "success_pattern_threshold": 0.7, "success_pattern_min_attempts": 2,
-                 "ai_predictor_failure_threshold": 0.6
-            }
-        }
-    }
-    return config
+# Comprehensive Configuration Fixture has been moved to conftest.py
 
 @pytest.fixture(scope="module")
 def sample_telemetry_for_integration_df(): # Renamed for clarity
@@ -191,7 +110,7 @@ def pae_test_environment(full_ai_config_dict, sample_telemetry_for_integration_d
     trainer.train_health_prediction_model(health_training_df)
     trainer.train_failure_prediction_model(failure_training_df)
     trainer.train_anomaly_detection_model(anomaly_training_df)
-    trainer.save_models(str(model_dir))
+    trainer.save_models(str(pae_model_dir))
 
     # Pass the main 'aiComponents' config to ArcPredictor as it might initialize FE
     # predictor = ArcPredictor(model_dir=str(model_dir), config=full_ai_config_dict['aiComponents'])
@@ -221,8 +140,7 @@ def test_telemetry_to_predictive_risk_analysis(pae_test_environment, sample_tele
 
     # Spy on constructors and methods
     with patch('Python.predictive.predictive_analytics_engine.ArcPredictor') as MockArcPredictorConstructor, \
-         patch('Python.predictive.predictive_analytics_engine.PatternAnalyzer') as MockPatternAnalyzerConstructor, \
-         patch('Python.predictive.predictor.FeatureEngineer') as MockFeatureEngineerConstructor: # Patch FE at source where ArcPredictor imports it
+         patch('Python.predictive.predictive_analytics_engine.PatternAnalyzer') as MockPatternAnalyzerConstructor:
 
         # Setup mock instances that will be returned by constructors
         mock_predictor_instance = MockArcPredictorConstructor.return_value

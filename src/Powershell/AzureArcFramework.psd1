@@ -1,9 +1,9 @@
 @{
     RootModule = 'AzureArcFramework.psm1'
     ModuleVersion = '1.0.0'
-    GUID = 'newly-generated-guid'
-    Author = 'Your Name'
-    CompanyName = 'Your Company'
+    GUID = '9890992f-6a97-4ba0-8ae5-415caa81eaba'
+    Author = 'Project Contributor'
+    CompanyName = 'Community Project'
     Copyright = '(c) 2024 Your Company. All rights reserved.'
     Description = 'Azure Arc Deployment and Management Framework'
     PowerShellVersion = '5.1'
@@ -51,8 +51,8 @@
     PrivateData = @{
         PSData = @{
             Tags = @('Azure', 'Arc', 'Deployment', 'Management', 'AI', 'Monitoring')
-            LicenseUri = 'https://github.com/yourusername/azure-arc-framework/blob/main/LICENSE'
-            ProjectUri = 'https://github.com/yourusername/azure-arc-framework'
+            LicenseUri = 'https://github.com/project-owner/azure-arc-framework/blob/main/LICENSE'
+            ProjectUri = 'https://github.com/project-owner/azure-arc-framework'
             ReleaseNotes = 'Initial release of Azure Arc Framework'
         }
     }

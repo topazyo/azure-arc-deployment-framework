@@ -31,6 +31,7 @@
 
 ### 1. Automated Installation
 
+(Note: Run the following commands from the root of the repository)
 ```powershell
 # Download and run installer
 .\install.ps1 -InstallPath "C:\Program Files\AzureArcFramework" -Dev
@@ -45,10 +46,12 @@ Install-Module -Name Az.ConnectedMachine -Force
 Install-Module -Name Az.Monitor -Force
 
 # 2. Install Python Dependencies
+# (Run from the root of the repository)
 pip install -r requirements.txt
 
 # 3. Import PowerShell Module
-Import-Module .\src\PowerShell\AzureArcFramework.psd1
+# (Path relative to the root of the repository)
+Import-Module src/PowerShell/AzureArcFramework.psd1
 ```
 
 ## Configuration
@@ -73,12 +76,13 @@ Initialize-ArcDeployment -CustomConfig $config
 ```
 
 ### 3. Environment-Specific Configuration
+(Note: The `prod-environment.json` file mentioned below is an example and is not provided in this repository. You would need to create your own environment-specific configuration files.)
 ```powershell
-# Load environment configuration
-$envConfig = Get-Content .\Config\prod-environment.json | ConvertFrom-Json
+# Example: Load environment configuration (if you create such a file)
+# $envConfig = Get-Content ./config/your-custom-env.json | ConvertFrom-Json
 
 # Apply configuration
-Set-ArcEnvironmentConfig -Config $envConfig
+# Set-ArcEnvironmentConfig -Config $envConfig
 ```
 
 ## Validation
@@ -140,6 +144,7 @@ For support:
 ## Uninstallation
 
 ### Clean Uninstall
+(Note: Run the following command from the root of the repository)
 ```powershell
 # Run uninstaller
 .\uninstall.ps1 -RemoveData
