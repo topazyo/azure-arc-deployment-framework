@@ -5,20 +5,28 @@ function Write-Log {
         [string]$Message,
         [Parameter()]
         [ValidateSet('Information', 'Warning', 'Error', 'Debug', 'Verbose')]
-        [string]$Level = 'Information',
+        [string]$Level = ($global:AzureArcFramework_LogLevel | Get-Variable -ErrorAction SilentlyContinue -ValueOnly),
         [Parameter()]
         [string]$Component = 'General',
         [Parameter()]
-        [string]$LogPath = ".\Logs\ArcDeployment.log",
+        [string]$LogPath = ($global:AzureArcFramework_LogPath | Get-Variable -ErrorAction SilentlyContinue -ValueOnly),
         [Parameter()]
         [switch]$PassThru
     )
 
     begin {
+        # Set effective defaults if parameters were not passed and global vars were not set (or null/empty)
+        if ([string]::IsNullOrEmpty($LogPath)) {
+            $LogPath = Join-Path $env:TEMP "AzureArcFramework/Default.log"
+        }
+        if ([string]::IsNullOrEmpty($Level)) {
+            $Level = 'Information'
+        }
+
         # Ensure log directory exists
         $logDir = Split-Path $LogPath -Parent
         if (-not (Test-Path $logDir)) {
-            New-Item -Path $logDir -ItemType Directory -Force | Out-Null
+            New-Item -Path $logDir -ItemType Directory -Force -ErrorAction SilentlyContinue | Out-Null
         }
 
         $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss.fff"

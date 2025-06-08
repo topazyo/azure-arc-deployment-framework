@@ -8,7 +8,7 @@ import sys
 import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../src')))
 
-from Python.analysis.RootCauseAnalyzer import RootCauseAnalyzer, MLModelPlaceholder, ExplainerPlaceholder
+from Python.analysis.RootCauseAnalyzer import RootCauseAnalyzer, SimpleRCAEstimator, SimpleRCAExplainer
 from Python.analysis.pattern_analyzer import PatternAnalyzer
 from Python.analysis.telemetry_processor import TelemetryProcessor
 
@@ -47,8 +47,8 @@ class TestRootCauseAnalyzer:
     def test_rca_init(self, base_config):
         rca = RootCauseAnalyzer(config=base_config)
         assert rca is not None
-        assert isinstance(rca.ml_model, MLModelPlaceholder)
-        assert isinstance(rca.explainer, ExplainerPlaceholder)
+        assert isinstance(rca.ml_model, SimpleRCAEstimator)
+        assert isinstance(rca.explainer, SimpleRCAExplainer)
 
     def test_rca_analyze_incident(self, base_config, sample_incident_data):
         rca = RootCauseAnalyzer(config=base_config)

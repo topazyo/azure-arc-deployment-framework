@@ -68,7 +68,7 @@ function Get-AMAHealthStatus {
             }
 
             # Performance Issues
-            if ($performance.CPUUsage.Average -gt 10) {
+            if ($performance.CPUUsage.Average -gt 80) {
                 $healthStatus.Issues += @{
                     Type = 'Performance'
                     Severity = 'Warning'

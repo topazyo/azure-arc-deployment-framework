@@ -1,7 +1,8 @@
 import pytest
 import pandas as pd
 import numpy as np
-from src.Python.analysis.telemetry_processor import TelemetryProcessor
+from datetime import datetime # Added import
+from Python.analysis.telemetry_processor import TelemetryProcessor
 
 def test_process_telemetry(sample_telemetry_data, sample_config):
     processor = TelemetryProcessor(sample_config)

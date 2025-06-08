@@ -133,8 +133,9 @@ class TestArcRemediationLearner:
     def test_arl_initialize_ai_components(self, comprehensive_predictive_config, tmp_path):
         arl = ArcRemediationLearner(config=comprehensive_predictive_config.get("remediation_learner_config"))
         # Mock actual trainer and predictor for this unit test
-        with patch('Python.predictive.ArcRemediationLearner.ArcModelTrainer') as MockTrainer, \
-             patch('Python.predictive.ArcRemediationLearner.ArcPredictor') as MockPredictor:
+        # Patch where the objects are defined
+        with patch('Python.predictive.model_trainer.ArcModelTrainer') as MockTrainer, \
+             patch('Python.predictive.predictor.ArcPredictor') as MockPredictor:
 
             # Need to ensure model_dir exists for ArcPredictor, even if mocked
             os.makedirs(tmp_path / "models", exist_ok=True)

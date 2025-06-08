@@ -1,7 +1,7 @@
 import pytest
 import pandas as pd
 import numpy as np
-from src.Python.predictive.feature_engineering import FeatureEngineer
+from Python.predictive.feature_engineering import FeatureEngineer
 
 def test_engineer_features(sample_training_data, sample_config):
     engineer = FeatureEngineer(sample_config)

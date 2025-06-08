@@ -20,7 +20,6 @@ class ArcRemediationLearner:
         self.success_patterns: Dict[tuple, Dict[str, Any]] = {} # Key: (error_type, action)
         self.predictor: Optional[ArcPredictor] = None
         self.trainer: Optional[ArcModelTrainer] = None
-        self.model: Optional[Any] = None # Placeholder for tests expecting this attribute
 
         # Attributes for retraining trigger
         self.new_data_counter: Dict[str, int] = {}
@@ -69,7 +68,7 @@ class ArcRemediationLearner:
                 return
 
             pattern_key = (error_type, action_taken)
-            
+
             # Create a summary of the context based on configured features
             context_summary = {feat: context.get(feat) for feat in self.context_features_to_log if feat in context}
 
@@ -84,9 +83,9 @@ class ArcRemediationLearner:
             current_pattern['total_attempts'] += 1
             if outcome_success:
                 current_pattern['success_count'] += 1
-            
+
             current_pattern['success_rate'] = current_pattern['success_count'] / current_pattern['total_attempts']
-            
+
             # Add current context summary, maybe limit the size of this list
             max_contexts_to_store = self.config.get('max_contexts_per_pattern', 10)
             current_pattern['contexts'].append(context_summary)

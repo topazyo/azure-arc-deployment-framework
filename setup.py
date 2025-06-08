@@ -6,12 +6,12 @@ with open("README.md", "r", encoding="utf-8") as fh:
 setup(
     name="azure-arc-framework",
     version="1.0.0",
-    author="Your Name",
-    author_email="your.email@domain.com",
+    author="Project Contributor",
+    author_email="contributor@example.com",
     description="A comprehensive framework for Azure Arc deployment and management",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/yourusername/azure-arc-framework",
+    url="https://github.com/project-owner/azure-arc-framework",
     packages=find_packages(where="src"),
     package_dir={"": "src"},
     classifiers=[
@@ -42,6 +42,11 @@ setup(
             'black>=21.5b2',
             'flake8>=3.9.0',
             'mypy>=0.910',
+        ],
+        'optional': [
+            'matplotlib>=3.4.0',
+            'seaborn>=0.11.0',
+            'jupyter>=1.0.0',
         ],
     },
 )
