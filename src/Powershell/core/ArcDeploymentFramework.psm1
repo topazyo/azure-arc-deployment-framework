@@ -4,7 +4,6 @@
 # Module Variables
 $script:ModuleRoot = $PSScriptRoot
 $script:ConfigPath = Join-Path $PSScriptRoot "../../config"
-$script:LogPath = Join-Path $PSScriptRoot "../../Logs/AzureArcFramework" # Centralized log path
 
 # Import Configuration
 $script:Config = @{}
@@ -22,12 +21,24 @@ try {
             $script:Config[$file.Replace('.json','')] = Get-Content $filePath | ConvertFrom-Json
         }
         else {
-            Write-Warning "Configuration file not found: $file"
+            if ($file -eq "ai_config.json") {
+                Write-Error "Critical configuration file not found: $file at $filePath"
+                throw "Critical configuration file ai_config.json not found."
+            }
+            else {
+                Write-Warning "Configuration file not found: $file at $filePath"
+            }
         }
     }
 }
 catch {
     Write-Error "Failed to load configuration: $_"
+    # Re-throw the original exception if it's the specific one for ai_config.json,
+    # or a general one if something else went wrong.
+    if ($_.Exception.Message -eq "Critical configuration file ai_config.json not found.") {
+        throw $_.Exception
+    }
+    throw "Configuration loading failed."
 }
 
 # Import Functions
@@ -72,7 +83,9 @@ function Initialize-ArcDeployment {
         [Parameter()]
         [string]$WorkspaceKey,
         [Parameter()]
-        [hashtable]$CustomConfig
+        [hashtable]$CustomConfig,
+        [Parameter()]
+        [string]$LogPathOverride # New parameter
     )
 
     try {
@@ -92,7 +105,12 @@ function Initialize-ArcDeployment {
 
         # Merge custom configuration
         if ($CustomConfig) {
-            $script:DefaultConfig = Internal_MergeHashtables $script:DefaultConfig $CustomConfig
+            $script:DefaultConfig = Merge-CommonHashtable $script:DefaultConfig $CustomConfig
+        }
+
+        # Store LogPathOverride if provided
+        if (-not [string]::IsNullOrEmpty($LogPathOverride)) {
+            $script:DefaultConfig.LogPathOverride = $LogPathOverride
         }
 
         # Initialize logging
@@ -212,30 +230,48 @@ function Start-ArcTroubleshooting {
 
 # Helper Functions
 function Initialize-Logging {
+    $finalLogBasePath = $null
+
+    # 1. Check LogPathOverride in config
+    if (-not [string]::IsNullOrEmpty($script:DefaultConfig.LogPathOverride)) {
+        $finalLogBasePath = $script:DefaultConfig.LogPathOverride
+        Write-Verbose "Using LogPathOverride: $finalLogBasePath"
+    }
+    # 2. Check Environment Variable
+    elseif ($env:AZUREARC_FRAMEWORK_LOG_PATH) { # Check if variable exists and is not empty
+        $finalLogBasePath = $env:AZUREARC_FRAMEWORK_LOG_PATH
+        Write-Verbose "Using environment variable AZUREARC_FRAMEWORK_LOG_PATH: $finalLogBasePath"
+    }
+    # 3. Default to Temp Path
+    else {
+        $tempDir = [System.IO.Path]::GetTempPath()
+        $finalLogBasePath = Join-Path $tempDir "AzureArcFrameworkLogs"
+        Write-Verbose "Using default temp log path: $finalLogBasePath"
+    }
+
     # Ensure the base log directory exists
-    if (-not (Test-Path $script:LogPath)) {
-        New-Item -Path $script:LogPath -ItemType Directory -Force -ErrorAction SilentlyContinue | Out-Null
+    if (-not (Test-Path $finalLogBasePath)) {
+        try {
+            New-Item -Path $finalLogBasePath -ItemType Directory -Force -ErrorAction Stop | Out-Null
+        }
+        catch {
+            Write-Error "Failed to create log directory at $finalLogBasePath. Error: $_"
+            # Fallback to a script-relative path as a last resort, or throw
+            $fallbackLogPath = Join-Path $PSScriptRoot "../../Logs_Fallback" # Different from original
+            Write-Warning "Falling back to log path: $fallbackLogPath"
+            $finalLogBasePath = $fallbackLogPath
+            if (-not (Test-Path $finalLogBasePath)) {
+                 New-Item -Path $finalLogBasePath -ItemType Directory -Force -ErrorAction SilentlyContinue | Out-Null
+            }
+        }
     }
 
     # Set global variables for Write-Log to use
-    $global:AzureArcFramework_LogPath = Join-Path $script:LogPath "ArcDeployment.log"
+    $global:AzureArcFramework_LogPath = Join-Path $finalLogBasePath "ArcDeployment.log"
     $global:AzureArcFramework_LogLevel = $script:DefaultConfig.LogLevel
 
     # Optional: Confirmation message
     Write-Host "Logging initialized. Path: $($global:AzureArcFramework_LogPath), Level: $($global:AzureArcFramework_LogLevel)"
-}
-
-function Internal_MergeHashtables {
-    param (
-        [hashtable]$Original,
-        [hashtable]$Update
-    )
-
-    $result = $Original.Clone()
-    foreach ($key in $Update.Keys) {
-        $result[$key] = $Update[$key]
-    }
-    return $result
 }
 
 # Export module members
@@ -248,5 +284,13 @@ Export-ModuleMember -Function @(
     'Start-ArcDiagnostics',
     'Invoke-ArcAnalysis',
     'Start-ArcRemediation',
-    'Test-DeploymentHealth'
+    'Test-DeploymentHealth',
+    'Start-AIEnhancedTroubleshooting',
+    'Invoke-AIPatternAnalysis',
+    'Get-PredictiveInsights',
+    'Write-Log',
+    'New-RetryBlock',
+    'Convert-ErrorToObject',
+    'Test-Connectivity',
+    'Merge-CommonHashtable'
 )

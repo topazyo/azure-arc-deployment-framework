@@ -29,30 +29,25 @@ PROJECT_ROOT_ASSUMED = os.path.abspath(os.path.join(SCRIPT_DIR, "..", ".."))
 DEFAULT_MODEL_DIR = os.path.join(PROJECT_ROOT_ASSUMED, "data", "models", "latest")
 
 
-def generate_sample_telemetry(server_name: str, feature_names: list) -> dict:
-    """Generates sample telemetry data for a given server based on expected feature names."""
-    data = {"server_name": server_name}
-    # Based on feature names used in training (from model_metadata['feature_order'])
-    for feature in feature_names:
-        if "count" in feature or "restarts" in feature or "spikes" in feature or "drops" in feature:
-            data[feature] = np.random.randint(0, 5)
-        elif "latency" in feature or "response_time" in feature:
-            data[feature] = np.random.uniform(10, 200)
-        elif "usage" in feature: # cpu_usage, memory_usage, disk_usage
-            data[feature] = np.random.uniform(0.05, 0.95)
-        # cpu_to_memory_ratio is derived, not a raw input for sample generation here
-        else: # Default for unknown features, or features not fitting above patterns
-            data[feature] = np.random.rand()
-    return data
-
 def main():
-    """[TODO: Add method documentation]"""
+    """Main entry point for ArcPredictor. Processes telemetry data from a JSON string and runs specified predictions."""
+    # Expected --telemetrydatajson structure:
+    # A dictionary representing a single snapshot of telemetry data, e.g.,
+    # {
+    #   "cpu_usage": 0.75,
+    #   "memory_usage": 0.60,
+    #   // ... other features as defined in ai_config.json for the relevant model ...
+    #   // Note: server_name and timestamp might also be part of this data if models use them.
+    # }
+    # This script is designed for direct interaction with ArcPredictor using specific models.
+    # For a more holistic analysis (risk scoring, pattern analysis), use invoke_ai_engine.py.
     parser = argparse.ArgumentParser(description="ArcPredictor AI Engine Interface")
     parser.add_argument("--server-name", type=str, required=True, help="Name of the server for prediction.")
     parser.add_argument("--analysis-type", type=str, default="Full",
                         choices=["Full", "Health", "Failure", "Anomaly"],
                         help="Type of analysis to perform.")
     parser.add_argument("--model-dir", type=str, default=DEFAULT_MODEL_DIR, help="Directory where models are stored.")
+    parser.add_argument("--telemetrydatajson", type=str, required=True, help="JSON string containing the telemetry data for prediction.")
 
     args = parser.parse_args()
 
@@ -70,51 +65,32 @@ def main():
              print(json.dumps(output_results), flush=True)
              return
 
-        sample_telemetry = None
-        # Try to get feature order from one of the loaded models to generate relevant sample data
-        # This is just for placeholder data generation.
-        if predictor.model_metadata:
-            # Use feature order from health_prediction model for generating sample data
-            # This assumes health_prediction model and its metadata are loaded.
-            # The specific model chosen ('health_prediction') is arbitrary for selecting a feature list.
-            # Any model's metadata containing 'feature_order' would suffice.
-            chosen_model_type_for_features = None
-            for mt in ['health_prediction', 'failure_prediction', 'anomaly_detection']:
-                if predictor.model_metadata.get(mt) and predictor.model_metadata[mt].get('feature_order'):
-                    chosen_model_type_for_features = mt
-                    break
-
-            if chosen_model_type_for_features:
-                input_feature_names = predictor.model_metadata[chosen_model_type_for_features]['feature_order']
-                if not input_feature_names: # If feature_order list is empty
-                    output_results = {"error": f"Feature order list for {chosen_model_type_for_features} is empty. Cannot generate sample telemetry."}
-                    print(json.dumps(output_results), flush=True)
-                    return
-                sample_telemetry = generate_sample_telemetry(args.server_name, input_feature_names)
-            else: # Fallback if no model/meta found with feature_order
-                fallback_features = [
-                    "cpu_usage", "memory_usage", "disk_usage", "network_latency",
-                    "error_count", "warning_count", "request_count", "response_time",
-                    "service_restarts", "cpu_spikes", "memory_spikes", "connection_drops"
-                ]
-                sample_telemetry = generate_sample_telemetry(args.server_name, fallback_features)
-        else:
-            output_results = {"error": "Model metadata not loaded by ArcPredictor, cannot determine features for sample telemetry."}
-            print(json.dumps(output_results), flush=True)
+        try:
+            telemetry_data = json.loads(args.telemetrydatajson)
+        except json.JSONDecodeError as e:
+            output_results = {
+                "error": "JSONDecodeError",
+                "message": f"Invalid JSON provided in --telemetrydatajson: {str(e)}",
+                "server_name": args.server_name,
+                "analysis_type": args.analysis_type,
+            }
+            print(json.dumps(output_results, indent=4 if os.environ.get('DEBUG_PYTHON_WRAPPER') else None), flush=True)
             return
 
-        output_results = {"server_name": args.server_name, "analysis_type": args.analysis_type, "input_telemetry_sample_features": list(sample_telemetry.keys())}
+        output_results = {"server_name": args.server_name, "analysis_type": args.analysis_type}
+        # Optionally, add features provided:
+        # output_results["input_features_provided"] = list(telemetry_data.keys())
 
         if args.analysis_type in ["Full", "Health"]:
-            health_pred = predictor.predict_health(sample_telemetry)
+            health_pred = predictor.predict_health(telemetry_data)
             output_results["health_prediction"] = health_pred
 
         if args.analysis_type in ["Full", "Anomaly"]:
-            anomaly_pred = predictor.detect_anomalies(sample_telemetry)
+            anomaly_pred = predictor.detect_anomalies(telemetry_data)
             output_results["anomaly_detection"] = anomaly_pred
 
         if args.analysis_type in ["Full", "Failure"]:
-            failure_pred = predictor.predict_failures(sample_telemetry)
+            failure_pred = predictor.predict_failures(telemetry_data)
             output_results["failure_prediction"] = failure_pred
 
         print(json.dumps(output_results, indent=4 if os.environ.get('DEBUG_PYTHON_WRAPPER') else None), flush=True)
