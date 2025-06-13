@@ -9,7 +9,9 @@ from datetime import datetime
 import os # Not strictly needed by this diff, but good practice
 
 class FeatureEngineer:
+    """Engineers features from raw data for model training."""
     def __init__(self, config: Dict[str, Any]):
+        """Initializes FeatureEngineer with configuration."""
         self.config = config
         self.scalers: Dict[str, StandardScaler] = {}
         self.encoders: Dict[str, OneHotEncoder] = {}

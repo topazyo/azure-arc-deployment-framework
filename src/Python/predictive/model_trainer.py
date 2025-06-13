@@ -17,9 +17,9 @@ from sklearn.model_selection import train_test_split
 
 
 class ArcModelTrainer:
-    """[TODO: Add class documentation]"""
+    """Manages training of predictive models."""
     def __init__(self, config: Dict[str, Any]):
-        """[TODO: Add method documentation]"""
+        """Initializes the model trainer with configuration."""
         self.config = config
         self.models: Dict[str, Any] = {}
         self.scalers: Dict[str, StandardScaler] = {}
@@ -27,7 +27,7 @@ class ArcModelTrainer:
         self.setup_logging()
 
     def setup_logging(self):
-        """[TODO: Add method documentation]"""
+        """Sets up logging for the model trainer."""
         logging.basicConfig(
             level=logging.INFO,
             format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -119,7 +119,7 @@ class ArcModelTrainer:
         return df
 
     def train_health_prediction_model(self, data: pd.DataFrame) -> None:
-        """[TODO: Add method documentation]"""
+        """Trains the health prediction model using configured algorithm."""
         model_type = 'health_prediction'
         self.logger.info(f"Starting training for {model_type} model...")
         try:
@@ -194,7 +194,7 @@ class ArcModelTrainer:
             self.logger.error(f"{model_type} model training failed: {str(e)}", exc_info=True)
 
     def train_anomaly_detection_model(self, data: pd.DataFrame) -> None:
-        """[TODO: Add method documentation]"""
+        """Trains the anomaly detection model."""
         model_type = 'anomaly_detection'
         self.logger.info(f"Starting training for {model_type} model...")
         try:
@@ -228,7 +228,7 @@ class ArcModelTrainer:
             self.logger.error(f"{model_type} model training failed: {str(e)}", exc_info=True)
 
     def train_failure_prediction_model(self, data: pd.DataFrame) -> None:
-        """[TODO: Add method documentation]"""
+        """Trains the failure prediction model."""
         model_type = 'failure_prediction'
         self.logger.info(f"Starting training for {model_type} model...")
         try:
@@ -297,7 +297,7 @@ class ArcModelTrainer:
             raise # Re-raise to indicate failure in saving
 
     def update_models_with_remediation(self, remediation_data: Dict[str, Any]) -> None:
-        """Placeholder for updating models with new remediation data."""
+        """Placeholder method for updating models with remediation data. Currently logs receipt of data and warns that full retraining logic is not implemented."""
         try:
             self.logger.info(f"Received remediation data for learning: {remediation_data.get('action')}")
             self.logger.warning("Full retraining logic for models with new remediation data is not yet implemented. Models were not updated.")
