@@ -6,9 +6,9 @@ from typing import Dict, List, Any, Optional # Ensure List and Optional are here
 from datetime import datetime
 
 class ArcPredictor:
-    """[TODO: Add class documentation]"""
+    """Loads trained models and makes predictions."""
     def __init__(self, model_dir: str, config: Dict[str, Any] = None): # Added config
-        """[TODO: Add method documentation]"""
+        """Initializes ArcPredictor, loading models from model_dir."""
         self.model_dir = model_dir
         self.config = config if config else {} # Store config
         self.models: Dict[str, Any] = {}
@@ -18,7 +18,7 @@ class ArcPredictor:
         self.load_models()
 
     def setup_logging(self):
-        """[TODO: Add method documentation]"""
+        """Sets up logging for the predictor.""" # Generic, as per similar updates
         logging.basicConfig(
             level=logging.INFO,
             format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -282,7 +282,7 @@ class ArcPredictor:
         return impacts
 
     def calculate_risk_level(self, failure_probability: float) -> str:
-        """[TODO: Add method documentation]"""
+        """Calculates risk level string from failure probability.""" # Generic
         if failure_probability >= 0.75:
             return 'Critical'
         elif failure_probability >= 0.5:
