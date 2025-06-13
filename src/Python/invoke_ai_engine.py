@@ -21,11 +21,20 @@ def main():
     Parses command-line arguments, loads configuration, initializes the
     PredictiveAnalyticsEngine, processes the input, and prints results as JSON.
     """
+    # Expected --serverdatajson structure:
+    # {
+    #   "server_name_id": "actual_server_name", // Should match --servername for consistency
+    #   "timestamp": "YYYY-MM-DDTHH:MM:SS.ffffff", // ISO format timestamp for the snapshot
+    #   "cpu_usage": 0.75,
+    #   "memory_usage": 0.60,
+    #   // ... other features as defined in ai_config.json model_config features ...
+    # }
     parser = argparse.ArgumentParser(description="Azure Arc AI Engine Interface")
     parser.add_argument("--servername", required=True, help="Name of the server to analyze")
     parser.add_argument("--analysistype", default="Full", help="Type of analysis (Full, Health, Failure, Anomaly)")
     parser.add_argument("--modeldir", default=os.path.join(os.path.dirname(__file__), 'models_placeholder'), help="Directory containing trained models. Defaults to a 'models_placeholder' folder relative to this script.")
     parser.add_argument("--configpath", default=os.path.join(os.path.dirname(__file__), '../config/ai_config.json'), help="Path to AI configuration file. Defaults to 'src/config/ai_config.json'.")
+    parser.add_argument("--serverdatajson", required=True, help="JSON string containing the server telemetry data for analysis.")
 
     args = parser.parse_args()
     ai_components_config = {} # Initialize
@@ -42,6 +51,21 @@ def main():
         if not ai_components_config:
              raise ValueError(f"Invalid configuration format in {config_path}. Missing 'aiComponents' key.")
 
+        # Parse the JSON input for server data
+        try:
+            server_data_input = json.loads(args.serverdatajson)
+        except json.JSONDecodeError as e:
+            # Handle JSON parsing error
+            error_output = {
+                "error": "JSONDecodeError",
+                "message": f"Invalid JSON provided in --serverdatajson: {str(e)}",
+                "input_servername": args.servername,
+                "input_analysistype": args.analysistype,
+                "timestamp": datetime.now().isoformat()
+            }
+            print(json.dumps(error_output, indent=4), file=sys.stderr)
+            sys.exit(1)
+
         # Ensure model directory exists, or ArcPredictor will fail to load
         model_dir_abs = os.path.abspath(args.modeldir)
         if not os.path.isdir(model_dir_abs):
@@ -54,38 +78,6 @@ def main():
             config=ai_components_config, # Pass the 'aiComponents' section
             model_dir=model_dir_abs
         )
-
-        # Construct dummy server_data_input based on config
-        # This is because this script is a simple entry point and doesn't collect real telemetry.
-        # The real data would be collected by PowerShell and passed to more specialized Python functions if needed.
-        fe_config = ai_components_config.get('feature_engineering', {})
-        num_features = fe_config.get('original_numerical_features', [])
-        cat_features = fe_config.get('original_categorical_features', [])
-
-        server_data_input = {"server_name_id": args.servername, "timestamp": datetime.now().isoformat()}
-        # Add 'timestamp' as FeatureEngineer might use it.
-
-        for f in num_features:
-            # Provide some default values for features that might be used by models via FeatureEngineer
-            if f == "cpu_usage" or f == "cpu_usage_avg": # Example common features
-                server_data_input[f] = 50.0 + (len(args.servername) % 10)
-            elif f == "memory_usage" or f == "memory_usage_avg":
-                 server_data_input[f] = 70.0 - (len(args.servername) % 10)
-            elif "error_count" in f or "errors" in f: # Broader match for error related counts
-                server_data_input[f] = float(len(args.servername) % 5)
-            elif "count" in f: # For other counts
-                server_data_input[f] = float(len(args.servername) % 20) * 5.0
-            elif "time" in f: # For time related metrics
-                 server_data_input[f] = 100.0 + (len(args.servername) % 50)
-            else: # Generic default for other numerical
-                server_data_input[f] = 0.0
-
-        for f in cat_features:
-            # Provide a consistent default or vary slightly if needed for diverse testing
-            server_data_input[f] = "default_category_value" # Example default
-            if f == "region": # Example specific categorical feature
-                server_data_input[f] = ['eastus', 'westus', 'northeurope'][len(args.servername) % 3]
-
 
         # analyze_deployment_risk expects a dictionary representing a single server's raw data snapshot
         results = engine.analyze_deployment_risk(server_data_input)

@@ -38,7 +38,7 @@
         'New-RetryBlock',
         'Convert-ErrorToObject',
         'Test-Connectivity',
-        'Merge-Hashtables'
+        'Merge-CommonHashtable'
     )
 
     # Variables to export

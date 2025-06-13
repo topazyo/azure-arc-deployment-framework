@@ -13,9 +13,9 @@ from .model_trainer import ArcModelTrainer
 from .predictor import ArcPredictor
 
 class ArcRemediationLearner:
-    """[TODO: Add class documentation]"""
+    """Learns from remediation actions and outcomes."""
     def __init__(self, config: Dict[str, Any] = None): # Added config to __init__
-        """[TODO: Add method documentation]"""
+        """Initializes ArcRemediationLearner with config and components."""
         self.config = config if config else {}
         self.success_patterns: Dict[tuple, Dict[str, Any]] = {} # Key: (error_type, action)
         self.predictor: Optional[ArcPredictor] = None

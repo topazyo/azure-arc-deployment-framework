@@ -11,9 +11,9 @@ import pandas as pd # Ensure pandas is imported if not already
 import numpy as np # Ensure numpy is imported
 
 class PatternAnalyzer:
-    """[TODO: Add class documentation]"""
+    """Provides methods for pattern analysis."""
     def __init__(self, config: Dict[str, Any]):
-        """[TODO: Add method documentation]"""
+        """Initializes the analyzer with configuration."""
         self.config = config
         self.setup_logging()
         # DBSCAN parameters from config, with defaults
@@ -22,7 +22,7 @@ class PatternAnalyzer:
         self.scaler = StandardScaler() # Keep scaler for behavioral patterns
 
     def setup_logging(self):
-        """[TODO: Add method documentation]"""
+        """Configures logging for the analyzer."""
         logging.basicConfig(
             level=logging.INFO,
             format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -31,7 +31,7 @@ class PatternAnalyzer:
         self.logger = logging.getLogger('PatternAnalyzer')
 
     def analyze_patterns(self, data: pd.DataFrame) -> Dict[str, Any]:
-        """[TODO: Add method documentation]"""
+        """Main method to analyze all pattern types."""
         try:
             patterns = {
                 'temporal': self.analyze_temporal_patterns(data),

@@ -9,7 +9,9 @@ from scipy.fft import rfft, rfftfreq
 from scipy.stats import linregress
 
 class TelemetryProcessor:
+    """Processes raw telemetry data into a structured format."""
     def __init__(self, config: Dict[str, Any]):
+        """Initializes TelemetryProcessor with configuration."""
         self.config = config
         self.scaler = StandardScaler()
         self.pca = PCA(n_components=0.95)  # Preserve 95% of variance
