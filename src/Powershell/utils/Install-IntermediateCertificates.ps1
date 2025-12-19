@@ -17,7 +17,13 @@ Function Install-IntermediateCertificates {
         [string]$StoreName = "CA", # Intermediate Certification Authorities (PowerShell's Import-Certificate often uses "CA" or "Intermediate")
 
         [Parameter(Mandatory=$false)]
-        [string]$LogPath = "C:\ProgramData\AzureArcFramework\Logs\InstallIntermediateCertificates_Activity.log"
+        [string]$LogPath = "C:\ProgramData\AzureArcFramework\Logs\InstallIntermediateCertificates_Activity.log",
+
+        [Parameter(Mandatory=$false)]
+        [switch]$SkipIfExists = $true,
+
+        [Parameter(Mandatory=$false)]
+        [switch]$ForceImport
     )
 
     # --- Logging Function (for script activity) ---
@@ -80,6 +86,25 @@ Function Install-IntermediateCertificates {
             continue
         }
 
+        $certFileObject = $null
+        try { $certFileObject = Get-PfxCertificate -FilePath $certPath -ErrorAction Stop } catch {}
+
+        if ($SkipIfExists -and $certFileObject) {
+            try {
+                $existing = Get-ChildItem -Path $fullStorePath -ErrorAction Stop | Where-Object { $_.Thumbprint -eq $certFileObject.Thumbprint }
+                if ($existing) {
+                    $currentCertResult.Status = "AlreadyExists"
+                    $currentCertResult.Thumbprint = $certFileObject.Thumbprint
+                    $currentCertResult.Subject = $certFileObject.Subject
+                    Write-Log "Certificate already present in store; skipping import. Thumbprint: $($certFileObject.Thumbprint)" -Level "INFO"
+                    $results.Add($currentCertResult) | Out-Null
+                    continue
+                }
+            } catch {
+                Write-Log "Existing-certificate check failed for '$fullStorePath': $($_.Exception.Message)" -Level "WARNING"
+            }
+        }
+
         if (-not $PSCmdlet.ShouldProcess($certPath, "Import Certificate to Store '$fullStorePath'")) {
             $currentCertResult.Status = "SkippedWhatIf"
             $currentCertResult.ErrorMessage = "Import skipped due to -WhatIf or user choice."
@@ -89,7 +114,8 @@ Function Install-IntermediateCertificates {
         }
 
         try {
-            $importedCert = Import-Certificate -FilePath $certPath -CertStoreLocation $fullStorePath -ErrorAction Stop
+            $importParams = @{ FilePath = $certPath; CertStoreLocation = $fullStorePath; ErrorAction = 'Stop' }
+            $importedCert = Import-Certificate @importParams
             
             if ($importedCert) {
                 $currentCertResult.Status = "Success"

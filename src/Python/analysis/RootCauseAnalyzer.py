@@ -72,6 +72,8 @@ class SimpleRCAEstimator:
         }
         self.rules = self.config.get('rules', default_rules)
         self.multi_condition_confidence_boost = self.config.get('multi_condition_confidence_boost', 0.1)
+        # Used by the simplified rule schema in tests (rules that don't specify base_confidence)
+        self.default_confidence = self.config.get('default_confidence', 0.6)
 
 
     def predict_root_cause(self, incident_data: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -95,12 +97,48 @@ class SimpleRCAEstimator:
         self.logger.info(f"Predicting root cause for incident: {incident_data.get('description', 'No description')[:100]}...") # Log snippet
         potential_causes = []
 
-        description = incident_data.get('description', '').lower()
-        metrics = incident_data.get('metrics', {}) # Assuming metrics is a flat dict now
+        description = str(incident_data.get('description', '')).lower()
+        metrics = incident_data.get('metrics', {})
+        # Some callers/tests provide metrics as top-level keys rather than nested under "metrics".
+        if not isinstance(metrics, dict) or not metrics:
+            metrics = {k: v for k, v in incident_data.items() if k not in {'description', 'metrics', 'metrics_timeseries', 'timestamp', 'priority', 'incident_id'}}
+
+        def _metric_value_from_contains(substr: str) -> Any:
+            """Return the max numeric metric value whose name contains substr (case-insensitive)."""
+            if not substr:
+                return None
+            substr_l = substr.lower()
+            candidates: List[float] = []
+            for key, value in (metrics or {}).items():
+                if substr_l in str(key).lower() and isinstance(value, (int, float)):
+                    if not (np.isnan(value) or np.isinf(value)):
+                        candidates.append(float(value))
+            return max(candidates) if candidates else None
 
         for rule_name, rule_details in self.rules.items():
             self.logger.debug(f"Evaluating rule: {rule_name}")
             trigger_reasons_list = []
+
+            # Support a simplified rule schema (used in tests) where the rule name itself
+            # acts as the keyword (e.g. "network error"), and a single numeric threshold
+            # is provided via "metric_threshold".
+            if 'keywords_any' not in rule_details and 'keywords_all' not in rule_details:
+                rule_details = {
+                    **rule_details,
+                    'keywords_any': [str(rule_name)]
+                }
+
+            if 'metrics_thresholds' not in rule_details and 'metric_threshold' in rule_details:
+                rule_details = {
+                    **rule_details,
+                    'metrics_thresholds': [
+                        {
+                            'metric_contains': str(rule_name),
+                            'threshold': rule_details.get('metric_threshold'),
+                            'operator': '>'
+                        }
+                    ]
+                }
 
             # Keyword matching
             keyword_match_all_met = True
@@ -134,10 +172,16 @@ class SimpleRCAEstimator:
                 all_metrics_match = True
                 for cond in rule_details['metrics_thresholds']:
                     metric_name = cond.get('metric')
+                    metric_contains = cond.get('metric_contains')
                     threshold = cond.get('threshold')
                     operator = cond.get('operator', '>') # Default operator
 
-                    metric_val = metrics.get(metric_name)
+                    if metric_name:
+                        metric_val = metrics.get(metric_name)
+                    elif metric_contains:
+                        metric_val = _metric_value_from_contains(str(metric_contains))
+                    else:
+                        metric_val = None
                     if metric_val is None: # Metric not present in incident data
                         all_metrics_match = False; break
                     if not isinstance(metric_val, (int, float)): # Metric not numeric
@@ -173,7 +217,7 @@ class SimpleRCAEstimator:
                 rule_triggered = metric_thresholds_met
 
             if rule_triggered:
-                final_confidence = rule_details.get('base_confidence', 0.6)
+                final_confidence = rule_details.get('base_confidence', self.default_confidence)
                 # Boost confidence if multiple types of conditions met effectively (e.g. keywords AND metrics)
                 num_condition_types_met = 0
                 if keyword_match_all_met and rule_details.get('keywords_all'): num_condition_types_met +=1
@@ -187,10 +231,10 @@ class SimpleRCAEstimator:
                     final_confidence = min(0.95, final_confidence + self.multi_condition_confidence_boost)
 
                 potential_causes.append({
-                    'type': rule_details["cause"],
+                    'type': rule_details.get("cause", "Unknown"),
                     'confidence': round(final_confidence, 2),
-                    'recommendation': rule_details["recommendation"],
-                    'impact': rule_details["impact_score"],
+                    'recommendation': rule_details.get("recommendation", "Review incident details."),
+                    'impact': rule_details.get("impact_score", 0.5),
                     'trigger_reason': "; ".join(trigger_reasons_list)
                 })
                 self.logger.debug(f"Rule '{rule_name}' triggered. Details: {potential_causes[-1]}")
@@ -265,7 +309,8 @@ class SimpleRCAExplainer:
         primary_cause = causes[0]
         primary_explanation_str = (
             f"The primary suspected cause is '{primary_cause['type']}' (Impact: {primary_cause['impact']}, Confidence: {primary_cause['confidence']}). "
-            f"This is based on: {primary_cause.get('trigger_reason', 'general assessment of incident data')}."
+            f"This is based on: {primary_cause.get('trigger_reason', 'general assessment of incident data')}. "
+            f"Recommended action: {primary_cause.get('recommendation', 'Review incident details.')}."
         )
 
         for cause in causes:
@@ -372,6 +417,11 @@ class RootCauseAnalyzer:
 
             # Generate recommendations based on both predicted causes and identified patterns
             analysis_result['actionable_recommendations'] = self.generate_recommendations(predicted_causes, patterns)
+
+            # Legacy/placeholder aliases for older callers/tests
+            if 'primary_suspected_cause' in analysis_result:
+                analysis_result['primary_cause'] = analysis_result['primary_suspected_cause']
+            analysis_result['recommendations'] = analysis_result['actionable_recommendations']
 
             self.logger.info("Incident analysis complete.")
             return analysis_result

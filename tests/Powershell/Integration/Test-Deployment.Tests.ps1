@@ -1,9 +1,9 @@
 BeforeAll {
-    . $PSScriptRoot/../../src/PowerShell/Core/Deploy-ArcAgent.ps1
-    . $PSScriptRoot/../../src/PowerShell/Core/Test-ArcPrerequisites.ps1
-    . $PSScriptRoot/../../src/PowerShell/Core/Test-DeploymentHealth.ps1
-    . $PSScriptRoot/../../src/PowerShell/Utils/Write-Log.ps1
-    . $PSScriptRoot/../../src/PowerShell/Utils/New-RetryBlock.ps1
+    . (Join-Path $PSScriptRoot '..\..\..\src\Powershell\core\Deploy-ArcAgent.ps1')
+    . (Join-Path $PSScriptRoot '..\..\..\src\Powershell\core\Test-ArcPrerequisites.ps1')
+    . (Join-Path $PSScriptRoot '..\..\..\src\Powershell\core\Test-DeploymentHealth.ps1')
+    . (Join-Path $PSScriptRoot '..\..\..\src\Powershell\utils\Write-Log.ps1')
+    . (Join-Path $PSScriptRoot '..\..\..\src\Powershell\utils\New-RetryBlock.ps1')
 
     # Mock configurations
     $mockConfig = @{

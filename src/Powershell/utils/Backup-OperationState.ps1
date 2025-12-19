@@ -19,7 +19,13 @@ Function Backup-OperationState {
         [int]$MaxBackupVersions = 3,
 
         [Parameter(Mandatory=$false)]
-        [string]$LogPath = "C:\ProgramData\AzureArcFramework\Logs\BackupOperationState_Activity.log"
+        [string]$LogPath = "C:\ProgramData\AzureArcFramework\Logs\BackupOperationState_Activity.log",
+
+        [Parameter(Mandatory=$false)]
+        [switch]$Compress,
+
+        [Parameter(Mandatory=$false)]
+        [switch]$KeepUncompressed
     )
 
     # --- Logging Function (for script activity) ---
@@ -85,7 +91,8 @@ Function Backup-OperationState {
         foreach ($item in $ItemsToBackup) {
             $itemType = $item.Type
             $itemPath = $item.Path
-            $itemName = if ($item.PSObject.Properties.Contains('Name')) { $item.Name } else { (Split-Path $itemPath -Leaf) }
+            # Prefer an explicit Name property if present; fall back to leaf of the path
+            $itemName = if ($item.PSObject.Properties.Name -contains 'Name') { $item.Name } else { (Split-Path $itemPath -Leaf) }
             $itemBackupStatus = "Pending"
             $backupFileName = $null # For reg/service config
 
@@ -192,6 +199,30 @@ Function Backup-OperationState {
             }
         }
 
+        # --- Optional compression ---
+        $backupArchivePath = $null
+        if ($Compress) {
+            $backupArchivePath = "$currentVersionBackupDir.zip"
+            Write-Log "Compressing backup to '$backupArchivePath'." -Level "INFO"
+            try {
+                if ($PSCmdlet.ShouldProcess($backupArchivePath, "Create compressed archive")) {
+                    Compress-Archive -Path (Join-Path $currentVersionBackupDir '*') -DestinationPath $backupArchivePath -Force -ErrorAction Stop
+                    Write-Log "Backup compressed successfully to '$backupArchivePath'."
+                    if (-not $KeepUncompressed) {
+                        if ($PSCmdlet.ShouldProcess($currentVersionBackupDir, "Remove uncompressed backup directory")) {
+                            Remove-Item -Path $currentVersionBackupDir -Recurse -Force -ErrorAction Stop
+                            Write-Log "Removed uncompressed backup directory '$currentVersionBackupDir'." -Level "INFO"
+                        }
+                    }
+                }
+            } catch {
+                $errorMessage = "Compression failed for '$currentVersionBackupDir': $($_.Exception.Message)"
+                Write-Log $errorMessage -Level "ERROR"
+                $errorsEncountered.Add($errorMessage) | Out-Null
+                if ($overallStatus -ne "Failed") { $overallStatus = "PartialSuccess" }
+            }
+        }
+
     } catch {
         Write-Log "A critical error occurred during backup operation setup or version management: $($_.Exception.Message)" -Level "FATAL"
         Write-Log "Stack Trace: $($_.ScriptStackTrace)" -Level "DEBUG"
@@ -207,6 +238,7 @@ Function Backup-OperationState {
             OperationId         = $OperationId
             BackupTimestamp     = $currentTimestampForDir # The YYYYMMDD_HHMMSS string for this run
             BackupLocation      = $currentVersionBackupDir # Full path to this specific backup version
+            BackupArchive       = $backupArchivePath
             Status              = $overallStatus
             BackedUpItems       = $backedUpItemsResults
             ErrorsEncountered   = $errorsEncountered

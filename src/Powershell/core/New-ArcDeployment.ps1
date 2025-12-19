@@ -56,9 +56,12 @@ function New-ArcDeployment {
             # For now, this is a soft check as direct azcmagent doesn't need it from this script's perspective
         }
 
-        # Validate that if SP AppId is provided, Secret is also provided
-        if (($null -ne $ServicePrincipalAppId -and $null -eq $ServicePrincipalSecret) -or `
-            ($null -eq $ServicePrincipalAppId -and $null -ne $ServicePrincipalSecret)) {
+        # Validate that if SP AppId is provided, Secret is also provided.
+        # Treat empty/whitespace AppId as not provided.
+        $hasServicePrincipalAppId = -not [string]::IsNullOrWhiteSpace($ServicePrincipalAppId)
+        $hasServicePrincipalSecret = ($null -ne $ServicePrincipalSecret)
+
+        if ($hasServicePrincipalAppId -xor $hasServicePrincipalSecret) {
             throw "Both ServicePrincipalAppId and ServicePrincipalSecret must be provided for service principal onboarding."
         }
     }

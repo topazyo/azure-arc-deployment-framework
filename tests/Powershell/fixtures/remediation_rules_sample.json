@@ -1,0 +1,40 @@
+{
+  "remediationRules": [
+    {
+      "AppliesToId": "JSONDetected",
+      "RemediationActionId": "REM_JSON_Action",
+      "Title": "Handle JSON-detected issue",
+      "Description": "Action for JSON pattern detection.",
+      "ImplementationType": "Manual",
+      "TargetScriptPath": "",
+      "Parameters": { "MessageSnippet": "$InputContext.MatchedItem.Message" },
+      "ConfirmationRequired": true,
+      "Impact": "Low",
+      "SuccessCriteria": "Operator confirms resolution."
+    },
+    {
+      "AppliesToId": "CPUSustainedHighJson",
+      "RemediationActionId": "REM_JSON_CPUCapture",
+      "Title": "Capture CPU offenders",
+      "Description": "Gather top processes for high CPU.",
+      "ImplementationType": "Manual",
+      "TargetScriptPath": "",
+      "Parameters": { "SampleSeconds": "$InputContext.MatchedItem.DurationSeconds" },
+      "ConfirmationRequired": true,
+      "Impact": "Medium",
+      "SuccessCriteria": "CPU usage returns to normal."
+    },
+    {
+      "AppliesToId": "AgentPrefixDown",
+      "RemediationActionId": "REM_JSON_RestartAgent",
+      "Title": "Restart Arc agent services",
+      "Description": "Restart agent after disconnect indication.",
+      "ImplementationType": "Manual",
+      "TargetScriptPath": "",
+      "Parameters": { "ServiceSource": "$InputContext.Source" },
+      "ConfirmationRequired": true,
+      "Impact": "Medium",
+      "SuccessCriteria": "Connectivity restored."
+    }
+  ]
+}

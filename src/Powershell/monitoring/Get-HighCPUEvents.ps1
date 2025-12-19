@@ -22,27 +22,8 @@ param (
     [string]$LogPath = "C:\ProgramData\AzureArcFramework\Logs\HighCPUEvents_Activity.log"
 )
 
-# --- Logging Function (for script activity) ---
-function Write-Log {
-    param (
-        [string]$Message,
-        [string]$Level = "INFO", # INFO, WARNING, ERROR
-        [string]$Path = $LogPath
-    )
-    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-    $logEntry = "[$timestamp] [$Level] $Message"
-    
-    try {
-        if (-not (Test-Path (Split-Path $Path -Parent))) {
-            New-Item -ItemType Directory -Path (Split-Path $Path -Parent) -Force -ErrorAction Stop | Out-Null
-        }
-        Add-Content -Path $Path -Value $logEntry -ErrorAction Stop
-    }
-    catch {
-        Write-Warning "Failed to write to activity log file $Path. Error: $($_.Exception.Message). Logging to console instead."
-        Write-Host $logEntry
-    }
-}
+# --- Logging (shared utility) ---
+. (Join-Path $PSScriptRoot '..\utils\Write-Log.ps1')
 
 # --- Main Script Logic ---
 try {
@@ -64,9 +45,8 @@ try {
             LogName='System'; 
             ProviderName='Microsoft-Windows-Resource-Exhaustion-Detector'; 
             Id=2004; # Windows Resource Exhaustion Detector detected a condition
+            KeywordsFilter = "CPU", "processor"; # Filter for high CPU related messages
             Label="Resource Exhaustion (System)" 
-            # Message often contains: "Windows detected that your system is low on virtual memory." 
-            # or other resources. We'd need to check if CPU is implicated.
         },
         @{
             LogName='Microsoft-Windows-Resource-Exhaustion-Resolver/Operational';
@@ -145,8 +125,8 @@ try {
                 Write-Log "No events found for query [Label: $($query.Label)] before keyword filtering."
             }
         }
-        catch [System.Management.Automation.भूतियाException] { 
-             Write-Log "Failed to execute query [Label: $($query.Label)]. Log '$($query.LogName)' might not exist or is inaccessible on '$ServerName'. Error: $($_.Exception.Message)" -Level "WARNING"
+        catch [System.Diagnostics.Eventing.Reader.EventLogNotFoundException],[System.UnauthorizedAccessException] { 
+            Write-Log "Failed to execute query [Label: $($query.Label)]. Log '$($query.LogName)' might not exist or is inaccessible on '$ServerName'. Error: $($_.Exception.Message)" -Level "WARNING"
         }
         catch { 
             Write-Log "An error occurred while executing query [Label: $($query.Label)] on '$ServerName'. Error: $($_.Exception.Message)" -Level "ERROR"

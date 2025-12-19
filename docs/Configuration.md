@@ -157,3 +157,10 @@ Configures the `ArcRemediationLearner` class (`src/Python/predictive/ArcRemediat
 *   **Caution**: Modifying `ai_config.json` can significantly alter the behavior and performance of the AI engine. Changes should be made cautiously and tested.
 *   **Component Details**: For a deeper understanding of how each component uses these configurations, refer to `docs/AI-Components.md`.
 *   **Iterative Tuning**: Finding optimal configurations, especially for model hyperparameters, feature lists, and thresholds, is an iterative process that typically involves experimentation and validation against your specific data.
+*   **Validation and drift samples**: Example validation rules and drift baselines live under `tests/Powershell/fixtures` (see `docs/Validation-Fixtures.md` for structure and authoring tips). Use these as templates when defining environment-specific rules outside the repo.
+
+## Operational Notes: Certificates and Backups
+
+* **Certificates**: The certificate installers default to the LocalMachine store and will fail without administrative privileges. Use `-SkipIfExists` to avoid re-importing present thumbprints and `-ForceImport` to bypass existence checks when you intentionally want to overwrite. Expect warnings/failures in non-admin contexts.
+* **Backups**: `Backup-OperationState.ps1` supports `-Compress` and `-KeepUncompressed`; the summary reports `BackupArchive` when compression succeeds. Plan retention with `-MaxBackupVersions` and choose a backup root on a volume with sufficient space; keep uncompressed copies only when you must inspect raw files.
+* **Remediation backups**: `Start-RemediationAction.ps1` passes `-BackupCompress`/`-BackupKeepUncompressed` through to `Backup-OperationState.ps1` when available. Ensure backup targets are reachable and writable by the remediation context before enabling automatic backups.

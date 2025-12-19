@@ -4,6 +4,7 @@ import joblib
 import logging
 from typing import Dict, List, Any, Optional # Ensure List and Optional are here
 from datetime import datetime
+from sklearn.preprocessing import StandardScaler
 
 class ArcPredictor:
     """Loads trained models and makes predictions."""
@@ -14,6 +15,7 @@ class ArcPredictor:
         self.models: Dict[str, Any] = {}
         self.scalers: Dict[str, StandardScaler] = {} # Type hint for clarity
         self.feature_info: Dict[str, Dict[str, Any]] = {} # Renamed from model_metadata
+        self.model_load_errors: Dict[str, str] = {}
         self.setup_logging()
         self.load_models()
 
@@ -28,12 +30,11 @@ class ArcPredictor:
 
     def load_models(self):
         """Load all trained models and scalers."""
-        try:
-            model_types = ['health_prediction', 'anomaly_detection', 'failure_prediction']
-            
-            for model_type in model_types:
-                model_path = f"{self.model_dir}/{model_type}_model.pkl"
-                scaler_path = f"{self.model_dir}/{model_type}_scaler.pkl"
+        model_types = ['health_prediction', 'anomaly_detection', 'failure_prediction']
+
+        for model_type in model_types:
+            model_path = f"{self.model_dir}/{model_type}_model.pkl"
+            scaler_path = f"{self.model_dir}/{model_type}_scaler.pkl"
                 # Path for feature info (assuming ArcModelTrainer saves it this way)
                 # Step 7 (ArcModelTrainer) saved 'feature_importance' which was a dict: {'names': [...], 'importances': [...]}
                 # This is more aligned with 'feature_info.pkl' than 'metadata.pkl' or 'feature_importance.pkl' alone.
@@ -48,60 +49,97 @@ class ArcPredictor:
                 # The prompt for Step 7 (ArcModelTrainer) saved:
                 # self.feature_importance[model_type] = {'names': feature_names, 'importances': model.feature_importances_.tolist()}
                 # So we load this dict.
-                feature_info_path = f"{self.model_dir}/{model_type}_feature_importance.pkl"
+            feature_info_path = f"{self.model_dir}/{model_type}_feature_importance.pkl"
 
+            # Always initialize feature_info for the type so downstream code can be defensive.
+            self.feature_info[model_type] = {}
 
+            try:
                 self.models[model_type] = joblib.load(model_path)
                 self.scalers[model_type] = joblib.load(scaler_path)
-                
-                self.feature_info[model_type] = {} # Initialize for the type
-                try:
-                    loaded_feature_info = joblib.load(feature_info_path) # Changed variable name
-                    if isinstance(loaded_feature_info, dict):
-                        self.feature_info[model_type]['ordered_features'] = loaded_feature_info.get('names', [])
-                        raw_importances = loaded_feature_info.get('importances') # List of importance values
-                        # Algorithm used during training
-                        self.feature_info[model_type]['algorithm'] = loaded_feature_info.get('algorithm', 'RandomForestClassifier') # Default if not found
+            except FileNotFoundError as e:
+                self.model_load_errors[model_type] = str(e)
+                self.logger.warning(
+                    f"Model artifacts not found for {model_type}. "
+                    f"Expected: {model_path} and {scaler_path}. "
+                    "Predictions for this model_type will return an error until models are trained."
+                )
+                # Skip feature info loading too; it doesn't help without a model.
+                self.feature_info[model_type]['ordered_features'] = []
+                self.feature_info[model_type]['importances_map'] = None
+                self.feature_info[model_type]['algorithm'] = 'Unknown'
+                continue
 
-                        if raw_importances is not None and self.feature_info[model_type]['ordered_features']:
-                            if len(self.feature_info[model_type]['ordered_features']) == len(raw_importances):
-                                self.feature_info[model_type]['importances_map'] = dict(zip(self.feature_info[model_type]['ordered_features'], raw_importances))
-                            else:
-                                self.logger.error(f"Mismatch between number of feature names and importances for {model_type}. Cannot create importance map.")
-                                self.feature_info[model_type]['importances_map'] = None
+            try:
+                loaded_feature_info = joblib.load(feature_info_path)
+                if isinstance(loaded_feature_info, dict):
+                    self.feature_info[model_type]['ordered_features'] = loaded_feature_info.get('names', [])
+                    raw_importances = loaded_feature_info.get('importances')
+                    self.feature_info[model_type]['algorithm'] = loaded_feature_info.get('algorithm', 'RandomForestClassifier')
+
+                    if raw_importances is not None and self.feature_info[model_type]['ordered_features']:
+                        if len(self.feature_info[model_type]['ordered_features']) == len(raw_importances):
+                            self.feature_info[model_type]['importances_map'] = dict(
+                                zip(self.feature_info[model_type]['ordered_features'], raw_importances)
+                            )
                         else:
-                            self.feature_info[model_type]['importances_map'] = None # No importances available or no names
-
-                        self.logger.info(f"Loaded feature info for {model_type}. Algorithm: {self.feature_info[model_type]['algorithm']}. Features: {len(self.feature_info[model_type]['ordered_features'])}.")
+                            self.logger.error(
+                                f"Mismatch between number of feature names and importances for {model_type}. "
+                                "Cannot create importance map."
+                            )
+                            self.feature_info[model_type]['importances_map'] = None
                     else:
-                        self.logger.warning(f"Feature info file at {feature_info_path} for {model_type} is not a dictionary. Cannot parse.")
-                        self.feature_info[model_type]['ordered_features'] = []
                         self.feature_info[model_type]['importances_map'] = None
-                        self.feature_info[model_type]['algorithm'] = 'Unknown'
 
-
-                except FileNotFoundError:
-                    self.logger.warning(f"Feature info file not found for {model_type} at {feature_info_path}. Prediction may rely on defaults or fail if features mismatch.")
-                    self.feature_info[model_type]['ordered_features'] = []
-                    self.feature_info[model_type]['importances_map'] = None
-                    self.feature_info[model_type]['algorithm'] = 'Unknown' # Default if file not found
-                except Exception as e_fi:
-                    self.logger.error(f"Error loading feature info for {model_type} from {feature_info_path}: {e_fi}", exc_info=True)
+                    self.logger.info(
+                        f"Loaded feature info for {model_type}. Algorithm: {self.feature_info[model_type]['algorithm']}. "
+                        f"Features: {len(self.feature_info[model_type]['ordered_features'])}."
+                    )
+                else:
+                    self.logger.warning(
+                        f"Feature info file at {feature_info_path} for {model_type} is not a dictionary. Cannot parse."
+                    )
                     self.feature_info[model_type]['ordered_features'] = []
                     self.feature_info[model_type]['importances_map'] = None
                     self.feature_info[model_type]['algorithm'] = 'Unknown'
+            except FileNotFoundError:
+                self.logger.warning(
+                    f"Feature info file not found for {model_type} at {feature_info_path}. "
+                    "Feature ordering may be unavailable for this model_type."
+                )
+                self.feature_info[model_type]['ordered_features'] = []
+                self.feature_info[model_type]['importances_map'] = None
+                self.feature_info[model_type]['algorithm'] = 'Unknown'
+            except Exception as e_fi:
+                self.logger.error(
+                    f"Error loading feature info for {model_type} from {feature_info_path}: {e_fi}",
+                    exc_info=True,
+                )
+                self.feature_info[model_type]['ordered_features'] = []
+                self.feature_info[model_type]['importances_map'] = None
+                self.feature_info[model_type]['algorithm'] = 'Unknown'
 
+        self.logger.info("Model load completed.")
 
-            self.logger.info("Models, scalers, and feature info loaded.")
-
-        except Exception as e:
-            self.logger.error(f"Failed to load models: {str(e)}")
-            raise
+    def _ensure_model_loaded(self, model_type: str) -> Optional[Dict[str, Any]]:
+        if model_type not in self.models or model_type not in self.scalers:
+            return {
+                "error": "ModelNotLoaded",
+                "model_type": model_type,
+                "message": "Model/scaler artifacts are not loaded for this model_type.",
+                "details": self.model_load_errors.get(model_type),
+                "timestamp": datetime.now().isoformat(),
+            }
+        return None
 
     def predict_health(self, telemetry_data: Dict[str, Any]) -> Dict[str, Any]:
         """Predict health status based on telemetry data."""
         model_type = 'health_prediction'
         try:
+            not_loaded = self._ensure_model_loaded(model_type)
+            if not_loaded is not None:
+                return not_loaded
+
             raw_features_array = self.prepare_features(telemetry_data, model_type)
             if raw_features_array is None or raw_features_array.size == 0:
                 self.logger.error(f"Feature preparation failed or resulted in empty array for {model_type}.")
@@ -142,6 +180,10 @@ class ArcPredictor:
         """Detect anomalies in telemetry data."""
         model_type = 'anomaly_detection'
         try:
+            not_loaded = self._ensure_model_loaded(model_type)
+            if not_loaded is not None:
+                return not_loaded
+
             raw_features_array = self.prepare_features(telemetry_data, model_type)
             if raw_features_array is None or raw_features_array.size == 0:
                 self.logger.error(f"Feature preparation failed or resulted in empty array for {model_type}.")
@@ -171,6 +213,10 @@ class ArcPredictor:
         """Predict potential failures based on telemetry data."""
         model_type = 'failure_prediction'
         try:
+            not_loaded = self._ensure_model_loaded(model_type)
+            if not_loaded is not None:
+                return not_loaded
+
             raw_features_array = self.prepare_features(telemetry_data, model_type)
             if raw_features_array is None or raw_features_array.size == 0:
                 self.logger.error(f"Feature preparation failed or resulted in empty array for {model_type}.")

@@ -24,27 +24,8 @@ param (
     [string]$LogPath = "C:\ProgramData\AzureArcFramework\Logs\EventLogErrors_Activity.log" # Log script activity
 )
 
-# --- Logging Function (for script activity) ---
-function Write-Log {
-    param (
-        [string]$Message,
-        [string]$Level = "INFO", # INFO, WARNING, ERROR
-        [string]$Path = $LogPath
-    )
-    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-    $logEntry = "[$timestamp] [$Level] $Message"
-    
-    try {
-        if (-not (Test-Path (Split-Path $Path -Parent))) {
-            New-Item -ItemType Directory -Path (Split-Path $Path -Parent) -Force -ErrorAction Stop | Out-Null
-        }
-        Add-Content -Path $Path -Value $logEntry -ErrorAction Stop
-    }
-    catch {
-        Write-Warning "Failed to write to activity log file $Path. Error: $($_.Exception.Message). Logging to console instead."
-        Write-Host $logEntry
-    }
-}
+# --- Logging (shared utility) ---
+. (Join-Path $PSScriptRoot '..\utils\Write-Log.ps1')
 
 # --- Main Script Logic ---
 try {
@@ -101,8 +82,8 @@ try {
                 Write-Log "No error events found in '$singleLogName' for the specified criteria."
             }
         }
-        catch [System.Management.Automation.भूतियाException] { # Catching specific exception for "log not found" or access issues
-             Write-Log "Failed to query log '$singleLogName' on '$ServerName'. Log might not exist or is inaccessible. Error: $($_.Exception.Message)" -Level "WARNING"
+        catch [System.Diagnostics.Eventing.Reader.EventLogNotFoundException],[System.UnauthorizedAccessException] { # Log not found / access issues
+            Write-Log "Failed to query log '$singleLogName' on '$ServerName'. Log might not exist or is inaccessible. Error: $($_.Exception.Message)" -Level "WARNING"
         }
         catch { # Catch other errors from Get-WinEvent
             Write-Log "An error occurred while querying log '$singleLogName' on '$ServerName'. Error: $($_.Exception.Message)" -Level "ERROR"

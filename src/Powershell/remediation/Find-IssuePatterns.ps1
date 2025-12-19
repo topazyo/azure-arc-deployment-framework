@@ -75,18 +75,69 @@ Function Find-IssuePatterns {
                     @{ Property = "Message"; Operator = "Contains"; Value = "terminated unexpectedly" }
                 )
                 Severity = "High"
-                SuggestedRemediationId = "REM_RestartService"
+                SuggestedRemediationId = "REM_RestartService_Generic"
+            },
+            @{
+                IssueId = "ServiceRestartLoop"
+                Description = "Service is repeatedly terminating and restarting."
+                DataSignatures = @(
+                    @{ Property = "EventId"; Operator = "Equals"; Value = 7031 },
+                    @{ Property = "Message"; Operator = "Contains"; Value = "terminated unexpectedly" },
+                    @{ Property = "Message"; Operator = "Contains"; Value = "restart" }
+                )
+                Severity = "High"
+                SuggestedRemediationId = "REM_CheckServiceRecoveryOptions"
+            },
+            @{
+                IssueId = "ExtensionInstallFailure"
+                Description = "Arc/guest extension installation failed."
+                DataSignatures = @(
+                    @{ Property = "Source"; Operator = "Contains"; Value = "Extension" },
+                    @{ Property = "Message"; Operator = "Contains"; Value = "failed" },
+                    @{ Property = "Message"; Operator = "Contains"; Value = "install" }
+                )
+                Severity = "High"
+                SuggestedRemediationId = "REM_RetryExtensionDeployment"
+            },
+            @{
+                IssueId = "ArcAgentDisconnected"
+                Description = "Arc agent (himds/guest agent) lost connectivity or heartbeat."
+                DataSignatures = @(
+                    @{ Property = "Source"; Operator = "Contains"; Value = "AzureConnectedMachineAgent" },
+                    @{ Property = "Message"; Operator = "Contains"; Value = "disconnected" }
+                )
+                Severity = "High"
+                SuggestedRemediationId = "REM_RestartArcAgent"
+            },
+            @{
+                IssueId = "CertificateExpiringSoon"
+                Description = "A certificate used by the node is nearing expiration."
+                DataSignatures = @(
+                    @{ Property = "DaysToExpiry"; Operator = "LessThanOrEqual"; Value = 30 }
+                )
+                Severity = "Medium"
+                SuggestedRemediationId = "REM_RenewCertificate"
+            },
+            @{
+                IssueId = "PolicyAssignmentNonCompliant"
+                Description = "Resource is non-compliant with an assigned policy."
+                DataSignatures = @(
+                    @{ Property = "Message"; Operator = "Contains"; Value = "non-compliant" },
+                    @{ Property = "Message"; Operator = "Contains"; Value = "policy" }
+                )
+                Severity = "Medium"
+                SuggestedRemediationId = "REM_ReapplyPolicyAssignment"
             },
             @{
                 IssueId = "LowDiskSpaceSystemDrive"
                 Description = "The system drive (C:) is reported as low on disk space."
                 DataSignatures = @(
                     @{ Property = "EventId"; Operator = "Equals"; Value = 2013 },
-                    @{ Property = "Source"; Operator = "Equals"; Value = "srv" }, # LanmanServer
-                    @{ Property = "Message"; Operator = "MatchesRegex"; Value = "The C: disk is at or near capacity" } # Regex for C: drive specifically
+                    @{ Property = "Source"; Operator = "Equals"; Value = "srv" },
+                    @{ Property = "Message"; Operator = "MatchesRegex"; Value = "The C: disk is at or near capacity" }
                 )
                 Severity = "Medium"
-                SuggestedRemediationId = "REM_ClearTempFiles"
+                SuggestedRemediationId = "REM_RunDiskCleanup"
             },
             @{
                 IssueId = "DNSResolutionFailure"
@@ -97,6 +148,16 @@ Function Find-IssuePatterns {
                 )
                 Severity = "Medium"
                 SuggestedRemediationId = "REM_TestDNS"
+            },
+            @{
+                IssueId = "CPUSustainedHigh"
+                Description = "CPU usage sustained above threshold for multiple minutes."
+                DataSignatures = @(
+                    @{ Property = "CpuPercentage"; Operator = "GreaterThanOrEqual"; Value = 85 },
+                    @{ Property = "DurationSeconds"; Operator = "GreaterThanOrEqual"; Value = 300 }
+                )
+                Severity = "Medium"
+                SuggestedRemediationId = "REM_CaptureTopProcesses"
             }
         )
         Write-Log "Loaded $($issuePatterns.Count) hardcoded issue patterns."
@@ -110,7 +171,7 @@ Function Find-IssuePatterns {
             break
         }
 
-        Write-Log "Processing input item: $($item | Out-String -Width 200 -Depth 2)" -Level "DEBUG"
+        Write-Log "Processing input item: $($item | Out-String -Width 200)" -Level "DEBUG"
 
         foreach ($pattern in $issuePatterns) {
             $allSignaturesMatch = $true # Assume match until a signature fails
@@ -132,25 +193,45 @@ Function Find-IssuePatterns {
 
                 $signatureMatched = $false
                 switch ($operator) {
-                    "Equals"       { $signatureMatched = ($itemValue -eq $conditionValue) }
-                    "NotEquals"    { $signatureMatched = ($itemValue -ne $conditionValue) }
-                    "Contains"     { 
-                        if ($itemValue -is [string]) { $signatureMatched = ($itemValue -match [regex]::Escape($conditionValue)) } # Using -match for substring
+                    "Equals"             { $signatureMatched = ($itemValue -eq $conditionValue) }
+                    "NotEquals"          { $signatureMatched = ($itemValue -ne $conditionValue) }
+                    "Contains"           { 
+                        if ($itemValue -is [string]) { $signatureMatched = ($itemValue -match [regex]::Escape($conditionValue)) }
                         else { Write-Log "Operator 'Contains' used on non-string property '$($signature.Property)' for pattern '$($pattern.IssueId)'." -Level "DEBUG"; $signatureMatched = $false }
                     }
-                    "GreaterThan"  { 
+                    "StartsWith"         {
+                        if ($itemValue -is [string]) { $signatureMatched = $itemValue.StartsWith($conditionValue, $true, [System.Globalization.CultureInfo]::InvariantCulture) }
+                        else { Write-Log "Operator 'StartsWith' used on non-string property '$($signature.Property)' for pattern '$($pattern.IssueId)'." -Level "DEBUG"; $signatureMatched = $false }
+                    }
+                    "EndsWith"           {
+                        if ($itemValue -is [string]) { $signatureMatched = $itemValue.EndsWith($conditionValue, $true, [System.Globalization.CultureInfo]::InvariantCulture) }
+                        else { Write-Log "Operator 'EndsWith' used on non-string property '$($signature.Property)' for pattern '$($pattern.IssueId)'." -Level "DEBUG"; $signatureMatched = $false }
+                    }
+                    "GreaterThan"        { 
                         if (($itemValue -is [int] -or $itemValue -is [double] -or $itemValue -is [long]) -and `
                             ($conditionValue -is [int] -or $conditionValue -is [double] -or $conditionValue -is [long])) {
-                             $signatureMatched = ($itemValue -gt $conditionValue)
-                        } else {$signatureMatched = $false}
+                                $signatureMatched = ($itemValue -gt $conditionValue)
+                        } else { $signatureMatched = $false }
                     }
-                    "LessThan"     { 
-                         if (($itemValue -is [int] -or $itemValue -is [double] -or $itemValue -is [long]) -and `
+                    "GreaterThanOrEqual" {
+                        if (($itemValue -is [int] -or $itemValue -is [double] -or $itemValue -is [long]) -and `
                             ($conditionValue -is [int] -or $conditionValue -is [double] -or $conditionValue -is [long])) {
-                             $signatureMatched = ($itemValue -lt $conditionValue)
-                        } else {$signatureMatched = $false}
+                                $signatureMatched = ($itemValue -ge $conditionValue)
+                        } else { $signatureMatched = $false }
                     }
-                    "MatchesRegex" { 
+                    "LessThan"           { 
+                        if (($itemValue -is [int] -or $itemValue -is [double] -or $itemValue -is [long]) -and `
+                            ($conditionValue -is [int] -or $conditionValue -is [double] -or $conditionValue -is [long])) {
+                                $signatureMatched = ($itemValue -lt $conditionValue)
+                        } else { $signatureMatched = $false }
+                    }
+                    "LessThanOrEqual"    {
+                        if (($itemValue -is [int] -or $itemValue -is [double] -or $itemValue -is [long]) -and `
+                            ($conditionValue -is [int] -or $conditionValue -is [double] -or $conditionValue -is [long])) {
+                                $signatureMatched = ($itemValue -le $conditionValue)
+                        } else { $signatureMatched = $false }
+                    }
+                    "MatchesRegex"       { 
                         if ($itemValue -is [string]) { $signatureMatched = ($itemValue -match $conditionValue) }
                         else { Write-Log "Operator 'MatchesRegex' used on non-string property '$($signature.Property)' for pattern '$($pattern.IssueId)'." -Level "DEBUG"; $signatureMatched = $false }
                     }

@@ -1,4 +1,6 @@
 from typing import Dict, List, Any
+import json
+import os
 import numpy as np
 import pandas as pd
 # Removed RandomForestClassifier and joblib as direct model is removed
@@ -9,8 +11,8 @@ from datetime import datetime
 from typing import Dict, List, Any, Optional # Added Optional
 
 # Assuming these are correctly imported from their respective files
-from .model_trainer import ArcModelTrainer
-from .predictor import ArcPredictor
+from . import model_trainer
+from . import predictor
 
 class ArcRemediationLearner:
     """Learns from remediation actions and outcomes."""
@@ -18,9 +20,11 @@ class ArcRemediationLearner:
         """Initializes ArcRemediationLearner with config and components."""
         self.config = config if config else {}
         self.success_patterns: Dict[tuple, Dict[str, Any]] = {} # Key: (error_type, action)
-        self.predictor: Optional[ArcPredictor] = None
-        self.trainer: Optional[ArcModelTrainer] = None
+        self.predictor: Optional[Any] = None
+        self.trainer: Optional[Any] = None
         self.model: Optional[Any] = None # Placeholder for tests expecting this attribute
+        self.trainer_last_response: Optional[Dict[str, Any]] = None
+        self.pending_retrain_requests: List[Dict[str, Any]] = []
 
         # Attributes for retraining trigger
         self.new_data_counter: Dict[str, int] = {}
@@ -46,10 +50,17 @@ class ArcRemediationLearner:
     def initialize_ai_components(self, global_ai_config: Dict[str, Any], model_dir: str):
         """Initialize AI components (Trainer and Predictor)."""
         try:
-            # Pass relevant parts of the global_ai_config to trainer and predictor
-            # Assuming model_trainer and predictor can pick their configs from global_ai_config
-            self.trainer = ArcModelTrainer(global_ai_config.get('model_config', {}))
-            self.predictor = ArcPredictor(model_dir=model_dir) # Predictor needs model_dir
+            # Accept either a full config (with an aiComponents key) or the aiComponents subtree.
+            ai_config = global_ai_config.get('aiComponents', global_ai_config)
+
+            model_config = ai_config.get('model_config')
+            if model_config is None and 'features' in ai_config and 'models' in ai_config:
+                model_config = ai_config
+            if model_config is None:
+                model_config = {}
+
+            self.trainer = model_trainer.ArcModelTrainer(model_config)
+            self.predictor = predictor.ArcPredictor(model_dir=model_dir) # Predictor needs model_dir
             self.logger.info("AI components (Trainer, Predictor) initialized successfully for RemediationLearner.")
         except Exception as e:
             self.logger.error(f"Failed to initialize AI components: {str(e)}", exc_info=True)
@@ -59,10 +70,15 @@ class ArcRemediationLearner:
     def learn_from_remediation(self, remediation_data: Dict[str, Any]):
         """Process remediation actions to update success patterns and inform model trainer."""
         try:
+            if not isinstance(remediation_data, dict):
+                self.logger.warning("Remediation payload must be a dict; skipping.")
+                return
+
             error_type = remediation_data.get('error_type', 'UnknownError')
             action_taken = remediation_data.get('action', 'UnknownAction')
-            outcome_success = remediation_data.get('outcome') == 'success'
-            context = remediation_data.get('context', {})
+            outcome_raw = remediation_data.get('outcome')
+            outcome_success = outcome_raw is True or str(outcome_raw).lower() == 'success'
+            context = remediation_data.get('context', {}) if isinstance(remediation_data.get('context', {}), dict) else {}
 
             if not error_type or not action_taken:
                 self.logger.warning("Remediation data missing 'error_type' or 'action'. Cannot learn effectively.")
@@ -98,11 +114,12 @@ class ArcRemediationLearner:
                              f"{current_pattern['success_count']}/{current_pattern['total_attempts']} successes. "
                              f"Context: {context_summary}")
 
-            # Call trainer to potentially update models (trainer decides if/how)
+            # Call trainer to potentially update models (trainer decides if/how). Pass through the
+            # original payload to keep contract aligned with existing tests and trainer's flexible parsing
+            # (`features` or `context`, optional `target`).
             if self.trainer:
-                # Pass a structured version of remediation data that trainer might understand
-                # This might need standardization later based on trainer's needs
-                self.trainer.update_models_with_remediation(remediation_data)
+                trainer_response = self.trainer.update_models_with_remediation(remediation_data)
+                self._handle_trainer_response(trainer_response, remediation_data)
             else:
                 self.logger.warning("Trainer not initialized. Cannot pass remediation data for model updates.")
 
@@ -221,3 +238,90 @@ class ArcRemediationLearner:
     def get_all_success_patterns(self) -> Dict[tuple, Dict[str, Any]]:
         """Returns all learned success patterns."""
         return self.success_patterns
+
+    def has_pending_retrain_requests(self) -> bool:
+        return len(self.pending_retrain_requests) > 0
+
+    def peek_pending_retrain_requests(self) -> List[Dict[str, Any]]:
+        """Return a copy of queued retrain requests without clearing them."""
+        return list(self.pending_retrain_requests)
+
+    def consume_pending_retrain_requests(self) -> List[Dict[str, Any]]:
+        """Return and clear accumulated retrain requests for the orchestrator."""
+        requests = list(self.pending_retrain_requests)
+        self.pending_retrain_requests.clear()
+        return requests
+
+    def export_pending_retrain_requests(self, output_path: str, consume: bool = False) -> Dict[str, Any]:
+        """Persist queued retrain requests for orchestration pipelines or operators."""
+        queue_snapshot = self.consume_pending_retrain_requests() if consume else self.peek_pending_retrain_requests()
+
+        if not output_path or not isinstance(output_path, str):
+            return {
+                "status": "error",
+                "reason": "output_path must be a non-empty string",
+                "pending_retrain_requests": queue_snapshot,
+            }
+
+        try:
+            directory = os.path.dirname(output_path)
+            if directory:
+                os.makedirs(directory, exist_ok=True)
+
+            payload = {
+                "pending_retrain_requests": queue_snapshot,
+                "exported_at": datetime.now().isoformat(),
+            }
+            with open(output_path, "w", encoding="utf-8") as handle:
+                json.dump(payload, handle, indent=2)
+
+            self.logger.info(
+                "Exported %s pending retrain requests to %s (consume=%s)",
+                len(queue_snapshot),
+                output_path,
+                consume,
+            )
+            return {"status": "exported", "path": output_path, "count": len(queue_snapshot)}
+        except Exception as exc:
+            self.logger.error("Failed to export retrain queue to %s: %s", output_path, str(exc), exc_info=True)
+            return {
+                "status": "error",
+                "reason": str(exc),
+                "pending_retrain_requests": queue_snapshot,
+            }
+
+    def _handle_trainer_response(self, trainer_response: Dict[str, Any], remediation_data: Dict[str, Any]) -> None:
+        """Normalize trainer responses and track pending retrain signals without raising."""
+        self.trainer_last_response = trainer_response
+        status = (trainer_response or {}).get('status')
+        model_type = (trainer_response or {}).get('model_type', remediation_data.get('model_type', 'failure_prediction'))
+
+        if status in {'rejected', 'error', None}:
+            self.logger.warning(
+                f"Trainer response for {model_type} marked as {status or 'missing_status'}: "
+                f"{(trainer_response or {}).get('reason', 'unspecified')}"
+            )
+            return
+
+        if status == 'retrain_required':
+            self.pending_retrain_requests.append({
+                'model_type': model_type,
+                'queued_count': trainer_response.get('queued_count'),
+                'threshold': trainer_response.get('threshold'),
+                'received_at': datetime.now().isoformat(),
+            })
+            self.logger.info(
+                f"Trainer signaled retrain_required for {model_type} "
+                f"(queued={trainer_response.get('queued_count')}, threshold={trainer_response.get('threshold')})."
+            )
+            return
+
+        if status == 'queued':
+            self.logger.info(
+                f"Trainer buffered remediation sample for {model_type} "
+                f"(queued={trainer_response.get('queued_count')}, threshold={trainer_response.get('threshold')})."
+            )
+            return
+
+        # Unknown but non-error statuses: log and ignore
+        self.logger.info(f"Trainer returned unrecognized status '{status}' for {model_type}; ignoring.")

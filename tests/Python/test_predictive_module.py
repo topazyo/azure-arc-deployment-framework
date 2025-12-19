@@ -273,6 +273,54 @@ class TestArcRemediationLearner:
                     break
             assert not new_retraining_message_after_reset, "Retraining message logged again before reaching threshold after reset"
 
+    def test_arl_handles_trainer_retrain_signal(self, comprehensive_predictive_config, sample_remediation_data):
+        arl_config = comprehensive_predictive_config.get("remediation_learner_config", {})
+        arl = ArcRemediationLearner(config=arl_config)
+        mock_trainer = MagicMock(spec=ArcModelTrainer)
+
+        mock_trainer.update_models_with_remediation.side_effect = [
+            {"status": "queued", "model_type": "failure_prediction", "queued_count": 1, "threshold": 2},
+            {"status": "retrain_required", "model_type": "failure_prediction", "queued_count": 2, "threshold": 2},
+        ]
+        arl.trainer = mock_trainer
+
+        arl.learn_from_remediation(sample_remediation_data)
+        assert arl.trainer_last_response["status"] == "queued"
+        assert arl.pending_retrain_requests == []
+
+        arl.learn_from_remediation(sample_remediation_data)
+        assert arl.trainer_last_response["status"] == "retrain_required"
+        assert len(arl.pending_retrain_requests) == 1
+        request = arl.pending_retrain_requests[0]
+        assert request["model_type"] == "failure_prediction"
+        assert request["queued_count"] == 2
+
+    def test_arl_consumes_pending_retrain_requests(self, comprehensive_predictive_config):
+        arl_config = comprehensive_predictive_config.get("remediation_learner_config", {})
+        arl = ArcRemediationLearner(config=arl_config)
+
+        pending = [{"model_type": "failure_prediction", "queued_count": 3, "threshold": 5}]
+        arl.pending_retrain_requests = list(pending)
+
+        assert arl.has_pending_retrain_requests()
+        consumed = arl.consume_pending_retrain_requests()
+        assert consumed == pending
+        assert not arl.has_pending_retrain_requests()
+
+    def test_arl_logs_trainer_error_without_queueing(self, comprehensive_predictive_config, sample_remediation_data):
+        arl_config = comprehensive_predictive_config.get("remediation_learner_config", {})
+        arl = ArcRemediationLearner(config=arl_config)
+        mock_trainer = MagicMock(spec=ArcModelTrainer)
+        mock_trainer.update_models_with_remediation.return_value = {"status": "error", "reason": "bad payload"}
+        arl.trainer = mock_trainer
+
+        with patch.object(arl.logger, "warning") as warn_log:
+            arl.learn_from_remediation(sample_remediation_data)
+
+        assert arl.trainer_last_response["status"] == "error"
+        assert arl.pending_retrain_requests == []
+        assert any("bad payload" in args[0][0] for args in warn_log.call_args_list)
+
 
 class TestFeatureEngineer:
     def test_fe_init_and_config_params(self, comprehensive_predictive_config):
@@ -513,8 +561,8 @@ class TestPredictiveAnalyticsEngine: # Basic tests, PAE is mostly an orchestrato
             assert pae is not None
             assert isinstance(pae.trainer, ArcModelTrainer)
             assert isinstance(pae.predictor, ArcPredictor)
-            assert isinstance(pae.pattern_analyzer, MockPatternAnalyzer) # Check it's the mocked instance
-            MockPatternAnalyzer.assert_called_once_with(pa_config)
+            assert pae.pattern_analyzer is mock_pa_instance
+            MockPatternAnalyzer.assert_called_once_with(config=pa_config)
 
 
     def test_pae_analyze_deployment_risk(self, comprehensive_predictive_config, trained_models_for_predictor_path, sample_telemetry_df_for_predictive):

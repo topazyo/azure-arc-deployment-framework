@@ -131,6 +131,28 @@ Predictive models are trained using Python scripts (e.g., `ArcModelTrainer` deta
     *   Python 3.x must be installed and accessible via the system PATH or the `-PythonExecutable` parameter.
     *   The `invoke_ai_engine.py` script must be present at its default relative location (`../../src/Python/`) or the path specified via `-ScriptPath`.
 
+### 2. AI Remediation Workflow: `Start-AIRemediationWorkflow`
+*   **Purpose**: Runs the pattern-to-remediation pipeline: detect issues in diagnostics, map them to remediation rules, execute validated actions, and emit a telemetry summary (including pattern/action counts) for downstream AI.
+*   **Common syntax**:
+    ```powershell
+    Start-AIRemediationWorkflow -InputData $telemetry -RemediationMode Automatic `
+      -IssuePatternDefinitionsPath 'tests/Powershell/fixtures/issue_patterns_sample.json' `
+      -RemediationRulesPath 'tests/Powershell/fixtures/remediation_rules_sample.json' `
+      -FindIssuePatternsPath 'src/Powershell/remediation/Find-IssuePatterns.ps1' `
+      -GetRemediationActionPath 'src/Powershell/remediation/Get-RemediationAction.ps1' `
+      -ValidationRulesPath 'tests/Powershell/fixtures/validation_rules_sample.json' `
+      -LogPath '.\Logs\remediation.log'
+    ```
+*   **Key parameters**:
+    *   `-IssuePatternDefinitionsPath`: JSON rule pack for pattern detection. Defaults to the built-in patterns if omitted; accept StartsWith/EndsWith/threshold operators.
+    *   `-RemediationRulesPath`: JSON rule pack mapping `IssueId` to `RemediationActionId` and parameters.
+    *   `-FindIssuePatternsPath` / `-GetRemediationActionPath`: Override script paths when running outside the module root.
+    *   `-ValidationRulesPath`: Optional validation rules merged with derived checks (`Replace` or `AppendDerived`).
+    *   `-RemediationMode`: `Automatic` or `ManualApproval`; actions run through `Start-RemediationAction` with validation and optional backups.
+*   **Inputs**: Provide either parsed diagnostics/telemetry (hashtable or object) or a path to a diagnostics JSON file; sample fixture: tests/Powershell/fixtures/diagnostics_pattern_sample.json.
+*   **Outputs**: Structured object with detected patterns, selected remediation actions, validation results, execution summaries, and telemetry counts (`PatternsDetected`, `ActionsResolved`, `ActionsExecuted`).
+*   **Error handling**: Missing rule packs or malformed JSON surface as terminating errors; execution failures bubble the underlying action/validation errors so they can be audited in logs.
+
 ## Advanced Features
 
 #### Pattern Analysis
@@ -203,6 +225,28 @@ $validationParams = @{
     ValidationLevel = 'Comprehensive'
 }
 Start-BulkValidation @validationParams
+```
+
+### 3. Validation rules and drift baselines (samples)
+- Sample validation rules JSON: tests/Powershell/fixtures/validation_rules_sample.json (per-action steps, merge behaviors Replace/AppendDerived).
+- Sample drift baseline JSON: tests/Powershell/fixtures/drift_baseline.json (registry, service, firewall, and audit expectations).
+- See docs/Validation-Fixtures.md for structure and authoring guidance.
+
+#### Running drift checks with a custom baseline
+```powershell
+# Run configuration drift using your baseline JSON
+Test-ConfigurationDrift -BaselinePath 'C:\baselines\arc-drift.json' -LogPath 'C:\Logs\drift.log'
+
+# Include drift inside Arc Troubleshooter
+Start-ArcTroubleshooter -ServerName 'ArcSrv01' -DriftBaselinePath 'C:\baselines\arc-drift.json' -OutputPath '.\Logs'
+```
+
+#### Supplying validation rules to AI remediation
+```powershell
+# Run AI remediation workflow with validation rules
+Start-AIRemediationWorkflow -InputData $telemetry -RemediationMode 'Automatic' `
+    -ValidationRulesPath 'C:\baselines\validation_rules.json' `
+    -LogPath 'C:\Logs\remediation.log'
 ```
 
 ## Monitoring and Reporting

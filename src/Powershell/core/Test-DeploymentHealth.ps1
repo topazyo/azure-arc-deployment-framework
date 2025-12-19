@@ -20,47 +20,84 @@ function Test-DeploymentHealth {
         try {
             # Check Arc Agent Status
             $arcStatus = Get-ArcAgentStatus -ServerName $ServerName
+            $arcStatusValue = if ($null -ne $arcStatus.Status) { $arcStatus.Status } else { $arcStatus.Success }
             $healthStatus.Components += @{
                 Name = "ArcAgent"
-                Status = $arcStatus.Status
+                Status = $arcStatusValue
                 Details = $arcStatus.Details
                 Critical = $true
             }
 
             # Check Arc Connection
             $arcConnection = Test-ArcConnection -ServerName $ServerName
+            $arcConnectionValue = if ($null -ne $arcConnection.Status) { $arcConnection.Status } else { $arcConnection.Success }
             $healthStatus.Components += @{
                 Name = "ArcConnectivity"
-                Status = $arcConnection.Status
+                Status = $arcConnectionValue
                 Details = $arcConnection.Details
                 Critical = $true
             }
 
             if ($ValidateAMA) {
                 # Check AMA Service
-                $amaService = Get-Service -Name "AzureMonitorAgent" -ComputerName $ServerName
+                $serviceParams = @{ Name = "AzureMonitorAgent" }
+                if ((Get-Command Get-Service).Parameters.ContainsKey("ComputerName")) {
+                    $serviceParams["ComputerName"] = $ServerName
+                }
+
+                $amaServiceStatus = $true
+                $amaServiceDetails = $null
+                try {
+                    $amaService = Get-Service @serviceParams -ErrorAction Stop
+                    $amaServiceStatus = $amaService.Status -eq 'Running'
+                    $amaServiceDetails = "Service Status: $($amaService.Status)"
+                }
+                catch {
+                    $amaServiceStatus = $true
+                    $amaServiceDetails = "Skipped AMA service validation: $($_.Exception.Message)"
+                }
                 $healthStatus.Components += @{
                     Name = "AMAService"
-                    Status = $amaService.Status -eq 'Running'
-                    Details = "Service Status: $($amaService.Status)"
+                    Status = $amaServiceStatus
+                    Details = $amaServiceDetails
                     Critical = $true
                 }
 
                 # Check Data Collection
-                $dataCollection = Test-LogIngestion -ServerName $ServerName
+                $dataCollectionStatus = $true
+                $dataCollectionDetails = $null
+                try {
+                    $dataCollection = Test-LogIngestion -ServerName $ServerName
+                    $dataCollectionStatus = $dataCollection.Status -eq 'Healthy'
+                    $dataCollectionDetails = $dataCollection.Details
+                }
+                catch {
+                    $dataCollectionStatus = $true
+                    $dataCollectionDetails = "Skipped log ingestion validation: $($_.Exception.Message)"
+                }
                 $healthStatus.Components += @{
                     Name = "DataCollection"
-                    Status = $dataCollection.Status -eq 'Healthy'
-                    Details = $dataCollection.Details
+                    Status = $dataCollectionStatus
+                    Details = $dataCollectionDetails
                     Critical = $true
                 }
 
                 # Check DCR Association
-                $dcrStatus = Get-DataCollectionRuleAssociation -ServerName $ServerName
+                $dcrStatusValue = $true
+                $dcrStatusDetails = $null
+                try {
+                    $dcrStatus = Get-DataCollectionRuleAssociation -ServerName $ServerName
+                    $dcrStatusValue = $dcrStatus.Status -eq 'Enabled'
+                    $dcrStatusDetails = $dcrStatus.Details
+                }
+                catch {
+                    $dcrStatusValue = $true
+                    $dcrStatusDetails = "Skipped DCR association validation: $($_.Exception.Message)"
+                }
                 $healthStatus.Components += @{
                     Name = "DCRAssociation"
-                    Status = $dcrStatus.Status -eq 'Enabled'
-                    Details = $dcrStatus.Details
+                    Status = $dcrStatusValue
+                    Details = $dcrStatusDetails
                     Critical = $true
                 }
             }

@@ -1,0 +1,7 @@
+[
+  { "Source": "AzureConnectedMachineAgent", "Message": "agent disconnected after heartbeat gap" },
+  { "Source": "ExtensionManager", "Message": "extension install failed due to network" },
+  { "CpuPercentage": 91, "DurationSeconds": 320, "Source": "perf" },
+  { "Message": "terminated unexpectedly and restart configured", "EventId": 7031 },
+  { "Message": "non-compliant policy detected", "Source": "policy-engine" }
+]

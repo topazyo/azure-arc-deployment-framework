@@ -68,9 +68,14 @@ Function Find-IssueCorrelations {
             continue
         }
 
-        # Determine Identifier: Prioritize MatchedIssueId, then PatternName, then try to build one for generic events
+        # Determine Identifier: Prioritize normalized issue/root-cause/remediation identifiers, then fall back to source/event identifiers
         $identifier = $null
         if ($event.PSObject.Properties['MatchedIssueId']) { $identifier = $event.MatchedIssueId }
+        elseif ($event.PSObject.Properties['IssueId']) { $identifier = $event.IssueId }
+        elseif ($event.PSObject.Properties['RootCauseRuleId']) { $identifier = $event.RootCauseRuleId }
+        elseif ($event.PSObject.Properties['RecommendationId']) { $identifier = $event.RecommendationId }
+        elseif ($event.PSObject.Properties['SuggestedRemediationId']) { $identifier = $event.SuggestedRemediationId }
+        elseif ($event.PSObject.Properties['RemediationActionId']) { $identifier = $event.RemediationActionId }
         elseif ($event.PSObject.Properties['PatternName']) { $identifier = $event.PatternName }
         elseif ($event.PSObject.Properties['EventId'] -and $event.PSObject.Properties['Source']) { $identifier = "Event:$($event.Source):$($event.EventId)" }
         elseif ($event.PSObject.Properties['Source'] -and $event.PSObject.Properties['Message']) { $identifier = "Source:$($event.Source):MsgSubstr:$($event.Message.Substring(0, [System.Math]::Min($event.Message.Length, 20)))" } # Fallback

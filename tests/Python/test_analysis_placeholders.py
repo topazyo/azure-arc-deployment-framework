@@ -91,12 +91,22 @@ class TestPatternAnalyzer:
         assert isinstance(pa.analyze_daily_patterns(sample_telemetry_df), dict)
         assert isinstance(pa.analyze_weekly_patterns(sample_telemetry_df), dict)
         assert isinstance(pa.analyze_monthly_patterns(sample_telemetry_df), dict)
-        # These internal methods currently return lists or dicts based on placeholder logic
-        assert isinstance(pa.identify_common_failure_causes(sample_telemetry_df), list)
-        assert isinstance(pa.identify_failure_precursors(sample_telemetry_df), list)
+        # Current implementation returns structured dicts for these helpers
+        common_causes = pa.identify_common_failure_causes(sample_telemetry_df)
+        assert isinstance(common_causes, dict)
+        assert 'common_causes' in common_causes
+
+        precursors = pa.identify_failure_precursors(sample_telemetry_df)
+        assert isinstance(precursors, dict)
+        assert 'precursors' in precursors
+
         assert isinstance(pa.analyze_failure_impact(sample_telemetry_df), dict)
         assert isinstance(pa.analyze_resource_usage_patterns(sample_telemetry_df), dict)
-        assert isinstance(pa.identify_bottlenecks(sample_telemetry_df), list)
+
+        bottlenecks = pa.identify_bottlenecks(sample_telemetry_df)
+        assert isinstance(bottlenecks, dict)
+        assert 'detected_bottlenecks' in bottlenecks
+
         assert isinstance(pa.analyze_performance_trends(sample_telemetry_df), dict)
 
 class TestTelemetryProcessor:

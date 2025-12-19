@@ -27,7 +27,13 @@ Function Repair-MachineCertificates {
         [bool]$AttemptRenewal = $false, # Placeholder for future functionality
 
         [Parameter(Mandatory=$false)]
-        [string]$LogPath = "C:\ProgramData\AzureArcFramework\Logs\RepairMachineCertificates_Activity.log"
+        [string]$LogPath = "C:\ProgramData\AzureArcFramework\Logs\RepairMachineCertificates_Activity.log",
+
+        [Parameter(Mandatory=$false)]
+        [switch]$OnlyProblematic,
+
+        [Parameter(Mandatory=$false)]
+        [string]$ReportPath
     )
 
     # --- Logging Function (for script activity) ---
@@ -188,6 +194,28 @@ Function Repair-MachineCertificates {
         }
     }
     
-    Write-Log "Repair-MachineCertificates script finished. Inspected $($certificatesToProcess.Count) certificates."
-    return $results
+    $filteredResults = if ($OnlyProblematic) { $results | Where-Object { $_.OverallCertStatus -eq "Problematic" } } else { $results }
+
+    $summary = [PSCustomObject]@{
+        Total               = $results.Count
+        Problematic         = ($results | Where-Object { $_.OverallCertStatus -eq "Problematic" }).Count
+        Expired             = ($results | Where-Object { $_.ExpiryStatus -eq "Expired" }).Count
+        NearingExpiry       = ($results | Where-Object { $_.ExpiryStatus -eq "NearingExpiry" }).Count
+        MissingPrivateKey   = ($results | Where-Object { $_.PrivateKeyStatus -eq "Missing" }).Count
+        HostnameMismatch    = ($results | Where-Object { $_.IdentifiedIssues -contains "HostnameMismatch" }).Count
+        LacksServerAuthEKU  = ($results | Where-Object { $_.IdentifiedIssues -contains "LacksServerAuthEKU" }).Count
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($ReportPath)) {
+        try {
+            $reportPayload = [PSCustomObject]@{ Summary = $summary; Certificates = $filteredResults }
+            $reportPayload | ConvertTo-Json -Depth 5 | Out-File -FilePath $ReportPath -Encoding UTF8 -Force -ErrorAction Stop
+            Write-Log "Report written to '$ReportPath'."
+        } catch {
+            Write-Log "Failed to write report to '$ReportPath': $($_.Exception.Message)" -Level "WARNING"
+        }
+    }
+
+    Write-Log "Repair-MachineCertificates script finished. Inspected $($certificatesToProcess.Count) certificates. Problematic=$($summary.Problematic)."
+    return [PSCustomObject]@{ Summary = $summary; Certificates = $filteredResults }
 }

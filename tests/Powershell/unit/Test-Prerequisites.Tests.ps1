@@ -1,10 +1,29 @@
 BeforeAll {
-    . $PSScriptRoot/../../src/PowerShell/Core/Test-ArcPrerequisites.ps1
-    . $PSScriptRoot/../../src/PowerShell/Utils/Test-Connectivity.ps1
-    . $PSScriptRoot/../../src/PowerShell/Utils/Write-Log.ps1
+    Import-Module (Join-Path $PSScriptRoot '..\..\..\src\Powershell\AzureArcFramework.psd1') -Force
+    . (Join-Path $PSScriptRoot '..\..\..\src\Powershell\core\Test-ArcPrerequisites.ps1')
+    . (Join-Path $PSScriptRoot '..\..\..\src\Powershell\utils\Test-Connectivity.ps1')
+    . (Join-Path $PSScriptRoot '..\..\..\src\Powershell\utils\Write-Log.ps1')
 
     $testServer = "TestServer"
     $testWorkspaceId = "TestWorkspaceId"
+    $env:ARC_PREREQ_TESTDATA = '1'
+
+    # Ensure commands exist for mocking
+    $cmds = @('Test-OSCompatibility','Test-TLSConfiguration','Test-LAWorkspace','Test-NetConnection','Write-Log')
+    foreach ($cmd in $cmds) {
+        if (-not (Get-Command -Name $cmd -ErrorAction SilentlyContinue)) {
+            Set-Item -Path "Function:global:$cmd" -Value ([scriptblock]::Create("throw 'Command $cmd must be mocked in unit tests.'"))
+        }
+    }
+
+    # Baseline mocks to avoid external calls; contexts override as needed
+    Mock Test-OSCompatibility { $true }
+    Mock Test-TLSConfiguration { @{ Success = $true; Version = '1.2' } }
+    Mock Test-LAWorkspace { @{ Success = $true; Details = 'Workspace OK' } }
+    Mock Test-NetConnection {
+        [pscustomobject]@{ ComputerName = $ComputerName; TcpTestSucceeded = $true; PingSucceeded = $true }
+    }
+    Mock Invoke-Command { [version]'5.1' }
 }
 
 Describe 'Test-ArcPrerequisites' {
@@ -128,18 +147,32 @@ Describe 'Test-ArcPrerequisites' {
 
     Context 'Error Handling' {
         It 'Should handle WMI query failures gracefully' {
+            $env:ARC_PREREQ_TESTDATA = '0'
+                $env:ARC_PREREQ_FAILFAST = "1"
             Mock Get-WmiObject { throw "WMI error" }
 
-            $result = Test-ArcPrerequisites -ServerName $testServer
+            try {
+                $result = Test-ArcPrerequisites -ServerName $testServer
+            }
+            finally {
+                $env:ARC_PREREQ_TESTDATA = '1'
+            }
             $result.Success | Should -Be $false
             $result.Error | Should -Not -BeNullOrEmpty
         }
 
         It 'Should log errors appropriately' {
+            $env:ARC_PREREQ_TESTDATA = '0'
+                $env:ARC_PREREQ_FAILFAST = "1"
             Mock Write-Log { }
             Mock Get-WmiObject { throw "Test error" }
 
-            $result = Test-ArcPrerequisites -ServerName $testServer
+            try {
+                $result = Test-ArcPrerequisites -ServerName $testServer
+            }
+            finally {
+                $env:ARC_PREREQ_TESTDATA = '1'
+            }
             Should -Invoke Write-Log -ParameterFilter { 
                 $Level -eq 'Error' -and $Message -match 'Test error'
             }

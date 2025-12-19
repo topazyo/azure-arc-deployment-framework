@@ -1,0 +1,15 @@
+{
+  "registryChecks": [
+    { "Path": "HKLM:\\SOFTWARE\\Microsoft\\.NETFramework\\v4.0.30319", "Name": "SchUseStrongCrypto", "Expected": 1 },
+    { "Path": "HKLM:\\SOFTWARE\\Microsoft\\.NETFramework\\v4.0.30319", "Name": "SystemDefaultTlsVersions", "Expected": 1 }
+  ],
+  "serviceChecks": [
+    { "Name": "himds", "StartupType": "Automatic", "State": "Running" }
+  ],
+  "firewallChecks": [
+    { "Name": "Azure Arc Management", "Enabled": true, "Direction": "Outbound", "Action": "Allow" }
+  ],
+  "auditPolicies": [
+    { "Name": "Process Creation", "Setting": "Success" }
+  ]
+}

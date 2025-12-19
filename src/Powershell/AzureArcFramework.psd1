@@ -8,12 +8,9 @@
     Description = 'Azure Arc Deployment and Management Framework'
     PowerShellVersion = '5.1'
     
-    # Required Modules
-    RequiredModules = @(
-        @{ModuleName='Az.Accounts'; ModuleVersion='2.7.0'},
-        @{ModuleName='Az.ConnectedMachine'; ModuleVersion='0.4.0'},
-        @{ModuleName='Az.Monitor'; ModuleVersion='3.0.0'}
-    )
+    # NOTE: Az.* dependencies are imported on-demand by cmdlets that need them.
+    # Keeping this empty allows unit tests and lightweight environments to import the module.
+    RequiredModules = @()
 
     # Functions to export
     FunctionsToExport = @(

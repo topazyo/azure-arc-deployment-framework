@@ -1,0 +1,33 @@
+{
+  "validationRules": [
+    {
+      "AppliesToRemediationActionId": "REM_RULE_ONLY",
+      "MergeBehavior": "Replace",
+      "Steps": [
+        {
+          "ValidationStepId": "VR_Simple",
+          "Description": "Ensure rule-only validation runs",
+          "ValidationType": "ScriptExecutionCheck",
+          "ValidationTarget": "C:/temp/rule-only.ps1",
+          "ExpectedResult": "Success",
+          "Parameters": {
+            "Path": "C:/temp/rule-only.ps1"
+          }
+        }
+      ]
+    },
+    {
+      "AppliesToRemediationActionId": "REM_APPEND",
+      "MergeBehavior": "AppendDerived",
+      "Steps": [
+        {
+          "ValidationStepId": "VR_Base",
+          "Description": "Base rule step that should append",
+          "ValidationType": "ManualCheck",
+          "ValidationTarget": "Operator",
+          "ExpectedResult": "Confirmed"
+        }
+      ]
+    }
+  ]
+}

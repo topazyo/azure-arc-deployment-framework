@@ -12,26 +12,23 @@ param (
     [string]$LogPath = "C:\ProgramData\AzureArcFramework\Logs\AuditPolicyConfiguration.log"
 )
 
-# --- Logging Function ---
-function Write-Log {
-    param (
-        [string]$Message,
-        [string]$Level = "INFO", # INFO, WARNING, ERROR, DEBUG
-        [string]$Path = $LogPath
-    )
-    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-    $logEntry = "[$timestamp] [$Level] $Message"
-    
-    try {
-        if (-not (Test-Path (Split-Path $Path -Parent))) {
-            New-Item -ItemType Directory -Path (Split-Path $Path -Parent) -Force -ErrorAction Stop | Out-Null
-        }
-        Add-Content -Path $Path -Value $logEntry -ErrorAction Stop
-    }
-    catch {
-        Write-Warning "Failed to write to log file $Path. Error: $($_.Exception.Message). Logging to console instead."
-        Write-Host $logEntry
-    }
+# --- Logging (shared utility) ---
+$ScriptRoot = if ($PSScriptRoot) {
+    $PSScriptRoot
+} elseif ($PSCommandPath) {
+    Split-Path -Parent $PSCommandPath
+} elseif ($MyInvocation.MyCommand.Path) {
+    Split-Path -Parent $MyInvocation.MyCommand.Path
+} else {
+    (Get-Location).Path
+}
+
+if (-not (Get-Command Write-Log -ErrorAction SilentlyContinue)) {
+    . (Join-Path $ScriptRoot '..\utils\Write-Log.ps1')
+}
+
+if (-not (Get-Command Test-IsAdministrator -ErrorAction SilentlyContinue)) {
+    . (Join-Path $ScriptRoot '..\utils\Test-IsAdministrator.ps1')
 }
 
 # --- Backup Function ---
@@ -44,7 +41,7 @@ function Backup-AuditPolicy {
         if (-not (Test-Path (Split-Path $BackupFilePath -Parent))) {
             New-Item -ItemType Directory -Path (Split-Path $BackupFilePath -Parent) -Force -ErrorAction Stop | Out-Null
         }
-        auditpol /backup /file:"$BackupFilePath" | Out-Null
+        Invoke-Expression "auditpol /backup /file:`"$BackupFilePath`"" | Out-Null
         Write-Log "Audit policy successfully backed up to $BackupFilePath."
     }
     catch {
@@ -62,8 +59,46 @@ function Backup-AuditPolicy {
 # --- Helper to Convert JSON Subcategory Name to AuditPol Format ---
 # Example: "credentialValidation" -> "Credential Validation"
 function ConvertTo-AuditPolSubcategoryName {
-    param ([string]$JsonName)
-    return ($JsonName -replace '([A-Z])', ' $1').Trim()
+    param (
+        [Parameter(Mandatory)]
+        [object]$JsonName
+    )
+
+    # Normalize input (string, char[], string[], nested arrays) to a plain string.
+    $normalized = $JsonName
+    if ($normalized -is [System.Collections.IEnumerable] -and -not ($normalized -is [string])) {
+        $normalized = -join $normalized
+    }
+    $normalized = ([string]$normalized).Trim()
+
+    # If the input already looks like "C R E D ...", collapse it first.
+    if ($normalized -match '^[A-Za-z](?:\s+[A-Za-z])+$') {
+        $normalized = ($normalized -replace '\s+', '')
+    }
+
+    # Normalize aggressively: keep only letters/digits and key separators.
+    # This handles inputs like "C R E D ..." (or other separator chars) by collapsing to "CREDENTIALVALIDATION".
+    $compact = -join ($normalized.ToCharArray() | Where-Object {
+        [char]::IsLetterOrDigit($_) -or $_ -eq '_' -or $_ -eq '-'
+    })
+
+    # Convert camelCase/PascalCase + underscores/dashes to spaced words.
+    $spaced = ($compact -replace '[_-]+', ' ')
+    $spaced = ($spaced -replace '(?<=[a-z0-9])(?=[A-Z])', ' ')
+    $spaced = $spaced.Trim()
+
+    # Known auditpol subcategories are title-cased with spaces.
+    # This also fixes scenarios where original casing was lost (e.g. "CREDENTIALVALIDATION").
+    $compactKey = ($compact -replace '[_-]+', '').ToLowerInvariant()
+    switch ($compactKey) {
+        'credentialvalidation' { return 'Credential Validation' }
+        'processcreation'      { return 'Process Creation' }
+        'filesystem'           { return 'File System' }
+        'logon'                { return 'Logon' }
+    }
+
+    # Title-case for auditpol display.
+    return (Get-Culture).TextInfo.ToTitleCase($spaced.ToLowerInvariant())
 }
 
 
@@ -72,14 +107,14 @@ try {
     Write-Log "Starting audit policy configuration script."
 
     # Check for Admin Privileges
-    if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+    if (-not (Test-IsAdministrator)) {
         Write-Log "This script requires Administrator privileges to manage audit policies." -Level "ERROR"
         throw "Administrator privileges required."
     }
 
     # Define paths
-    $ScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
     $ConfigFile = Join-Path -Path $ScriptRoot -ChildPath "..\..\config\security-baseline.json"
+    $ConfigFile = [System.IO.Path]::GetFullPath($ConfigFile)
 
     # Read configuration
     Write-Log "Reading configuration from $ConfigFile..."
@@ -111,13 +146,28 @@ try {
     Write-Log "Applying audit policy settings..."
 
     # Process audit policies
-    foreach ($categoryKey in $AuditPolicySettings.PSObject.Properties.Name) {
+    foreach ($categoryKey in @($AuditPolicySettings.PSObject.Properties.Name)) {
         $categoryObject = $AuditPolicySettings.$categoryKey
         Write-Log "Processing category: '$categoryKey'"
-        foreach ($subcategoryKey in $categoryObject.PSObject.Properties.Name) {
+        foreach ($subcategoryKey in @($categoryObject.PSObject.Properties.Name)) {
             $policyValue = $categoryObject.$subcategoryKey
             # Convert JSON key to AuditPol subcategory name (e.g., credentialValidation -> "Credential Validation")
             $subcategoryName = ConvertTo-AuditPolSubcategoryName -JsonName $subcategoryKey
+            # Normalize again defensively in case the first conversion produced an enumerable (which PowerShell
+            # would otherwise stringify as spaced letters when interpolated into strings).
+            $subcategoryName = ConvertTo-AuditPolSubcategoryName -JsonName $subcategoryName
+
+            # Force to a plain string (arrays/enumerables stringify as spaced letters in interpolation).
+            if ($subcategoryName -is [System.Collections.IEnumerable] -and -not ($subcategoryName -is [string])) {
+                $subcategoryName = -join $subcategoryName
+            }
+            $subcategoryName = ([string]$subcategoryName).Trim()
+
+            # Final guard: if the name still looks like spaced letters ("L O G O N"), collapse and re-convert.
+            if (([string]$subcategoryName) -match '^[A-Za-z](?:\s+[A-Za-z])+$') {
+                $collapsed = ($subcategoryName -replace '\s+', '')
+                $subcategoryName = ConvertTo-AuditPolSubcategoryName -JsonName $collapsed
+            }
             
             Write-Log "Setting policy for Subcategory: '$subcategoryName' to '$policyValue'"
 

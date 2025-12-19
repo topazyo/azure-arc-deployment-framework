@@ -308,11 +308,13 @@ class TestTelemetryProcessor:
         tp = TelemetryProcessor(config=comprehensive_config)
         telemetry_list_of_dicts = telemetry_df_for_processor.to_dict(orient='records')
         processed_output = tp.process_telemetry(telemetry_list_of_dicts) # Renamed from processed_data
-        assert "processed_data" in processed_output # This is the extracted_features dict
+        assert "processed_data" in processed_output # Cleaned DataFrame
         assert "anomalies" in processed_output
         assert "trends" in processed_output # This is from _analyze_trends
         assert "insights" in processed_output
-        assert isinstance(processed_output["processed_data"], dict) # Check if it's the flat feature dict
+        assert isinstance(processed_output["processed_data"], pd.DataFrame)
+        assert "flattened_features" in processed_output
+        assert isinstance(processed_output["flattened_features"], dict)
 
     def test_tp_handle_missing_values(self, comprehensive_config, telemetry_df_for_processor):
         tp_mean = TelemetryProcessor(config={"numerical_nan_fill_strategy": "mean", "categorical_nan_fill_strategy": "unknown"})

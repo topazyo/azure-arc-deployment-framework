@@ -1,0 +1,36 @@
+{
+  "Timestamp": "2025-12-16T07:59:07.8526021+02:00",
+  "Logs": {
+    "Arc": null,
+    "AMA": null,
+    "System": null,
+    "Security": null
+  },
+  "SystemState": {
+    "OS": {
+      "Version": "10.0.19041"
+    }
+  },
+  "DetailedAnalysis": {},
+  "Connectivity": {
+    "Arc": {
+      "Success": true
+    },
+    "AMA": null,
+    "Proxy": {
+      "Proxy": null
+    },
+    "NetworkPaths": null
+  },
+  "AMAStatus": {},
+  "ArcStatus": {
+    "StartType": "Automatic",
+    "Dependencies": null,
+    "Configuration": {
+      "Version": "1.0"
+    },
+    "LastHeartbeat": "2025-12-16T07:54:07.9316355+02:00",
+    "ServiceStatus": "Running"
+  },
+  "ServerName": "TEST-SERVER"
+}

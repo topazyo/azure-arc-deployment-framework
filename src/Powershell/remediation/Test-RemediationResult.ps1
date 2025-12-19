@@ -40,15 +40,44 @@ Function Test-RemediationResult {
 
     Write-Log "Starting Test-RemediationResult script. Number of validation steps: $($ValidationSteps.Count)."
 
+    function Test-ExpectedOutcome {
+        param(
+            [string]$Expected,
+            [string]$Actual,
+            [System.Collections.IEnumerable]$StdOutput,
+            [System.Collections.IEnumerable]$Errors
+        )
+
+        if ([string]::IsNullOrWhiteSpace($Expected)) {
+            return ($Errors -eq $null -or ($Errors | Measure-Object).Count -eq 0)
+        }
+
+        switch -regex ($Expected) {
+            '^\$true$' { return ($StdOutput -contains $true) }
+            '^\$false$' { return ($StdOutput -contains $false) }
+            '^0$' { return (($Errors -eq $null -or ($Errors | Measure-Object).Count -eq 0)) }
+            '^Contains\s+"(.+)"$' { return (($Actual) -match $Matches[1]) }
+            '^Regex\s*:(.+)$' { return (($Actual) -match $Matches[1]) }
+            default { return ($Actual -eq $Expected) }
+        }
+    }
+
     if (-not $ValidationSteps -or $ValidationSteps.Count -eq 0) {
         Write-Log "No validation steps provided. Cannot perform test." -Level "WARNING"
         return @{ OverallValidationStatus = "SkippedNoSteps"; ValidationStepResults = @() }
     }
 
-    # Ensure the step objects are modifiable if they came directly from ConvertFrom-Json
+    # Ensure the step objects are modifiable and carry writable properties when sourced from ConvertFrom-Json
     $modifiableValidationSteps = @()
     foreach($s in $ValidationSteps){
-        $modifiableValidationSteps += $s.PSObject.Copy()
+        $copyHashtable = @{}
+        $s.PSObject.Properties | ForEach-Object { $copyHashtable[$_.Name] = $_.Value }
+
+        foreach ($propName in @('Status','Timestamp','ActualResult','Notes')) {
+            if (-not $copyHashtable.ContainsKey($propName)) { $copyHashtable[$propName] = $null }
+        }
+
+        $modifiableValidationSteps += [PSCustomObject]$copyHashtable
     }
 
 
@@ -60,6 +89,11 @@ Function Test-RemediationResult {
         $stepError = $null
 
         try {
+            $invocationParams = @{}
+            if ($step.PSObject.Properties['Parameters'] -and $step.Parameters -is [hashtable]) {
+                $invocationParams = $step.Parameters
+            }
+
             switch ($step.ValidationType) {
                 "ServiceStateCheck" {
                     $serviceName = $step.ValidationTarget
@@ -99,26 +133,20 @@ Function Test-RemediationResult {
                     Write-Log "ScriptExecutionCheck: Path='$scriptPath', ExpectedResultString='$expectedResultStr'"
 
                     if (Test-Path $scriptPath -PathType Leaf) {
-                        $scriptOutput = & $scriptPath *>&1 # Capture all streams
+                        $scriptOutput = & $scriptPath @invocationParams *>&1 # Capture all streams
                         $errorsInOutput = $scriptOutput | Where-Object { $_ -is [System.Management.Automation.ErrorRecord] }
                         $stdOutput = $scriptOutput | Where-Object { $_ -isnot [System.Management.Automation.ErrorRecord] }
+                        $stdOutputArray = @($stdOutput)
+                        $errorsArray = @($errorsInOutput)
                         
-                        $step.ActualResult = $stdOutput -join [System.Environment]::NewLine
-                        if ($errorsInOutput) { $stepError = $errorsInOutput -join [System.Environment]::NewLine }
+                        $step.ActualResult = $stdOutputArray -join [System.Environment]::NewLine
+                        if ($errorsInOutput) { $stepError = $errorsArray -join [System.Environment]::NewLine }
 
-                        # Basic result checking
-                        if ($expectedResultStr -eq '$true' -and ($stdOutput -contains $true)) { $step.Status = "Success" }
-                        elseif ($expectedResultStr -eq '0' -and $LASTEXITCODE -eq 0 -and -not $errorsInOutput) { $step.Status = "Success" } # Assuming $LASTEXITCODE from script
-                        elseif ($expectedResultStr -match "Contains '(.*)'") {
-                            if (($stdOutput -join [System.Environment]::NewLine) -match $Matches[1]) { $step.Status = "Success" }
-                            else { $step.Status = "Failed" }
-                        } else {
-                            # If no specific check, success if no errors
-                            $step.Status = if ($errorsInOutput) { "Failed" } else { "Success" } 
-                        }
+                        $step.Status = if (Test-ExpectedOutcome -Expected $expectedResultStr -Actual $step.ActualResult -StdOutput $stdOutputArray -Errors $errorsArray) { "Success" } else { "Failed" }
                         Write-Log "Script execution result: Status='$($step.Status)'. Output captured. Errors: '$stepError'"
                     } else {
                         $step.Status = "Failed"
+                        $step.ActualResult = "NotFound"
                         $stepError = "Validation script not found: $scriptPath"
                         Write-Log $stepError -Level "ERROR"
                     }
@@ -129,25 +157,20 @@ Function Test-RemediationResult {
                     Write-Log "FunctionCall: Name='$functionName', ExpectedResultString='$expectedResultStr'"
                     $funcCmd = Get-Command -Name $functionName -CommandType Function -ErrorAction SilentlyContinue
                     if ($funcCmd) {
-                        $funcOutput = & $functionName *>&1 # Add parameters if step defines them
+                        $funcOutput = & $functionName @invocationParams *>&1 # Add parameters if step defines them
                         $errorsInOutput = $funcOutput | Where-Object { $_ -is [System.Management.Automation.ErrorRecord] }
                         $stdOutput = $funcOutput | Where-Object { $_ -isnot [System.Management.Automation.ErrorRecord] }
+                        $stdOutputArray = @($stdOutput)
+                        $errorsArray = @($errorsInOutput)
 
-                        $step.ActualResult = $stdOutput -join [System.Environment]::NewLine
-                        if ($errorsInOutput) { $stepError = $errorsInOutput -join [System.Environment]::NewLine }
+                        $step.ActualResult = $stdOutputArray -join [System.Environment]::NewLine
+                        if ($errorsInOutput) { $stepError = $errorsArray -join [System.Environment]::NewLine }
                         
-                        # Basic result checking (same as ScriptExecutionCheck)
-                        if ($expectedResultStr -eq '$true' -and ($stdOutput -contains $true)) { $step.Status = "Success" }
-                        elseif ($expectedResultStr -eq '0' -and -not $errorsInOutput) { $step.Status = "Success" } # Assuming function indicates success by no errors
-                        elseif ($expectedResultStr -match "Contains '(.*)'") {
-                            if (($stdOutput -join [System.Environment]::NewLine) -match $Matches[1]) { $step.Status = "Success" }
-                            else { $step.Status = "Failed" }
-                        } else {
-                            $step.Status = if ($errorsInOutput) { "Failed" } else { "Success" }
-                        }
+                        $step.Status = if (Test-ExpectedOutcome -Expected $expectedResultStr -Actual $step.ActualResult -StdOutput $stdOutputArray -Errors $errorsArray) { "Success" } else { "Failed" }
                         Write-Log "Function call result: Status='$($step.Status)'. Output captured. Errors: '$stepError'"
                     } else {
                         $step.Status = "Failed"
+                        $step.ActualResult = "NotFound"
                         $stepError = "Validation function not found: $functionName"
                         Write-Log $stepError -Level "ERROR"
                     }
@@ -185,7 +208,7 @@ Function Test-RemediationResult {
         $overallStatus = "RequiresManualActionOrNotImplemented"
     } elseif ($modifiableValidationSteps | Where-Object { $_.Status -eq "InProgress" -or $_.Status -eq "NotRun" }) { # Should not happen if all run
         $overallStatus = "PartialExecution"
-    } elseif ($modifiableValidationSteps | Where-Object { $_.Status -eq "Success" } | Measure-Object | Select-Object -ExpandProperty Count -eq $modifiableValidationSteps.Count) {
+    } elseif ((($modifiableValidationSteps | Where-Object { $_.Status -eq "Success" }) | Measure-Object).Count -eq $modifiableValidationSteps.Count) {
         $overallStatus = "Success" # All success
     } else { # Mix of success and manual/notimplemented
          $overallStatus = "PartialSuccessRequiresAttention"

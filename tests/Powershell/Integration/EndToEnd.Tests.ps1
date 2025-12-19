@@ -1,24 +1,40 @@
-BeforeAll {
-    # Import module and dependencies
-    $modulePath = Join-Path $PSScriptRoot "..\..\..\src\PowerShell"
-    Import-Module $modulePath\ArcDeploymentFramework.psd1 -Force
+$script:testConfig = @{
+    ServerName   = $env:TEST_SERVER_NAME
+    WorkspaceId  = $env:TEST_WORKSPACE_ID
+    WorkspaceKey = $env:TEST_WORKSPACE_KEY
+    Environment  = "Test"
+}
 
-    # Test configurations
-    $testConfig = @{
-        ServerName = $env:TEST_SERVER_NAME
-        WorkspaceId = $env:TEST_WORKSPACE_ID
-        WorkspaceKey = $env:TEST_WORKSPACE_KEY
-        Environment = "Test"
+$script:skipE2E = $true
+$script:skipReason = "E2E tests are disabled in CI. Set ARC_E2E_FORCE_RUN=1 with required env vars to enable."
+
+if ($env:ARC_E2E_FORCE_RUN -eq '1') {
+    $script:skipE2E = [string]::IsNullOrWhiteSpace($script:testConfig.ServerName) -or
+                      [string]::IsNullOrWhiteSpace($script:testConfig.WorkspaceId) -or
+                      [string]::IsNullOrWhiteSpace($script:testConfig.WorkspaceKey)
+    $script:skipReason = "Set TEST_SERVER_NAME, TEST_WORKSPACE_ID, TEST_WORKSPACE_KEY to run E2E tests."
+}
+
+Describe 'End-to-End Test Setup' {
+    BeforeAll {
+        # Import module and dependencies
+        $modulePath = Join-Path $PSScriptRoot "..\..\..\src\Powershell"
+        Import-Module (Join-Path $modulePath 'AzureArcFramework.psd1') -Force
+    }
+
+    It 'Should have required env vars for E2E' -Skip:$script:skipE2E {
+        $true | Should -Be $true
     }
 }
 
 Describe 'End-to-End Arc Deployment' {
     BeforeAll {
+        if ($script:skipE2E) { return }
         # Initialize the framework
         Initialize-ArcDeployment -WorkspaceId $testConfig.WorkspaceId -WorkspaceKey $testConfig.WorkspaceKey
     }
 
-    It 'Should complete full deployment lifecycle' {
+    It 'Should complete full deployment lifecycle' -Skip:$script:skipE2E {
         # 1. Prerequisites Check
         $prereqs = Test-ArcPrerequisites -ServerName $testConfig.ServerName -WorkspaceId $testConfig.WorkspaceId
         $prereqs.Success | Should -Be $true
@@ -42,7 +58,7 @@ Describe 'End-to-End Arc Deployment' {
 }
 
 Describe 'End-to-End Troubleshooting' {
-    It 'Should perform comprehensive troubleshooting' {
+    It 'Should perform comprehensive troubleshooting' -Skip:$script:skipE2E {
         # 1. Run Diagnostics
         $diagnostics = Start-ArcDiagnostics -ServerName $testConfig.ServerName -WorkspaceId $testConfig.WorkspaceId
         $diagnostics.Error | Should -BeNullOrEmpty
@@ -64,7 +80,7 @@ Describe 'End-to-End Troubleshooting' {
 }
 
 Describe 'End-to-End Performance Monitoring' {
-    It 'Should monitor and analyze performance' {
+    It 'Should monitor and analyze performance' -Skip:$script:skipE2E {
         # 1. Collect Performance Metrics
         $metrics = Get-AMAPerformanceMetrics -ServerName $testConfig.ServerName
         $metrics.Summary | Should -Not -BeNullOrEmpty

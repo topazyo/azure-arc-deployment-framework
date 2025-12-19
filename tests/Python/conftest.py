@@ -5,6 +5,10 @@ from datetime import datetime, timedelta
 import os
 import json
 from typing import Dict, Any # Added for full_ai_config_dict
+import sys
+
+# Ensure tests can import from the repo's src/ directory (e.g., `from Python...`).
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../src')))
 
 @pytest.fixture
 def sample_telemetry_data():
@@ -213,7 +217,8 @@ def full_ai_config_dict() -> Dict[str, Any]:
              "remediation_learner_config": {
                  "context_features_to_log": ["cpu_usage_avg", "error_count_sum"],
                  "success_pattern_threshold": 0.7, "success_pattern_min_attempts": 2,
-                 "ai_predictor_failure_threshold": 0.6
+                 "ai_predictor_failure_threshold": 0.6,
+                 "retraining_data_threshold": 3
             }
         }
     }

@@ -10,7 +10,9 @@ function Start-ArcTroubleshooter {
         [Parameter()]
         [switch]$DetailedAnalysis,
         [Parameter()]
-        [string]$OutputPath = ".\Logs"
+        [string]$OutputPath = "./Logs",
+        [Parameter()]
+        [string]$DriftBaselinePath
     )
 
     begin {
@@ -46,6 +48,17 @@ function Start-ArcTroubleshooter {
             $troubleshootingSession.Components += @{
                 Phase = "ArcDiagnostics"
                 Data = $arcDiagnostics
+                Timestamp = Get-Date
+            }
+
+            # 2b. Configuration Drift (optional baseline)
+            Write-Progress -Activity "Arc Troubleshooter" -Status "Configuration Drift" -PercentComplete 40
+            $driftParams = @{ ServerName = $ServerName }
+            if (-not [string]::IsNullOrWhiteSpace($DriftBaselinePath)) { $driftParams.BaselinePath = $DriftBaselinePath }
+            $driftReport = Test-ConfigurationDrift @driftParams
+            $troubleshootingSession.Components += @{
+                Phase = "ConfigurationDrift"
+                Data = $driftReport
                 Timestamp = Get-Date
             }
 

@@ -34,7 +34,38 @@ def main():
     parser.add_argument("--analysistype", default="Full", help="Type of analysis (Full, Health, Failure, Anomaly)")
     parser.add_argument("--modeldir", default=os.path.join(os.path.dirname(__file__), 'models_placeholder'), help="Directory containing trained models. Defaults to a 'models_placeholder' folder relative to this script.")
     parser.add_argument("--configpath", default=os.path.join(os.path.dirname(__file__), '../config/ai_config.json'), help="Path to AI configuration file. Defaults to 'src/config/ai_config.json'.")
-    parser.add_argument("--serverdatajson", required=True, help="JSON string containing the server telemetry data for analysis.")
+    parser.add_argument(
+        "--serverdatajson",
+        required=False,
+        default=None,
+        help=(
+            "JSON string containing the server telemetry data for analysis. "
+            "If omitted, a minimal snapshot (server_name_id, timestamp) is synthesized and missing features default to 0.0 during inference."
+        ),
+    )
+    parser.add_argument(
+        "--remediationoutcomejson",
+        required=False,
+        default=None,
+        help=(
+            "Optional remediation outcome payload to record with the remediation learner. "
+            "When provided, the engine will queue or signal retrain requests and surface them in the output."
+        ),
+    )
+    parser.add_argument(
+        "--exportretrainpath",
+        required=False,
+        default=None,
+        help=(
+            "Optional path to write pending retrain requests as JSON. "
+            "If specified, pending requests will be exported (and consumed when --consumeexportqueue is set)."
+        ),
+    )
+    parser.add_argument(
+        "--consumeexportqueue",
+        action="store_true",
+        help="When exporting retrain requests, consume/clear the queue after export instead of peeking."
+    )
 
     args = parser.parse_args()
     ai_components_config = {} # Initialize
@@ -51,20 +82,25 @@ def main():
         if not ai_components_config:
              raise ValueError(f"Invalid configuration format in {config_path}. Missing 'aiComponents' key.")
 
-        # Parse the JSON input for server data
-        try:
-            server_data_input = json.loads(args.serverdatajson)
-        except json.JSONDecodeError as e:
-            # Handle JSON parsing error
-            error_output = {
-                "error": "JSONDecodeError",
-                "message": f"Invalid JSON provided in --serverdatajson: {str(e)}",
-                "input_servername": args.servername,
-                "input_analysistype": args.analysistype,
-                "timestamp": datetime.now().isoformat()
+        # Parse (or synthesize) the JSON input for server data.
+        if args.serverdatajson is None or str(args.serverdatajson).strip() == "":
+            server_data_input = {
+                "server_name_id": args.servername,
+                "timestamp": datetime.now().isoformat(),
             }
-            print(json.dumps(error_output, indent=4), file=sys.stderr)
-            sys.exit(1)
+        else:
+            try:
+                server_data_input = json.loads(args.serverdatajson)
+            except json.JSONDecodeError as e:
+                error_output = {
+                    "error": "JSONDecodeError",
+                    "message": f"Invalid JSON provided in --serverdatajson: {str(e)}",
+                    "input_servername": args.servername,
+                    "input_analysistype": args.analysistype,
+                    "timestamp": datetime.now().isoformat(),
+                }
+                print(json.dumps(error_output, indent=4), file=sys.stderr)
+                sys.exit(1)
 
         # Ensure model directory exists, or ArcPredictor will fail to load
         model_dir_abs = os.path.abspath(args.modeldir)
@@ -81,6 +117,26 @@ def main():
 
         # analyze_deployment_risk expects a dictionary representing a single server's raw data snapshot
         results = engine.analyze_deployment_risk(server_data_input)
+
+        # Optionally record remediation outcome and surface pending retrain signals
+        if args.remediationoutcomejson:
+            try:
+                remediation_payload = json.loads(args.remediationoutcomejson)
+            except json.JSONDecodeError as e:
+                raise ValueError(f"Invalid JSON provided in --remediationoutcomejson: {e}")
+
+            outcome_response = engine.record_remediation_outcome(
+                remediation_payload=remediation_payload,
+                consume_retrain_queue=args.consumeexportqueue,
+            )
+            results["remediation_outcome"] = outcome_response
+
+            if args.exportretrainpath:
+                export_response = engine.export_retrain_requests(
+                    output_path=os.path.abspath(args.exportretrainpath),
+                    consume=args.consumeexportqueue,
+                )
+                results["retrain_export"] = export_response
 
         # Add input servername and analysistype to the results for clarity in PS
         results['input_servername'] = args.servername

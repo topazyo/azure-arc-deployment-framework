@@ -9,28 +9,50 @@ param (
     [string]$ServerName = $env:COMPUTERNAME, # Currently supports local machine checks primarily
 
     [Parameter(Mandatory = $false)]
-    [string]$LogPath = "C:\ProgramData\AzureArcFramework\Logs\ConfigurationDrift.log"
+    [string]$LogPath = "C:\ProgramData\AzureArcFramework\Logs\ConfigurationDrift.log",
+
+    [Parameter(Mandatory = $false)]
+    [switch]$SkipRegistryChecks,
+
+    [Parameter(Mandatory = $false)]
+    [switch]$SkipServiceChecks,
+
+    [Parameter(Mandatory = $false)]
+    [switch]$SkipFirewallChecks,
+
+    [Parameter(Mandatory = $false)]
+    [switch]$SkipAuditPolicyChecks
 )
 
-# --- Logging Function ---
-function Write-Log {
-    param (
-        [string]$Message,
-        [string]$Level = "INFO", # INFO, WARNING, ERROR, DEBUG
-        [string]$Path = $LogPath
-    )
-    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-    $logEntry = "[$timestamp] [$Level] $Message"
-    
-    try {
-        if (-not (Test-Path (Split-Path $Path -Parent))) {
-            New-Item -ItemType Directory -Path (Split-Path $Path -Parent) -Force -ErrorAction Stop | Out-Null
+# --- Logging (shared utility) ---
+$ScriptRoot = if ($PSScriptRoot) {
+    $PSScriptRoot
+} elseif ($PSCommandPath) {
+    Split-Path -Parent $PSCommandPath
+} elseif ($MyInvocation.MyCommand.Path) {
+    Split-Path -Parent $MyInvocation.MyCommand.Path
+} else {
+    (Get-Location).Path
+}
+
+if (-not (Get-Command Write-Log -ErrorAction SilentlyContinue)) {
+    . (Join-Path $ScriptRoot '..\utils\Write-Log.ps1')
+}
+# Fallback stub in case the utility cannot be loaded (e.g., in constrained test sandboxes)
+if (-not (Get-Command Write-Log -ErrorAction SilentlyContinue)) {
+    function Write-Log {
+        param(
+            [string]$Message,
+            [string]$Level = "INFO",
+            [string]$Path = $LogPath
+        )
+        $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+        $logEntry = "[$timestamp] [$Level] $Message"
+        try {
+            Add-Content -Path $Path -Value $logEntry -ErrorAction SilentlyContinue
+        } catch {
+            Write-Host $logEntry
         }
-        Add-Content -Path $Path -Value $logEntry -ErrorAction Stop
-    }
-    catch {
-        Write-Warning "Failed to write to log file $Path. Error: $($_.Exception.Message). Logging to console instead."
-        Write-Host $logEntry
     }
 }
 
@@ -60,8 +82,18 @@ function Add-DriftDetail {
 try {
     Write-Log "Starting configuration drift test script for server: $ServerName."
 
-    # Administrator check (recommended for full access, though some checks might work without)
-    $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+    # Administrator check (tests may override via $Global:IsAdminContext)
+    $isAdmin = $null
+    try {
+        $globalAdminOverride = Get-Variable -Name IsAdminContext -Scope Global -ErrorAction SilentlyContinue
+        if ($globalAdminOverride) {
+            $isAdmin = [bool]$globalAdminOverride.Value
+        }
+    } catch { }
+
+    if ($null -eq $isAdmin) {
+        $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+    }
     if (-not $isAdmin) {
         Write-Log "Running without Administrator privileges. Some checks might be limited or fail." -Level "WARNING"
     }
@@ -74,119 +106,160 @@ try {
     $driftCollection = [System.Collections.ArrayList]::new()
     $overallDriftDetected = $false
 
-    # Load baseline (placeholder for now)
+    # Load baseline (JSON supported; fallback to hardcoded)
+    $baselineRegistryChecks = @()
+    $baselineServiceChecks = @()
+    $baselineFirewallChecks = @()
+    $baselineAuditPolicies = @()
+
     if ($BaselinePath) {
-        Write-Log "Baseline file functionality is not yet implemented. Using hardcoded checks." -Level "WARNING"
-        # TODO: Implement logic to load and parse $BaselinePath
+        try {
+            Write-Log "Loading baseline from '$BaselinePath'."
+            $baselineContent = Get-Content -Path $BaselinePath -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+            if ($baselineContent.registryChecks) { $baselineRegistryChecks = $baselineContent.registryChecks }
+            if ($baselineContent.serviceChecks) { $baselineServiceChecks = $baselineContent.serviceChecks }
+            if ($baselineContent.firewallChecks) { $baselineFirewallChecks = $baselineContent.firewallChecks }
+            if ($baselineContent.auditPolicies) { $baselineAuditPolicies = $baselineContent.auditPolicies }
+            Write-Log "Baseline loaded: RegistryChecks=$($baselineRegistryChecks.Count), ServiceChecks=$($baselineServiceChecks.Count), FirewallChecks=$($baselineFirewallChecks.Count), AuditPolicies=$($baselineAuditPolicies.Count)."
+        } catch {
+            Write-Log "Failed to load baseline file '$BaselinePath'. Falling back to hardcoded checks. Error: $($_.Exception.Message)" -Level "WARNING"
+        }
     }
 
-    Write-Log "--- Performing Hardcoded Baseline Checks ---"
-
-    # 1. Registry Checks (from Set-TLSConfiguration.ps1)
-    Write-Log "Checking Registry Settings..."
-    $regPathNetFx = "HKLM:\SOFTWARE\Microsoft\.NETFramework\v4.0.30319"
-    $regPathNetFxWow64 = "HKLM:\SOFTWARE\Wow6432Node\Microsoft\.NETFramework\v4.0.30319"
-    
-    $expectedRegValues = @{
-        "SchUseStrongCrypto" = 1
-        "SystemDefaultTlsVersions" = 1
+    if ($baselineRegistryChecks.Count -eq 0) {
+        $baselineRegistryChecks = @(
+            @{ Path = "HKLM:\SOFTWARE\Microsoft\.NETFramework\v4.0.30319"; Name = "SchUseStrongCrypto"; Expected = 1 },
+            @{ Path = "HKLM:\SOFTWARE\Microsoft\.NETFramework\v4.0.30319"; Name = "SystemDefaultTlsVersions"; Expected = 1 },
+            @{ Path = "HKLM:\SOFTWARE\Wow6432Node\Microsoft\.NETFramework\v4.0.30319"; Name = "SchUseStrongCrypto"; Expected = 1 },
+            @{ Path = "HKLM:\SOFTWARE\Wow6432Node\Microsoft\.NETFramework\v4.0.30319"; Name = "SystemDefaultTlsVersions"; Expected = 1 }
+        )
     }
 
-    foreach ($keyName in $expectedRegValues.Keys) {
-        $expectedValue = $expectedRegValues[$keyName]
-        # Check main path
-        try {
-            $currentValue = (Get-ItemProperty -Path $regPathNetFx -Name $keyName -ErrorAction Stop).$keyName
-            Add-DriftDetail $driftCollection "Registry" $regPathNetFx $keyName $expectedValue $currentValue
-        } catch { Add-DriftDetail $driftCollection "Registry" $regPathNetFx $keyName $expectedValue "NOT_FOUND_OR_ERROR" }
-        # Check Wow6432Node path
-        try {
-            $currentValueWow = (Get-ItemProperty -Path $regPathNetFxWow64 -Name $keyName -ErrorAction Stop).$keyName
-            Add-DriftDetail $driftCollection "Registry" $regPathNetFxWow64 $keyName $expectedValue $currentValueWow
-        } catch { Add-DriftDetail $driftCollection "Registry" $regPathNetFxWow64 $keyName $expectedValue "NOT_FOUND_OR_ERROR" }
+    if ($baselineServiceChecks.Count -eq 0) {
+        $baselineServiceChecks = @(
+            @{ Name = "himds"; StartupType = "Automatic"; State = "Running" },
+            @{ Name = "AzureMonitorAgent"; StartupType = "Automatic"; State = "Running" },
+            @{ Name = "GCService"; StartupType = "Automatic"; State = "Running" }
+        )
+    }
+
+    Write-Log "--- Performing Baseline Checks ---"
+
+    # 1. Registry Checks (from baseline)
+    if ($SkipRegistryChecks) {
+        Write-Log "Skipping registry checks per configuration." -Level "INFO"
+    } else {
+        Write-Log "Checking Registry Settings..."
+        foreach ($regCheck in $baselineRegistryChecks) {
+            $regPath = $regCheck.Path
+            $keyName = $regCheck.Name
+            $expectedValue = $regCheck.Expected
+            try {
+                $currentValue = (Get-ItemProperty -Path $regPath -Name $keyName -ErrorAction Stop).$keyName
+                Add-DriftDetail $driftCollection "Registry" $regPath $keyName $expectedValue $currentValue
+            } catch { Add-DriftDetail $driftCollection "Registry" $regPath $keyName $expectedValue "NOT_FOUND_OR_ERROR" }
+        }
     }
 
     # 2. Service State Checks
-    Write-Log "Checking Service States..."
-    $servicesToTest = @{
-        "himds" = @{ StartupType = "Automatic"; State = "Running" } # Azure Connected Machine Agent
-        "AzureMonitorAgent" = @{ StartupType = "Automatic"; State = "Running" } # AMA
-        "GCService" = @{ StartupType = "Automatic"; State = "Running" } # Guest Config
-    }
-    foreach ($serviceName in $servicesToTest.Keys) {
-        $expectedProps = $servicesToTest[$serviceName]
-        try {
-            $service = Get-Service -Name $serviceName -ErrorAction Stop
-            Add-DriftDetail $driftCollection "Service" $serviceName "StartupType" $expectedProps.StartupType $service.StartupType
-            Add-DriftDetail $driftCollection "Service" $serviceName "State" $expectedProps.State $service.State
-        } catch {
-            Add-DriftDetail $driftCollection "Service" $serviceName "StartupType" $expectedProps.StartupType "NOT_FOUND_OR_ERROR"
-            Add-DriftDetail $driftCollection "Service" $serviceName "State" $expectedProps.State "NOT_FOUND_OR_ERROR"
+    if ($SkipServiceChecks) {
+        Write-Log "Skipping service checks per configuration." -Level "INFO"
+    } else {
+        Write-Log "Checking Service States..."
+        foreach ($svcCheck in $baselineServiceChecks) {
+            $serviceName = $svcCheck.Name
+            $hasStartup = ($svcCheck -is [hashtable] -and $svcCheck.ContainsKey('StartupType')) -or $svcCheck.PSObject.Properties['StartupType']
+            $hasState = ($svcCheck -is [hashtable] -and $svcCheck.ContainsKey('State')) -or $svcCheck.PSObject.Properties['State']
+            $expectedStartup = if ($svcCheck -is [hashtable]) { $svcCheck['StartupType'] } else { $svcCheck.StartupType }
+            $expectedState = if ($svcCheck -is [hashtable]) { $svcCheck['State'] } else { $svcCheck.State }
+
+            try {
+                $service = Get-Service -Name $serviceName -ErrorAction Stop
+                if ($hasStartup) { Add-DriftDetail $driftCollection "Service" $serviceName "StartupType" $expectedStartup $service.StartupType }
+                if ($hasState) { Add-DriftDetail $driftCollection "Service" $serviceName "State" $expectedState $service.Status }
+            } catch {
+                if ($hasStartup) { Add-DriftDetail $driftCollection "Service" $serviceName "StartupType" $expectedStartup "NOT_FOUND_OR_ERROR" }
+                if ($hasState) { Add-DriftDetail $driftCollection "Service" $serviceName "State" $expectedState "NOT_FOUND_OR_ERROR" }
+            }
         }
     }
 
     # 3. Firewall Rule Checks (Basic - from Set-FirewallRules.ps1)
-    Write-Log "Checking Firewall Rules..."
-    $firewallRulesToTest = @{
-        "Azure Arc Management" = @{ Enabled = $true; Direction = "Outbound"; Action = "Allow" }
-        # Add another key rule if desired, e.g., a Log Analytics outbound rule
-        "Azure Monitor" = @{ Enabled = $true; Direction = "Outbound"; Action = "Allow" }
+    if ($SkipFirewallChecks) {
+        Write-Log "Skipping firewall checks per configuration." -Level "INFO"
+    } else {
+        Write-Log "Checking Firewall Rules..."
+        $firewallRulesToTest = @{}
+        if ($baselineFirewallChecks -and $baselineFirewallChecks.Count -gt 0) {
+            foreach ($fw in $baselineFirewallChecks) {
+                $firewallRulesToTest[$fw.Name] = @{ Enabled = $fw.Enabled; Direction = $fw.Direction; Action = $fw.Action }
+            }
+        } else {
+            $firewallRulesToTest = @{
+                "Azure Arc Management" = @{ Enabled = $true; Direction = "Outbound"; Action = "Allow" }
+                "Azure Monitor" = @{ Enabled = $true; Direction = "Outbound"; Action = "Allow" }
+            }
+        }
 
-    }
-    foreach ($ruleName in $firewallRulesToTest.Keys) {
-        $expectedProps = $firewallRulesToTest[$ruleName]
-        try {
-            $rule = Get-NetFirewallRule -DisplayName $ruleName -ErrorAction Stop
-            Add-DriftDetail $driftCollection "Firewall" $ruleName "Enabled" $expectedProps.Enabled $rule.Enabled
-            Add-DriftDetail $driftCollection "Firewall" $ruleName "Direction" $expectedProps.Direction $rule.Direction
-            Add-DriftDetail $driftCollection "Firewall" $ruleName "Action" $expectedProps.Action $rule.Action
-        } catch {
-            Add-DriftDetail $driftCollection "Firewall" $ruleName "Enabled" $expectedProps.Enabled "NOT_FOUND_OR_ERROR"
+        foreach ($ruleName in $firewallRulesToTest.Keys) {
+            $expectedProps = $firewallRulesToTest[$ruleName]
+            try {
+                $rule = Get-NetFirewallRule -DisplayName $ruleName -ErrorAction Stop
+                Add-DriftDetail $driftCollection "Firewall" $ruleName "Enabled" $expectedProps.Enabled $rule.Enabled
+                Add-DriftDetail $driftCollection "Firewall" $ruleName "Direction" $expectedProps.Direction $rule.Direction
+                Add-DriftDetail $driftCollection "Firewall" $ruleName "Action" $expectedProps.Action $rule.Action
+            } catch {
+                Add-DriftDetail $driftCollection "Firewall" $ruleName "Enabled" $expectedProps.Enabled "NOT_FOUND_OR_ERROR"
+            }
         }
     }
 
     # 4. Audit Policy Checks (Basic - from Set-AuditPolicies.ps1)
-    Write-Log "Checking Audit Policies..."
-    $auditSubcategoriesToTest = @{
-        "Process Creation" = "Success" # Expected: Success, or Success and Failure
-        "Credential Validation" = "Success,Failure"
-    }
-    try {
-        # Get all audit policy settings. This requires admin rights.
-        $auditPolOutput = auditpol /get /category:* /r # CSV output
-        # Very basic parsing - this can be fragile
-        foreach($line in ($auditPolOutput | Where-Object {$_ -match "System,"})){ #Focus on System policy area
-            $parts = $line.Split(',')
-            if($parts.Length -ge 4){
-                $machine = $parts[0]
-                $policyArea = $parts[1] # e.g. System
-                $subcategoryNameFromAuditPol = $parts[2].Trim('"') # Subcategory Name
-                $currentSetting = $parts[3].Trim('"') # Inclusion Setting
+    if ($SkipAuditPolicyChecks) {
+        Write-Log "Skipping audit policy checks per configuration." -Level "INFO"
+    } else {
+        Write-Log "Checking Audit Policies..."
+        $auditSubcategoriesToTest = @{}
+        if ($baselineAuditPolicies -and $baselineAuditPolicies.Count -gt 0) {
+            foreach ($ap in $baselineAuditPolicies) {
+                $auditSubcategoriesToTest[$ap.Name] = $ap.Setting
+            }
+        } else {
+            $auditSubcategoriesToTest = @{
+                "Process Creation" = "Success"
+                "Credential Validation" = "Success,Failure"
+            }
+        }
 
-                foreach($definedSubcategoryKey in $auditSubcategoriesToTest.Keys){
-                    # Convert defined key (e.g. "Process Creation") to match auditpol output if needed, or assume direct match
-                    if($subcategoryNameFromAuditPol -eq $definedSubcategoryKey){
-                        $expectedSetting = $auditSubcategoriesToTest[$definedSubcategoryKey]
-                        
-                        # Normalize settings for comparison (e.g. "Success and Failure" vs "Success,Failure")
-                        $normalizedCurrent = $currentSetting -replace " and ", ","
-                        $normalizedExpected = $expectedSetting -replace " and ", ","
+        try {
+            $auditPolOutput = auditpol /get /category:* /r
+            foreach($line in ($auditPolOutput | Where-Object {$_ -match "System,"})){ # Focus on System policy area
+                $parts = $line.Split(',')
+                if($parts.Length -ge 4){
+                    $subcategoryNameFromAuditPol = $parts[2].Trim('"')
+                    $currentSetting = $parts[3].Trim('"')
 
-                        Add-DriftDetail $driftCollection "AuditPolicy" $definedSubcategoryKey "Setting" $normalizedExpected $normalizedCurrent
+                    foreach($definedSubcategoryKey in $auditSubcategoriesToTest.Keys){
+                        if($subcategoryNameFromAuditPol -eq $definedSubcategoryKey){
+                            $expectedSetting = $auditSubcategoriesToTest[$definedSubcategoryKey]
+                            $normalizedCurrent = $currentSetting -replace " and ", ","
+                            $normalizedExpected = $expectedSetting -replace " and ", ","
+
+                            Add-DriftDetail $driftCollection "AuditPolicy" $definedSubcategoryKey "Setting" $normalizedExpected $normalizedCurrent
+                        }
                     }
                 }
             }
-        }
-    } catch {
-        Write-Log "Failed to retrieve or parse audit policy. Error: $($_.Exception.Message)" -Level "ERROR"
-        foreach($definedSubcategoryKey in $auditSubcategoriesToTest.Keys){
-             Add-DriftDetail $driftCollection "AuditPolicy" $definedSubcategoryKey "Setting" $auditSubcategoriesToTest[$definedSubcategoryKey] "ERROR_RETRIEVING_POLICY"
+        } catch {
+            Write-Log "Failed to retrieve or parse audit policy. Error: $($_.Exception.Message)" -Level "ERROR"
+            foreach($definedSubcategoryKey in $auditSubcategoriesToTest.Keys){
+                 Add-DriftDetail $driftCollection "AuditPolicy" $definedSubcategoryKey "Setting" $auditSubcategoriesToTest[$definedSubcategoryKey] "ERROR_RETRIEVING_POLICY"
+            }
         }
     }
     
     # Determine overall drift status
-    $overallDriftDetected = $driftCollection | Where-Object { $_.Status -eq "Drifted" } | Select-Object -First 1
-    $overallDriftDetected = [bool]$overallDriftDetected # Cast to boolean
+    $overallDriftDetected = ($driftCollection | Where-Object { $_.Status -eq "Drifted" } | Measure-Object).Count -gt 0
 
     $result = @{
         ServerName    = $ServerName

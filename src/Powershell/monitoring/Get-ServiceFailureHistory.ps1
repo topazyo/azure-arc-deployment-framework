@@ -18,27 +18,8 @@ param (
     [string]$LogPath = "C:\ProgramData\AzureArcFramework\Logs\ServiceFailureHistory_Activity.log"
 )
 
-# --- Logging Function (for script activity) ---
-function Write-Log {
-    param (
-        [string]$Message,
-        [string]$Level = "INFO", # INFO, WARNING, ERROR
-        [string]$Path = $LogPath
-    )
-    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-    $logEntry = "[$timestamp] [$Level] $Message"
-    
-    try {
-        if (-not (Test-Path (Split-Path $Path -Parent))) {
-            New-Item -ItemType Directory -Path (Split-Path $Path -Parent) -Force -ErrorAction Stop | Out-Null
-        }
-        Add-Content -Path $Path -Value $logEntry -ErrorAction Stop
-    }
-    catch {
-        Write-Warning "Failed to write to activity log file $Path. Error: $($_.Exception.Message). Logging to console instead."
-        Write-Host $logEntry
-    }
-}
+# --- Logging (shared utility) ---
+. (Join-Path $PSScriptRoot '..\utils\Write-Log.ps1')
 
 # --- Helper to Extract Service Name from Event ---
 function Get-ServiceNameFromEvent {
@@ -153,8 +134,8 @@ try {
             Write-Log "No service failure events found in System log for the specified criteria."
         }
     }
-    catch [System.Management.Automation.भूतियाException] { 
-         Write-Log "Failed to query System log on '$ServerName'. Log might be inaccessible. Error: $($_.Exception.Message)" -Level "WARNING"
+    catch [System.Diagnostics.Eventing.Reader.EventLogNotFoundException],[System.UnauthorizedAccessException] { 
+        Write-Log "Failed to query System log on '$ServerName'. Log might be inaccessible. Error: $($_.Exception.Message)" -Level "WARNING"
     }
     catch { 
         Write-Log "An error occurred while querying System log on '$ServerName'. Error: $($_.Exception.Message)" -Level "ERROR"

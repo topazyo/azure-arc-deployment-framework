@@ -146,6 +146,12 @@ The framework integrates AI capabilities and core deployment functionalities thr
     *   **Error Handling**: Includes checks for Python executable, Python script path, script execution errors (non-zero exit code), and JSON parsing failures. Error details from the Python script (if available in stderr) are logged.
 -   **Other AI Functions** (e.g., `Start-ArcTroubleshooter`, `Invoke-AIPatternAnalysis`, `Start-AIEnhancedTroubleshooting`): These functions provide further AI-driven capabilities for diagnostics and analysis. Refer to their respective help or source for detailed parameters. The module manifest (`AzureArcFramework.psd1`) is the source of truth for exported function names like `Start-ArcTroubleshooter`.
 
+-   **Remediation Workflow (`Start-AIRemediationWorkflow.ps1`)**:
+    *   **Role**: Bridges diagnostics to remediation by chaining `Find-IssuePatterns` (pattern detection) and `Get-RemediationAction` (rule lookup) with validation and `Start-RemediationAction` execution. Emits telemetry counts for pattern/action detection.
+    *   **Inputs**: Diagnostics or telemetry object (or path), optional JSON rule packs for issue patterns and remediation mappings (`-IssuePatternDefinitionsPath`, `-RemediationRulesPath`), and optional validation rules (`-ValidationRulesPath`). Defaults fall back to built-in patterns/rules if paths are omitted.
+    *   **Behavior**: Resolves `IssueId` → `RemediationActionId`, merges derived validation with rule-defined steps, executes actions in `Automatic` or `ManualApproval` mode, and returns a summary containing `PatternsDetected`, `ActionsResolved`, and `ActionsExecuted` alongside per-action results.
+    *   **Extensibility**: Pattern operators support equals/contains as well as `StartsWith`, `EndsWith`, and numeric thresholds; remediation rules can be supplied via JSON to avoid code changes and align with CI fixtures.
+
 ### 2. Automation Integration
 
 ```powershell

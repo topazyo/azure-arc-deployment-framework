@@ -20,6 +20,18 @@ Function Get-AIPredictions {
         [string]$PredictionType = 'Classification', # Hint for interpreting output, not heavily used in this version
 
         [Parameter(Mandatory=$false)]
+        [string]$OnnxInputName,
+
+        [Parameter(Mandatory=$false)]
+        [string[]]$OnnxFeatureOrder,
+
+        [Parameter(Mandatory=$false)]
+        [hashtable]$FeatureSchema,
+
+        [Parameter(Mandatory=$false)]
+        [string[]]$ClassLabels,
+
+        [Parameter(Mandatory=$false)]
         [string]$LogPath = "C:\ProgramData\AzureArcFramework\Logs\GetAIPredictions_Activity.log"
     )
 
@@ -46,6 +58,40 @@ Function Get-AIPredictions {
     }
 
     Write-Log "Starting Get-AIPredictions script. InputFeatures count: $($InputFeatures.Count), ModelType: $ModelType."
+
+    function Get-OrderedFeatureValues {
+        param(
+            [Parameter(Mandatory=$true)] [object]$Item,
+            [Parameter(Mandatory=$true)] [string[]]$Order,
+            [Parameter()] [hashtable]$Schema,
+            [Parameter(Mandatory=$true)] [ref]$Missing
+        )
+
+        $values = [System.Collections.Generic.List[float]]::new()
+        foreach ($name in $Order) {
+            $raw = $null
+            if ($Item.PSObject.Properties[$name]) {
+                $raw = $Item.$name
+            } elseif ($Schema -and $Schema[$name] -and $Schema[$name].ContainsKey('default')) {
+                $raw = $Schema[$name].default
+            }
+
+            if ($null -eq $raw -or $raw -eq '') {
+                $Missing.Value.Add($name) | Out-Null
+                $values.Add(0.0) | Out-Null
+                continue
+            }
+
+            try {
+                $values.Add([float]$raw) | Out-Null
+            } catch {
+                $Missing.Value.Add($name) | Out-Null
+                $values.Add(0.0) | Out-Null
+            }
+        }
+
+        return $values.ToArray()
+    }
 
     if (-not $ModelObject) {
         Write-Log "ModelObject is null. Cannot proceed with predictions." -Level "ERROR"
@@ -80,20 +126,31 @@ Function Get-AIPredictions {
             switch ($ModelType) {
                 'ONNX' {
                     Write-Log "Attempting prediction with ONNX model."
-                    if (-not ($ModelObject -is [Microsoft.ML.OnnxRuntime.InferenceSession])) {
+                    $onnxSessionType = [type]::GetType('Microsoft.ML.OnnxRuntime.InferenceSession')
+                    $supportsOnnx = ($onnxSessionType -and ($ModelObject -is $onnxSessionType)) -or ($ModelObject.PSObject.Methods.Name -contains 'Run' -and $ModelObject.PSObject.Properties.Name -contains 'InputMetadata')
+                    if (-not $supportsOnnx) {
                         $currentPredictionResult.Status = "Error"
-                        $currentPredictionResult.ErrorDetails = "ModelObject is not a valid ONNX InferenceSession. Type: $($ModelObject.GetType().FullName)"
+                        $currentPredictionResult.ErrorDetails = "ModelObject is not an ONNX-compatible session (missing Run/InputMetadata). Type: $($ModelObject.GetType().FullName)"
                         Write-Log $currentPredictionResult.ErrorDetails -Level "ERROR"
                         $allPredictions.Add($currentPredictionResult) | Out-Null
                         continue # Next featureVectorItem
                     }
 
-                    # --- ONNX Input Preparation (Simplified Best-Effort) ---
-                    # 1. Extract numerical features and order them by name for consistency
-                    $numericalFeatureValues = [System.Collections.Generic.List[float]]::new()
-                    $featureVectorItem.PSObject.Properties | Where-Object { $_.Value -is [int] -or $_.Value -is [double] -or $_.Value -is [float] -or $_.Value -is [long] } | Sort-Object Name | ForEach-Object {
-                        $numericalFeatureValues.Add([float]$_.Value)
+                    # --- ONNX Input Preparation (configurable) ---
+                    # 1. Resolve feature order using override -> schema -> model metadata -> alphabetical properties
+                    $inferredOrder = @()
+                    if ($OnnxFeatureOrder -and $OnnxFeatureOrder.Count -gt 0) {
+                        $inferredOrder = $OnnxFeatureOrder
+                    } elseif ($FeatureSchema) {
+                        $inferredOrder = $FeatureSchema.Keys
+                    } elseif ($ModelObject.PSObject.Properties['InputMetadata'] -and $ModelObject.InputMetadata.Keys.Count -gt 0) {
+                        $inferredOrder = $ModelObject.InputMetadata.Keys
+                    } else {
+                        $inferredOrder = $featureVectorItem.PSObject.Properties.Name | Sort-Object
                     }
+
+                    $missingNames = [System.Collections.Generic.List[string]]::new()
+                    $numericalFeatureValues = Get-OrderedFeatureValues -Item $featureVectorItem -Order $inferredOrder -Schema $FeatureSchema -Missing ([ref]$missingNames)
 
                     if ($numericalFeatureValues.Count -eq 0) {
                         $currentPredictionResult.Status = "Error"
@@ -103,11 +160,15 @@ Function Get-AIPredictions {
                         continue 
                     }
                     
-                    Write-Log "Extracted $($numericalFeatureValues.Count) numerical features for ONNX input." -Level "DEBUG"
+                    if ($missingNames.Count -gt 0) {
+                        Write-Log "Missing or defaulted feature values: $($missingNames -join ', ')" -Level "WARNING"
+                    }
+                    
+                    Write-Log "Extracted $($numericalFeatureValues.Count) numerical features for ONNX input in order: $($inferredOrder -join ', ')." -Level "DEBUG"
                     Write-Log "ONNX Input Preparation Warning: This script uses a simplified approach. Input tensor name, shape, type, and feature order must align with the specific ONNX model requirements." -Level "WARNING"
 
-                    # 2. Determine input node name (heuristic: use the first one)
-                    $inputNodeName = $ModelObject.InputMetadata.Keys[0]
+                    # 2. Determine input node name (overrideable)
+                    $inputNodeName = if (-not [string]::IsNullOrWhiteSpace($OnnxInputName)) { $OnnxInputName } elseif ($ModelObject.PSObject.Properties['InputMetadata'] -and $ModelObject.InputMetadata.Keys.Count -gt 0) { $ModelObject.InputMetadata.Keys[0] } else { $null }
                     if ([string]::IsNullOrWhiteSpace($inputNodeName)) {
                         $currentPredictionResult.Status = "Error"
                         $currentPredictionResult.ErrorDetails = "Could not determine input node name from ONNX model metadata."
@@ -119,17 +180,39 @@ Function Get-AIPredictions {
 
                     # 3. Define shape (heuristic: [1, number of features])
                     $shape = [long[]](1, $numericalFeatureValues.Count)
+
+                    # 4. Create DenseTensor (fallback to raw array if OnnxRuntime not available)
+                    $inputTensor = $numericalFeatureValues
+                    try {
+                        $denseType = [type]::GetType('Microsoft.ML.OnnxRuntime.DenseTensor`1[[System.Single]]')
+                        if ($denseType) {
+                            $inputTensor = New-Object Microsoft.ML.OnnxRuntime.DenseTensor[float]($numericalFeatureValues, $shape)
+                        } else {
+                            Write-Log "DenseTensor type not available; using raw float array." -Level "WARNING"
+                        }
+                    } catch {
+                        Write-Log "Failed to construct DenseTensor; using raw float array. Error: $($_.Exception.Message)" -Level "WARNING"
+                        $inputTensor = $numericalFeatureValues
+                    }
                     
-                    # 4. Create DenseTensor
-                    $inputTensor = New-Object Microsoft.ML.OnnxRuntime.DenseTensor[float]($numericalFeatureValues.ToArray(), $shape)
-                    
-                    # 5. Create NamedOnnxValue
-                    $onnxInputs = [System.Collections.Generic.List[Microsoft.ML.OnnxRuntime.NamedOnnxValue]]::new()
-                    $onnxInputs.Add([Microsoft.ML.OnnxRuntime.NamedOnnxValue]::CreateFromTensor($inputNodeName, $inputTensor))
+                    # 5. Create NamedOnnxValue (fallback to lightweight payload if type missing)
+                    $onnxInputs = [System.Collections.Generic.List[object]]::new()
+                    try {
+                        $namedType = [type]::GetType('Microsoft.ML.OnnxRuntime.NamedOnnxValue')
+                        if ($namedType) {
+                            $onnxInputs.Add([Microsoft.ML.OnnxRuntime.NamedOnnxValue]::CreateFromTensor($inputNodeName, $inputTensor))
+                        } else {
+                            $onnxInputs.Add([pscustomobject]@{ Name = $inputNodeName; Tensor = $inputTensor })
+                            Write-Log "NamedOnnxValue type not available; using simplified input payload." -Level "WARNING"
+                        }
+                    } catch {
+                        $onnxInputs.Add([pscustomobject]@{ Name = $inputNodeName; Tensor = $inputTensor })
+                        Write-Log "Failed to construct NamedOnnxValue; using simplified input payload. Error: $($_.Exception.Message)" -Level "WARNING"
+                    }
 
                     # 6. Run Inference
                     Write-Log "Running ONNX inference..."
-                    $results = $ModelObject.Run($onnxInputs) # This returns IDisposableReadOnlyCollection<DisposableNamedOnnxValue>
+                    $results = $ModelObject.Run($onnxInputs) # This returns IDisposableReadOnlyCollection<DisposableNamedOnnxValue> or a compatible object
                     
                     # 7. Process Output Tensor (highly model-specific)
                     # Assuming the first output tensor contains the prediction.
@@ -138,31 +221,44 @@ Function Get-AIPredictions {
                     
                     # Example for classification: output might be probabilities or a class label.
                     # This part is extremely model dependent.
-                    if ($outputValue.ValueType -eq "Tensor") {
-                        if ($outputValue.ElementType -eq "System.Single") { # float
-                             $predictionArray = $outputValue.AsTensor[float]().ToArray()
-                             # For classification, this might be an array of probabilities for each class.
-                             # Find the index of the max probability.
-                             $maxProb = $predictionArray | Measure-Object -Maximum | Select-Object -ExpandProperty Maximum
-                             $predictedClassIndex = [array]::IndexOf($predictionArray, $maxProb)
-                             $currentPredictionResult.Prediction = "Class_$predictedClassIndex" # Example output
-                             $currentPredictionResult.Probability = $maxProb
-                        } elseif ($outputValue.ElementType -eq "System.Int64") { # int64 for class labels
-                             $predictionArray = $outputValue.AsTensor[long]().ToArray()
-                             $currentPredictionResult.Prediction = "Class_$($predictionArray[0])" # Assuming direct class label
-                             $currentPredictionResult.Probability = 1.0 # If direct label, confidence might be assumed or not applicable
-                        } else {
-                             $currentPredictionResult.Prediction = "Output tensor type $($outputValue.ElementType) not processed by this script."
-                             Write-Log $currentPredictionResult.Prediction -Level "WARNING"
+                    $predictionArray = $null
+                    if ($outputValue.PSObject.Methods.Name -contains 'AsTensor') {
+                        try {
+                            $tensor = $outputValue.AsTensor()
+                            if ($tensor -is [System.Array]) {
+                                $predictionArray = [float[]]$tensor
+                            } elseif ($tensor -is [System.Collections.IEnumerable]) {
+                                $predictionArray = @($tensor)
+                            }
+                        } catch {
+                            Write-Log "AsTensor invocation failed: $($_.Exception.Message)" -Level "WARNING"
                         }
+                    }
+
+                    if (-not $predictionArray -and $outputValue.PSObject.Properties['Data']) {
+                        $predictionArray = [float[]]$outputValue.Data
+                    }
+
+                    if (-not $predictionArray -and $outputValue.ValueType -eq "Tensor" -and $outputValue.ElementType -eq "System.Int64") {
+                        try { $predictionArray = [long[]]$outputValue.AsTensor() } catch { }
+                    }
+
+                    if ($predictionArray -and $predictionArray.Count -gt 0) {
+                        $maxProb = $predictionArray | Measure-Object -Maximum | Select-Object -ExpandProperty Maximum
+                        $predictedClassIndex = [array]::IndexOf($predictionArray, $maxProb)
+                        $predictedLabel = if ($ClassLabels -and $ClassLabels.Count -gt $predictedClassIndex -and $ClassLabels[$predictedClassIndex]) { $ClassLabels[$predictedClassIndex] } else { "Class_$predictedClassIndex" }
+                        $currentPredictionResult.Prediction = $predictedLabel
+                        $currentPredictionResult.Probability = $maxProb
                     } else {
-                         $currentPredictionResult.Prediction = "Output value type $($outputValue.ValueType) not processed."
-                         Write-Log $currentPredictionResult.Prediction -Level "WARNING"
+                        $currentPredictionResult.Prediction = "Output could not be interpreted as a tensor."
+                        Write-Log $currentPredictionResult.Prediction -Level "WARNING"
                     }
 
                     $currentPredictionResult.Status = "Success"
                     Write-Log "ONNX prediction successful."
-                    $results.Dispose() # Dispose of the results collection
+                    if ($results -and $results.PSObject.Methods.Name -contains 'Dispose') {
+                        $results.Dispose() # Dispose of the results collection when supported
+                    }
                 }
                 'CustomPSObject' {
                     Write-Log "Attempting prediction with CustomPSObject model."

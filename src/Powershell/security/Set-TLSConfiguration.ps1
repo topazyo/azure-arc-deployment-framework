@@ -9,18 +9,24 @@ param (
     [bool]$BackupRegistry = $true
 )
 
-# Function for logging messages
-function Write-Log {
-    param (
-        [string]$Message,
-        [string]$Level = "INFO"
-    )
-    Write-Host "[$Level] $Message"
+# --- Logging (shared utility) ---
+$ScriptRoot = if ($PSScriptRoot) {
+    $PSScriptRoot
+} elseif ($PSCommandPath) {
+    Split-Path -Parent $PSCommandPath
+} elseif ($MyInvocation.MyCommand.Path) {
+    Split-Path -Parent $MyInvocation.MyCommand.Path
+} else {
+    (Get-Location).Path
+}
+
+if (-not (Get-Command Write-Log -ErrorAction SilentlyContinue)) {
+    . (Join-Path $ScriptRoot '..\utils\Write-Log.ps1')
 }
 
 # Define paths
-$ScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $ConfigFile = Join-Path -Path $ScriptRoot -ChildPath "..\..\config\security-baseline.json" # Adjusted path
+$ConfigFile = [System.IO.Path]::GetFullPath($ConfigFile)
 
 # --- Registry Backup Function ---
 function Backup-RegistryKeys {
@@ -109,8 +115,10 @@ try {
         if (-not (Test-Path -Path $clientKeyPath)) {
             New-Item -Path $clientKeyPath -Force | Out-Null
         }
-        Set-ItemProperty -Path $clientKeyPath -Name "DisabledByDefault" -Value (if ($protocolConfig.enabled) { 0 } else { 1 }) -Type DWord -Force
-        Set-ItemProperty -Path $clientKeyPath -Name "Enabled" -Value (if ($protocolConfig.enabled) { 1 } else { 0 }) -Type DWord -Force
+        $clientDisabledByDefault = if ($protocolConfig.enabled) { 0 } else { 1 }
+        $clientEnabled = if ($protocolConfig.enabled) { 1 } else { 0 }
+        Set-ItemProperty -Path $clientKeyPath -Name "DisabledByDefault" -Value $clientDisabledByDefault -Force
+        Set-ItemProperty -Path $clientKeyPath -Name "Enabled" -Value $clientEnabled -Force
         Write-Log "Configured $protocolName Client: Enabled=$($protocolConfig.enabled)"
 
         # Server settings
@@ -118,8 +126,10 @@ try {
         if (-not (Test-Path -Path $serverKeyPath)) {
             New-Item -Path $serverKeyPath -Force | Out-Null
         }
-        Set-ItemProperty -Path $serverKeyPath -Name "DisabledByDefault" -Value (if ($protocolConfig.enabled) { 0 } else { 1 }) -Type DWord -Force
-        Set-ItemProperty -Path $serverKeyPath -Name "Enabled" -Value (if ($protocolConfig.enabled) { 1 } else { 0 }) -Type DWord -Force
+        $serverDisabledByDefault = if ($protocolConfig.enabled) { 0 } else { 1 }
+        $serverEnabled = if ($protocolConfig.enabled) { 1 } else { 0 }
+        Set-ItemProperty -Path $serverKeyPath -Name "DisabledByDefault" -Value $serverDisabledByDefault -Force
+        Set-ItemProperty -Path $serverKeyPath -Name "Enabled" -Value $serverEnabled -Force
         Write-Log "Configured $protocolName Server: Enabled=$($protocolConfig.enabled)"
     }
 
@@ -130,7 +140,7 @@ try {
         foreach ($cipherSuiteName in $TlsSettings.cipherSuites.disallowed) {
             $cipherKeyPath = Join-Path -Path $SchannelCiphersKey -ChildPath $cipherSuiteName
             if (Test-Path -Path $cipherKeyPath) { # Only try to disable if it exists
-                Set-ItemProperty -Path $cipherKeyPath -Name "Enabled" -Value 0 -Type DWord -Force
+                Set-ItemProperty -Path $cipherKeyPath -Name "Enabled" -Value 0 -Force
                 Write-Log "Disabled cipher suite: $cipherSuiteName"
             } else {
                 Write-Log "Cipher suite $cipherSuiteName not found, skipping disable." -Level "WARNING"
@@ -142,7 +152,7 @@ try {
     if ($TlsSettings.cipherSuites.allowed) {
         Write-Log "Setting cipher suite order..."
         try {
-            Set-ItemProperty -Path $CryptographyConfigKey -Name "Functions" -Value $TlsSettings.cipherSuites.allowed -Type MultiString -Force
+            Set-ItemProperty -Path $CryptographyConfigKey -Name "Functions" -Value $TlsSettings.cipherSuites.allowed -Force
             Write-Log "Successfully set cipher suite order."
         }
         catch {
@@ -160,16 +170,16 @@ try {
 
         # .NET v4.0.30319
         if (-not (Test-Path -Path $DotNetFrameworkKey)) { New-Item -Path $DotNetFrameworkKey -Force | Out-Null }
-        Set-ItemProperty -Path $DotNetFrameworkKey -Name "SchUseStrongCrypto" -Value $schUseStrongCrypto -Type DWord -Force
+        Set-ItemProperty -Path $DotNetFrameworkKey -Name "SchUseStrongCrypto" -Value $schUseStrongCrypto -Force
         Write-Log "Set $DotNetFrameworkKey\SchUseStrongCrypto to $schUseStrongCrypto"
-        Set-ItemProperty -Path $DotNetFrameworkKey -Name "SystemDefaultTlsVersions" -Value $systemDefaultTlsVersions -Type DWord -Force
+        Set-ItemProperty -Path $DotNetFrameworkKey -Name "SystemDefaultTlsVersions" -Value $systemDefaultTlsVersions -Force
         Write-Log "Set $DotNetFrameworkKey\SystemDefaultTlsVersions to $systemDefaultTlsVersions"
 
         # .NET v4.0.30319 (Wow6432Node)
         if (-not (Test-Path -Path $DotNetFrameworkWow6432NodeKey)) { New-Item -Path $DotNetFrameworkWow6432NodeKey -Force | Out-Null }
-        Set-ItemProperty -Path $DotNetFrameworkWow6432NodeKey -Name "SchUseStrongCrypto" -Value $schUseStrongCrypto -Type DWord -Force
+        Set-ItemProperty -Path $DotNetFrameworkWow6432NodeKey -Name "SchUseStrongCrypto" -Value $schUseStrongCrypto -Force
         Write-Log "Set $DotNetFrameworkWow6432NodeKey\SchUseStrongCrypto to $schUseStrongCrypto"
-        Set-ItemProperty -Path $DotNetFrameworkWow6432NodeKey -Name "SystemDefaultTlsVersions" -Value $systemDefaultTlsVersions -Type DWord -Force
+        Set-ItemProperty -Path $DotNetFrameworkWow6432NodeKey -Name "SystemDefaultTlsVersions" -Value $systemDefaultTlsVersions -Force
         Write-Log "Set $DotNetFrameworkWow6432NodeKey\SystemDefaultTlsVersions to $systemDefaultTlsVersions"
     }
 

@@ -5,6 +5,7 @@ import logging
 from datetime import datetime
 from .model_trainer import ArcModelTrainer
 from .predictor import ArcPredictor
+from .ArcRemediationLearner import ArcRemediationLearner
 from ..analysis.pattern_analyzer import PatternAnalyzer
 
 class PredictiveAnalyticsEngine:
@@ -16,6 +17,7 @@ class PredictiveAnalyticsEngine:
         self.trainer = None
         self.predictor = None
         self.pattern_analyzer = None
+        self.remediation_learner = None
         self.setup_logging()
         self.initialize_components()
 
@@ -31,9 +33,31 @@ class PredictiveAnalyticsEngine:
     def initialize_components(self):
         """Initialize all AI components"""
         try:
-            self.trainer = ArcModelTrainer(self.config) # This already passes the PAE's config
-            self.predictor = ArcPredictor(model_dir=self.model_dir, config=self.config) # Pass PAE's config to ArcPredictor
-            self.pattern_analyzer = PatternAnalyzer(self.config) # This already passes the PAE's config
+            # Config is either:
+            # - aiComponents (preferred) with sub-keys like model_config/pattern_analyzer_config, OR
+            # - a "comprehensive" config with those sub-keys at top-level, OR
+            # - a model_config-like object (contains features/models directly).
+            model_config = self.config.get('model_config')
+            if model_config is None and 'features' in self.config and 'models' in self.config:
+                model_config = self.config
+            if model_config is None:
+                model_config = {}
+
+            pa_config = self.config.get('pattern_analyzer_config', {})
+            remediation_learner_config = self.config.get('remediation_learner_config', {})
+
+            self.trainer = ArcModelTrainer(model_config)
+            self.predictor = ArcPredictor(model_dir=self.model_dir, config=self.config)
+            self.pattern_analyzer = PatternAnalyzer(config=pa_config)
+            self.remediation_learner = ArcRemediationLearner(config=remediation_learner_config)
+            try:
+                self.remediation_learner.initialize_ai_components(self.config, self.model_dir)
+            except Exception as remediation_exc:
+                self.logger.warning(
+                    "Remediation learner initialization failed: %s. Continuing without learner.",
+                    remediation_exc,
+                )
+
             self.logger.info("All components initialized successfully")
         except Exception as e:
             self.logger.error(f"Component initialization failed: {str(e)}")
@@ -74,6 +98,34 @@ class PredictiveAnalyticsEngine:
         except Exception as e:
             self.logger.error(f"Risk analysis failed: {str(e)}")
             raise
+
+    def record_remediation_outcome(
+        self,
+        remediation_payload: Dict[str, Any],
+        consume_retrain_queue: bool = False,
+    ) -> Dict[str, Any]:
+        """Pass remediation outcomes to the learner and surface retrain signals."""
+        if not self.remediation_learner:
+            return {"status": "disabled", "reason": "remediation_learner not initialized"}
+
+        self.remediation_learner.learn_from_remediation(remediation_payload)
+        pending = (
+            self.remediation_learner.consume_pending_retrain_requests()
+            if consume_retrain_queue
+            else self.remediation_learner.peek_pending_retrain_requests()
+        )
+
+        return {
+            "status": "processed",
+            "trainer_response": self.remediation_learner.trainer_last_response,
+            "pending_retrain_requests": pending,
+        }
+
+    def export_retrain_requests(self, output_path: str, consume: bool = False) -> Dict[str, Any]:
+        """Persist pending retrain requests to disk for orchestration workflows."""
+        if not self.remediation_learner:
+            return {"status": "disabled", "reason": "remediation_learner not initialized"}
+        return self.remediation_learner.export_pending_retrain_requests(output_path, consume=consume)
 
     def _calculate_overall_risk(
         self,
@@ -181,8 +233,16 @@ class PredictiveAnalyticsEngine:
         """Generate comprehensive recommendations based on all analyses"""
         recommendations = []
 
+        healthy_prob = health.get('prediction', {}).get('healthy_probability')
+        unhealthy_prob = health.get('prediction', {}).get('unhealthy_probability')
+        if unhealthy_prob is None and healthy_prob is not None:
+            try:
+                unhealthy_prob = 1 - float(healthy_prob)
+            except Exception:
+                unhealthy_prob = None
+
         # Add health-based recommendations
-        if health['prediction']['unhealthy_probability'] > 0.3:
+        if unhealthy_prob is not None and unhealthy_prob > 0.3:
             recommendations.extend(self._get_health_recommendations(health))
 
         # Add failure prevention recommendations
@@ -236,16 +296,30 @@ class PredictiveAnalyticsEngine:
 
     def _get_pattern_recommendations(self, patterns: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Generate pattern-based recommendations"""
-        recommendations = []
-        for pattern_type, pattern_data in patterns.items():
-            if isinstance(pattern_data, dict) and pattern_data.get('recommendations'):
-                recommendations.extend([
-                    {
-                        'category': 'Pattern',
-                        'action': rec['action'],
-                        'priority': rec.get('priority', 0.5),
-                        'details': rec.get('details', '')
-                    }
-                    for rec in pattern_data['recommendations']
-                ])
+        def iter_recs(obj: Any) -> List[Dict[str, Any]]:
+            collected: List[Dict[str, Any]] = []
+            if isinstance(obj, dict):
+                recs = obj.get('recommendations')
+                if isinstance(recs, list):
+                    for rec in recs:
+                        if isinstance(rec, dict):
+                            collected.append(rec)
+                for v in obj.values():
+                    collected.extend(iter_recs(v))
+            elif isinstance(obj, list):
+                for item in obj:
+                    collected.extend(iter_recs(item))
+            return collected
+
+        recommendations: List[Dict[str, Any]] = []
+        for rec in iter_recs(patterns):
+            recommendations.append(
+                {
+                    'category': 'Pattern',
+                    'action': rec.get('action', ''),
+                    'priority': rec.get('priority', 0.5),
+                    'details': rec.get('details', ''),
+                }
+            )
+
         return recommendations

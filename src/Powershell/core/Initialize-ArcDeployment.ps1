@@ -90,8 +90,15 @@ function Initialize-ArcDeployment {
                     throw "Resource group creation failed."
                 }
             } else {
+                # Under -WhatIf, ShouldProcess returns $false and emits the WhatIf message for us.
+                # Treat this as a successful dry-run (non-throwing) and return placeholder output.
                 Write-Warning "Resource group creation skipped due to -WhatIf or user declining confirmation."
-                throw "Resource group creation skipped."
+                $resourceGroup = [pscustomobject]@{
+                    ResourceGroupName  = $ResourceGroupName
+                    Location           = $Location
+                    ProvisioningState  = 'WhatIf'
+                    Tags               = $Tags
+                }
             }
         } elseif ($Tags.Count -gt 0) {
              if ($PSCmdlet.ShouldProcess("Resource Group '$ResourceGroupName'", "Update Tags")) {

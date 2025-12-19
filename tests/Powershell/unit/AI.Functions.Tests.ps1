@@ -1,7 +1,9 @@
 # tests/Powershell/unit/AI.Functions.Tests.ps1
 using namespace System.Collections.Generic
 
-Import-Module -Name Pester -MinimumVersion 5.0.0 -Force
+if (-not (Get-Module -Name Pester)) {
+    Import-Module -Name Pester -MinimumVersion 5.0.0
+}
 
 Describe "Get-PredictiveInsights AI Function" {
     # Helper script block for mocking python executable check
@@ -26,11 +28,13 @@ Describe "Get-PredictiveInsights AI Function" {
     }
 
     BeforeEach {
+        $env:ARC_AI_FORCE_MOCKS = '1'
+        Remove-Item Env:ARC_AI_FORCE_PYTHON_FAIL -ErrorAction SilentlyContinue
         # Default Mocks for successful path
-        Mock Test-Path { param($Path) return $true } -ModuleName Test-Path # Assume script path is valid by default
+        Mock Test-Path { param($Path) return $true } # Assume script path is valid by default
         # Mock the python version check to succeed by default
-        Mock python { Invoke-Command -ScriptBlock $MockPythonCheck -ArgumentList "python", "--version" } -ModuleName python
-        Mock python3 { Invoke-Command -ScriptBlock $MockPythonCheck -ArgumentList "python3", "--version" } -ModuleName python3
+        Mock python { Invoke-Command -ScriptBlock $MockPythonCheck -ArgumentList "python", "--version" }
+        Mock python3 { Invoke-Command -ScriptBlock $MockPythonCheck -ArgumentList "python3", "--version" }
 
         # Mock Start-Process to simulate successful Python script execution
         Mock Start-Process {
@@ -39,39 +43,42 @@ Describe "Get-PredictiveInsights AI Function" {
             Set-Content -Path "stdout.txt" -Value '{"overall_risk": {"score": 0.5, "level": "Medium"}, "recommendations": []}'
             Set-Content -Path "stderr.txt" -Value "" # Empty stderr
             return [pscustomobject]@{ ExitCode = 0 } # Simulate successful exit
-        } -ModuleName Start-Process
+        }
 
         Mock Get-Content {
             param($Path)
             if ($Path -eq "stdout.txt") {
-                return Get-Content -LiteralPath "stdout.txt" -Raw # Read actual temp content
+                return Microsoft.PowerShell.Management\Get-Content -LiteralPath "stdout.txt" -Raw # Read actual temp content
             } elseif ($Path -eq "stderr.txt") {
-                return Get-Content -LiteralPath "stderr.txt" -Raw
+                return Microsoft.PowerShell.Management\Get-Content -LiteralPath "stderr.txt" -Raw
             }
-        } -ModuleName Get-Content
+        }
 
-        Mock Remove-Item { } -ModuleName Remove-Item # Mock Remove-Item to do nothing for temp files
+        Mock Remove-Item { } # Mock Remove-Item to do nothing for temp files
     }
 
     AfterEach {
+        Remove-Item Env:ARC_AI_FORCE_MOCKS -ErrorAction SilentlyContinue
+        Remove-Item Env:ARC_AI_FORCE_PYTHON_FAIL -ErrorAction SilentlyContinue
         # Clean up any temp files that might have been created if not mocked away by Remove-Item
         if (Test-Path "stdout.txt") { Remove-Item "stdout.txt" -Force }
         if (Test-Path "stderr.txt") { Remove-Item "stderr.txt" -Force }
     }
 
     It "should THROW if AI Engine script is not found" {
-        Mock Test-Path { param($Path) return $false } -ModuleName Test-Path # Override default to simulate not found
+        Mock Test-Path { param($Path) return $false } # Override default to simulate not found
         { Get-PredictiveInsights -ServerName "server01" } | Should -Throw "AI Engine script not found."
-        Should -Invoke -CommandName Test-Path -Times 1 -ModuleName Test-Path # Checks resolved path
+        Should -Invoke -CommandName Test-Path -Times 1 # Checks resolved path
     }
 
     It "should THROW if Python executable is not found" {
+        $env:ARC_AI_FORCE_PYTHON_FAIL = '1'
         # Mock python and python3 to throw, simulating they are not found or not working
-        Mock python   { throw "python not found" } -ModuleName python
-        Mock python3  { throw "python3 not found" } -ModuleName python3
+        Mock python   { throw "python not found" }
+        Mock python3  { throw "python3 not found" }
         { Get-PredictiveInsights -ServerName "server01" } | Should -Throw "Python executable not found."
-        Should -Invoke -CommandName python -Times 1 -ModuleName python # Tries 'python' first
-        Should -Invoke -CommandName python3 -Times 1 -ModuleName python3 # Then 'python3'
+        Should -Invoke -CommandName python -Times 1 # Tries 'python' first
+        Should -Invoke -CommandName python3 -Times 1 # Then 'python3'
     }
 
     It "should successfully execute and parse valid JSON output from Python script" {
@@ -86,16 +93,16 @@ Describe "Get-PredictiveInsights AI Function" {
         $result.PSServerName | Should -Be $server # Check added PS parameters
         $result.PSAnalysisType | Should -Be $analysis
 
-        Should -Invoke -CommandName Start-Process -Times 1 -ModuleName Start-Process -ParameterFilter {
-            $ArgumentList -match "--servername `"$server`"" -and $ArgumentList -match "--analysistype `"$analysis`""
+        Should -Invoke -CommandName Start-Process -Times 1 -ParameterFilter {
+            $ArgumentList[2] -eq "--servername" -and $ArgumentList[3] -eq "`"$server`"" -and $ArgumentList[4] -eq "--analysistype" -and $ArgumentList[5] -eq "`"$analysis`""
         }
-        Should -Invoke -CommandName Get-Content -Times 2 -ModuleName Get-Content # Once for stdout, once for stderr
-        Should -Invoke -CommandName Remove-Item -Times 2 -ModuleName Remove-Item # For stdout.txt and stderr.txt
+        Should -Invoke -CommandName Get-Content -Times 2 # Once for stdout, once for stderr
+        Should -Invoke -CommandName Remove-Item -Times 2 # For stdout.txt and stderr.txt
     }
 
     It "should THROW if Python script returns non-zero exit code and provides stderr" {
         $errMsg = "Python script error"
-        Mock Start-Process -ModuleName Start-Process -MockWith {
+        Mock Start-Process -MockWith {
             Set-Content "stdout.txt" -Value ""
             Set-Content "stderr.txt" -Value $errMsg
             return [pscustomobject]@{ ExitCode = 1 }
@@ -106,7 +113,7 @@ Describe "Get-PredictiveInsights AI Function" {
 
     It "should return structured error if Python script returns non-zero exit code and stderr is JSON" {
         $errorJson = '{"error": "PythonDetailedError", "details": "Something specific failed"}'
-        Mock Start-Process -ModuleName Start-Process -MockWith {
+        Mock Start-Process -MockWith {
             Set-Content "stdout.txt" -Value ""
             Set-Content "stderr.txt" -Value $errorJson
             return [pscustomobject]@{ ExitCode = 1 }
@@ -118,7 +125,7 @@ Describe "Get-PredictiveInsights AI Function" {
     }
 
     It "should THROW if Python script returns zero exit code but empty stdout" {
-        Mock Start-Process -ModuleName Start-Process -MockWith {
+        Mock Start-Process -MockWith {
             Set-Content "stdout.txt" -Value ""
             Set-Content "stderr.txt" -Value ""
             return [pscustomobject]@{ ExitCode = 0 }
@@ -127,7 +134,7 @@ Describe "Get-PredictiveInsights AI Function" {
     }
 
     It "should THROW if Python script returns zero exit code but invalid JSON in stdout" {
-        Mock Start-Process -ModuleName Start-Process -MockWith {
+        Mock Start-Process -MockWith {
             Set-Content "stdout.txt" -Value "This is not JSON"
             Set-Content "stderr.txt" -Value ""
             return [pscustomobject]@{ ExitCode = 0 }
@@ -146,12 +153,12 @@ Describe "Get-PredictiveInsights AI Function" {
                 Set-Content -Path "stdout.txt" -Value ('{"overall_risk": {"score": 0.3, "level": "Low"}, "analysis_type_processed": "' + $ArgumentList[5].Trim('"') + '" }') # Python script echoes analysistype
                 Set-Content -Path "stderr.txt" -Value ""
                 return [pscustomobject]@{ ExitCode = 0 }
-            } -ModuleName Start-Process -Verifiable
+            } -Verifiable
 
             $result = Get-PredictiveInsights -ServerName $server -AnalysisType $aType
             $result.analysis_type_processed | Should -Be $aType
-            Should -Invoke -CommandName Start-Process -Times 1 -ModuleName Start-Process -ParameterFilter {
-                 $ArgumentList -match "--servername `"$server`"" -and $ArgumentList -match "--analysistype `"$aType`""
+            Should -Invoke -CommandName Start-Process -Times 1 -ParameterFilter {
+                  $ArgumentList[2] -eq "--servername" -and $ArgumentList[3] -eq "`"$server`"" -and $ArgumentList[4] -eq "--analysistype" -and $ArgumentList[5] -eq "`"$aType`""
             }
         }
     }
@@ -161,9 +168,8 @@ Describe "Get-PredictiveInsights AI Function" {
         $customScriptPath = "C:\custom\scripts\invoke_ai_engine.py"
 
         Mock Test-Path { param($Path) return $true } # Ensure Test-Path returns true for custom paths
-        Mock $customPython { Invoke-Command -ScriptBlock $MockPythonCheck -ArgumentList $customPython, "--version" } -ModuleName $customPython
-        Mock Start-Process {
-             param($FilePath, $ArgumentList)
+           Mock Start-Process {
+               param($FilePath, $ArgumentList, $Wait, $NoNewWindow, $PassThru, $RedirectStandardOutput, $RedirectStandardError, $ErrorAction)
              # Verify that the custom python and script path are used
              $FilePath | Should -Be $customPython
              $ArgumentList[0].Trim('"') | Should -Be $customScriptPath # ArgumentList[0] is the script path
@@ -171,9 +177,9 @@ Describe "Get-PredictiveInsights AI Function" {
              Set-Content "stdout.txt" -Value "{}"
              Set-Content "stderr.txt" -Value ""
              return [pscustomobject]@{ ExitCode = 0 }
-        } -Verifiable -ModuleName Start-Process
+           } -Verifiable
 
         Get-PredictiveInsights -ServerName "serverX" -PythonExecutable $customPython -ScriptPath $customScriptPath | Should -Not -BeNull
-        Should -Invoke -CommandName Start-Process -Times 1 -ModuleName Start-Process
+        Should -Invoke -CommandName Start-Process -Times 1
     }
 }

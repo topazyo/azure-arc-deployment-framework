@@ -1,0 +1,51 @@
+{
+  "Logs": {
+    "System": null,
+    "AMA": null,
+    "Security": null,
+    "Arc": null
+  },
+  "ArcStatus": {
+    "Configuration": {
+      "Version": "1.0"
+    },
+    "StartType": "Automatic",
+    "LastHeartbeat": "2025-12-16T08:15:19.0379918+02:00",
+    "Dependencies": null,
+    "ServiceStatus": "Running"
+  },
+  "DetailedAnalysis": {},
+  "SystemState": {
+    "OS": {
+      "Version": "10.0.19041"
+    }
+  },
+  "Connectivity": {
+    "NetworkPaths": null,
+    "AMA": {
+      "Success": true
+    },
+    "Arc": {
+      "Success": true
+    },
+    "Proxy": {
+      "Proxy": null
+    }
+  },
+  "AMAStatus": {
+    "DCRStatus": {
+      "State": "Enabled"
+    },
+    "Configuration": {
+      "Version": "1.0"
+    },
+    "StartType": "Automatic",
+    "DataCollection": {
+      "Status": "Active",
+      "LastHeartbeat": "2025-12-16T08:20:19.0543603+02:00"
+    },
+    "ServiceStatus": "Running"
+  },
+  "ServerName": "TEST-SERVER",
+  "Timestamp": "2025-12-16T08:20:18.9929604+02:00"
+}

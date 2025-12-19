@@ -68,30 +68,88 @@ Function Get-RemediationAction {
         Write-Log "Using hardcoded remediation rule definitions."
         $remediationRules = @(
             @{
-                AppliesToId = "ServiceCrashUnexpected" # MatchedIssueId
+                AppliesToId = "ServiceCrashUnexpected"
                 RemediationActionId = "REM_RestartService_Generic"
-                Title = "Attempt Generic Service Restart"
-                Description = "Attempts to restart the service that was reported as crashed."
-                ImplementationType = "Function" # Placeholder for a local function or module function
-                TargetFunction = "Restart-AffectedService"
-                # Parameter value is a string path to the property in the $item.MatchedItem object
-                Parameters = @{ ServiceNameFromEvent = '$InputContext.MatchedItem.Properties[0].Value' } # Assumes EventData[0] has service name for 7034
+                Title = "Restart impacted service"
+                Description = "Restart the service that terminated unexpectedly and verify it reaches Running state."
+                ImplementationType = "Manual"
+                TargetFunction = ""
+                Parameters = @{ ServiceName = '$InputContext.MatchedItem.ServiceName' }
                 ConfirmationRequired = $true
                 Impact = "Medium"
-                SuccessCriteria = "Service should be in 'Running' state after execution."
-                RollbackScript = "Stop-Service -Name '$($InputContext.MatchedItem.Properties[0].Value)'" # Example, needs context
+                SuccessCriteria = "Service reports Running and dependent workloads recover."
             },
             @{
-                AppliesToId = "RCA_ServiceCrash_Dependency" # RootCauseRuleId
-                RemediationActionId = "REM_CheckServiceDependencies"
-                Title = "Check and Restart Service Dependencies"
-                Description = "Identifies and attempts to start known dependencies of the crashed service."
-                ImplementationType = "Manual" # Or a more complex script
-                TargetScriptPath = "" 
-                Parameters = @{ CrashedServiceName = '$InputContext.OriginalIssue.MatchedItem.Properties[0].Value' }
+                AppliesToId = "ServiceRestartLoop"
+                RemediationActionId = "REM_CheckServiceRecoveryOptions"
+                Title = "Inspect service recovery options"
+                Description = "Review failure actions, restart delay, and dependency health for a flapping service."
+                ImplementationType = "Manual"
+                TargetScriptPath = ""
+                Parameters = @{ ServiceName = '$InputContext.MatchedItem.ServiceName' }
                 ConfirmationRequired = $true
                 Impact = "Medium"
-                SuccessCriteria = "Dependencies are running, primary service can start."
+                SuccessCriteria = "Service remains stable for multiple restart intervals."
+            },
+            @{
+                AppliesToId = "RCA_ServiceCrash_Dependency"
+                RemediationActionId = "REM_CheckServiceDependencies"
+                Title = "Check and restart dependencies"
+                Description = "Identify failed dependencies and bring them online before retrying the primary service."
+                ImplementationType = "Manual"
+                TargetScriptPath = ""
+                Parameters = @{ CrashedServiceName = '$InputContext.OriginalIssue.MatchedItem.ServiceName' }
+                ConfirmationRequired = $true
+                Impact = "Medium"
+                SuccessCriteria = "Dependencies and primary service are Running."
+            },
+            @{
+                AppliesToId = "ExtensionInstallFailure"
+                RemediationActionId = "REM_RetryExtensionDeployment"
+                Title = "Retry extension deployment"
+                Description = "Retry the failed Arc/guest extension with prerequisite checks (network, permissions, disk)."
+                ImplementationType = "Manual"
+                TargetScriptPath = ""
+                Parameters = @{ ExtensionName = '$InputContext.MatchedItem.ExtensionName' }
+                ConfirmationRequired = $true
+                Impact = "Medium"
+                SuccessCriteria = "Extension reports ProvisioningState=Succeeded."
+            },
+            @{
+                AppliesToId = "ArcAgentDisconnected"
+                RemediationActionId = "REM_RestartArcAgent"
+                Title = "Restart Arc agent services"
+                Description = "Restart himds/AzureConnectedMachineAgent and verify heartbeat recovery."
+                ImplementationType = "Manual"
+                TargetScriptPath = ""
+                Parameters = @{ Services = @('himds','AzureConnectedMachineAgent') }
+                ConfirmationRequired = $true
+                Impact = "High"
+                SuccessCriteria = "Heartbeat events resume; resource status is Connected."
+            },
+            @{
+                AppliesToId = "CertificateExpiringSoon"
+                RemediationActionId = "REM_RenewCertificate"
+                Title = "Renew expiring certificate"
+                Description = "Renew or reissue certificates nearing expiration and update bound services."
+                ImplementationType = "Manual"
+                TargetScriptPath = ""
+                Parameters = @{ CertificateName = '$InputContext.MatchedItem.Thumbprint' }
+                ConfirmationRequired = $true
+                Impact = "Medium"
+                SuccessCriteria = "New certificate is present and bound; expiration > 180 days."
+            },
+            @{
+                AppliesToId = "PolicyAssignmentNonCompliant"
+                RemediationActionId = "REM_ReapplyPolicyAssignment"
+                Title = "Re-apply policy remediation"
+                Description = "Trigger policy remediation task or rerun baselines for non-compliant assignments."
+                ImplementationType = "Manual"
+                TargetScriptPath = ""
+                Parameters = @{ PolicyName = '$InputContext.MatchedItem.PolicyName' }
+                ConfirmationRequired = $true
+                Impact = "Medium"
+                SuccessCriteria = "Policy reports Compliant after remediation task."
             },
             @{
                 AppliesToId = "LowDiskSpaceSystemDrive"
@@ -100,10 +158,46 @@ Function Get-RemediationAction {
                 Description = "Initiates cleanmgr.exe with automated settings for system drive cleanup."
                 ImplementationType = "Executable"
                 TargetScriptPath = "cleanmgr.exe"
-                Parameters = @{ Args = "/sagerun:1"} # Assumes a sagerun profile 1 is configured for temp files
+                Parameters = @{ Args = "/sagerun:1"}
                 ConfirmationRequired = $true
                 Impact = "Low"
                 SuccessCriteria = "Disk space on C: increases measurably."
+            },
+            @{
+                AppliesToId = "LowDiskSpaceSystemDrive"
+                RemediationActionId = "REM_ClearTempFiles"
+                Title = "Clear temporary files and package cache"
+                Description = "Delete temp folders, old logs, and package caches contributing to low disk space."
+                ImplementationType = "Manual"
+                TargetScriptPath = ""
+                Parameters = @{ TargetDrive = 'C:' }
+                ConfirmationRequired = $true
+                Impact = "Low"
+                SuccessCriteria = "System drive free space exceeds alert threshold."
+            },
+            @{
+                AppliesToId = "DNSResolutionFailure"
+                RemediationActionId = "REM_TestDNS"
+                Title = "Test DNS resolution and switch to fallback resolver"
+                Description = "Run nslookup/dig against primary and fallback resolvers; adjust DNS servers if primary fails."
+                ImplementationType = "Manual"
+                TargetScriptPath = ""
+                Parameters = @{ PrimaryResolver = '$InputContext.MatchedItem.DNSServer' }
+                ConfirmationRequired = $true
+                Impact = "Medium"
+                SuccessCriteria = "Name resolution succeeds for required endpoints."
+            },
+            @{
+                AppliesToId = "CPUSustainedHigh"
+                RemediationActionId = "REM_CaptureTopProcesses"
+                Title = "Capture top CPU consumers"
+                Description = "Collect top processes/threads and assess runaway workloads before mitigation."
+                ImplementationType = "Manual"
+                TargetScriptPath = ""
+                Parameters = @{ SampleSeconds = 60 }
+                ConfirmationRequired = $true
+                Impact = "Low"
+                SuccessCriteria = "CPU pressure relieved or offending process identified."
             }
         )
         Write-Log "Loaded $($remediationRules.Count) hardcoded remediation rules."
@@ -124,6 +218,8 @@ Function Get-RemediationAction {
             $lookupId = $item.PotentialRootCauses[0].RootCauseRuleId
         } elseif ($item.PSObject.Properties['MatchedIssueId']) {
             $lookupId = $item.MatchedIssueId
+        } elseif ($item.PSObject.Properties['IssueId']) {
+            $lookupId = $item.IssueId
         } else {
             Write-Log "Could not determine a suitable LookupID from input item: $($item | Out-String -Depth 1)" -Level "WARNING"
             continue
@@ -140,21 +236,29 @@ Function Get-RemediationAction {
 
             Write-Log "Rule '$($rule.RemediationActionId)' matches LookupID '$lookupId'." -Level "DEBUG"
             $resolvedParameters = @{}
-            if ($rule.Parameters -is [hashtable]) {
-                foreach ($paramName in $rule.Parameters.Keys) {
-                    $paramValueOrPath = $rule.Parameters[$paramName]
-                    if ($paramValueOrPath -is [string] -and $paramValueOrPath.StartsWith('$InputContext.')) {
-                        $expression = $paramValueOrPath.Replace('$InputContext', '$inputContextForParameterResolution')
-                        try {
-                            $resolvedParameters[$paramName] = Invoke-Expression $expression
-                            Write-Log "Resolved parameter '$paramName' to '$($resolvedParameters[$paramName])' from expression '$expression'." -Level "DEBUG"
-                        } catch {
-                            Write-Log "Failed to resolve parameter '$paramName' using expression '$expression'. Error: $($_.Exception.Message)" -Level "WARNING"
-                            $resolvedParameters[$paramName] = $paramValueOrPath # Keep original path as value if resolution fails
-                        }
-                    } else {
-                        $resolvedParameters[$paramName] = $paramValueOrPath # Static value
+            $parameterBag = @{}
+            if ($rule.PSObject.Properties['Parameters']) {
+                $rawParams = $rule.Parameters
+                if ($rawParams -is [hashtable]) {
+                    $parameterBag = $rawParams
+                } elseif ($rawParams -is [psobject]) {
+                    foreach ($p in $rawParams.PSObject.Properties) { $parameterBag[$p.Name] = $p.Value }
+                }
+            }
+
+            foreach ($paramName in $parameterBag.Keys) {
+                $paramValueOrPath = $parameterBag[$paramName]
+                if ($paramValueOrPath -is [string] -and $paramValueOrPath.StartsWith('$InputContext.')) {
+                    $expression = $paramValueOrPath.Replace('$InputContext', '$inputContextForParameterResolution')
+                    try {
+                        $resolvedParameters[$paramName] = Invoke-Expression $expression
+                        Write-Log "Resolved parameter '$paramName' to '$($resolvedParameters[$paramName])' from expression '$expression'." -Level "DEBUG"
+                    } catch {
+                        Write-Log "Failed to resolve parameter '$paramName' using expression '$expression'. Error: $($_.Exception.Message)" -Level "WARNING"
+                        $resolvedParameters[$paramName] = $paramValueOrPath # Keep original path as value if resolution fails
                     }
+                } else {
+                    $resolvedParameters[$paramName] = $paramValueOrPath # Static value
                 }
             }
 
@@ -166,7 +270,7 @@ Function Get-RemediationAction {
                 TargetScriptPath = $rule.TargetScriptPath
                 TargetFunction = $rule.TargetFunction
                 ResolvedParameters = $resolvedParameters
-                ConfirmationRequired = if($rule.PSObject.Properties.Contains('ConfirmationRequired')) { $rule.ConfirmationRequired } else { $true } # Default to true
+                ConfirmationRequired = if($rule.PSObject.Properties['ConfirmationRequired']) { $rule.ConfirmationRequired } else { $true }
                 Impact = $rule.Impact
                 SuccessCriteria = $rule.SuccessCriteria
                 RollbackScript = $rule.RollbackScript # May need parameter resolution too

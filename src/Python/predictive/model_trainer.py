@@ -24,6 +24,8 @@ class ArcModelTrainer:
         self.models: Dict[str, Any] = {}
         self.scalers: Dict[str, StandardScaler] = {}
         self.feature_importance: Dict[str, Dict[str, Any]] = {} # Stores names and importances
+        # Buffer for remediation samples awaiting a full retrain cycle
+        self.remediation_buffer: Dict[str, List[Dict[str, Any]]] = {}
         self.setup_logging()
 
     def setup_logging(self):
@@ -35,11 +37,24 @@ class ArcModelTrainer:
         )
         self.logger = logging.getLogger('ArcModelTrainer')
 
-    def prepare_data(self, data: pd.DataFrame, model_type: str) -> Tuple[Optional[np.ndarray], Optional[pd.Series], List[str]]:
+    def prepare_data(self, data: pd.DataFrame, model_type: str) -> Tuple[np.ndarray, Optional[pd.Series], List[str]]:
         """Prepare data for training specific model types.
-        Returns scaled features, target, and the list of feature names used, in order.
-        Returns (None, None, []) if preparation fails.
+
+        Returns:
+            (X_scaled, y_or_none, feature_names)
+
+        Raises:
+            ValueError for invalid inputs or missing required config/data.
         """
+        if data is None:
+            raise ValueError("data must not be None")
+        if not isinstance(data, pd.DataFrame):
+            raise ValueError("data must be a pandas DataFrame")
+        if data.empty:
+            raise ValueError("data must not be empty")
+        if not model_type:
+            raise ValueError("model_type must be provided")
+
         try:
             # Select features based on model type
             feature_config = self.config['features'][model_type]
@@ -51,8 +66,7 @@ class ArcModelTrainer:
                                     f"Missing: {set(feature_config['required_features']) - set(actual_features_to_use)}")
 
             if not actual_features_to_use:
-                self.logger.error(f"No required features for {model_type} found in data. Cannot prepare data.")
-                return None, None, []
+                raise ValueError(f"No required features for {model_type} found in data")
 
             features_df = data[actual_features_to_use].copy() # Use .copy() to avoid SettingWithCopyWarning later
             
@@ -67,17 +81,15 @@ class ArcModelTrainer:
             # Prepare target variable if not anomaly detection
             if model_type != 'anomaly_detection':
                 if feature_config['target_column'] not in data.columns:
-                    self.logger.error(f"Target column '{feature_config['target_column']}' for {model_type} not found in data.")
-                    return None, None, []
+                    raise ValueError(f"Target column '{feature_config['target_column']}' for {model_type} not found in data")
                 target = data[feature_config['target_column']]
                 return scaled_features, target, actual_features_to_use
             
             return scaled_features, None, actual_features_to_use
 
         except Exception as e:
-            self.logger.error(f"Data preparation failed for {model_type}: {str(e)}")
             self.logger.error(f"Data preparation failed for {model_type}: {str(e)}", exc_info=True)
-            return None, None, []
+            raise
 
 
     def handle_missing_values(self, df: pd.DataFrame, strategy: str, model_type: str) -> pd.DataFrame:
@@ -122,6 +134,10 @@ class ArcModelTrainer:
         """Trains the health prediction model using configured algorithm."""
         model_type = 'health_prediction'
         self.logger.info(f"Starting training for {model_type} model...")
+        if data is None:
+            raise ValueError("data must not be None")
+        if not isinstance(data, pd.DataFrame):
+            raise ValueError("data must be a pandas DataFrame")
         try:
             # Configuration for this model type
             model_type_config = self.config.get('models', {}).get(model_type, {})
@@ -134,10 +150,6 @@ class ArcModelTrainer:
             model_algorithm = model_type_config.get('algorithm', 'RandomForestClassifier') # Default to RF
 
             X_scaled, y, feature_names = self.prepare_data(data, model_type)
-
-            if X_scaled is None or y is None:
-                self.logger.error(f"Data preparation failed for {model_type}. Skipping training.")
-                return
             if len(np.unique(y)) < 2 :
                  self.logger.error(f"Target variable for {model_type} has less than 2 unique classes. Classification model cannot be trained. Unique values: {np.unique(y)}")
                  return
@@ -192,19 +204,21 @@ class ArcModelTrainer:
 
         except Exception as e:
             self.logger.error(f"{model_type} model training failed: {str(e)}", exc_info=True)
+            raise
 
     def train_anomaly_detection_model(self, data: pd.DataFrame) -> None:
         """Trains the anomaly detection model."""
         model_type = 'anomaly_detection'
         self.logger.info(f"Starting training for {model_type} model...")
+        if data is None:
+            raise ValueError("data must not be None")
+        if not isinstance(data, pd.DataFrame):
+            raise ValueError("data must be a pandas DataFrame")
         try:
             model_params = self.config.get('models', {}).get(model_type, {})
             random_state = self.config.get('random_state', 42)
 
             X_scaled, _, feature_names = self.prepare_data(data, model_type)
-            if X_scaled is None:
-                self.logger.error(f"Data preparation failed for {model_type}. Skipping training.")
-                return
             if X_scaled.shape[0] == 0:
                 self.logger.error(f"No data available for training {model_type} after preparation. Skipping.")
                 return
@@ -226,20 +240,23 @@ class ArcModelTrainer:
 
         except Exception as e:
             self.logger.error(f"{model_type} model training failed: {str(e)}", exc_info=True)
+            raise
 
     def train_failure_prediction_model(self, data: pd.DataFrame) -> None:
         """Trains the failure prediction model."""
         model_type = 'failure_prediction'
         self.logger.info(f"Starting training for {model_type} model...")
+        if data is None:
+            raise ValueError("data must not be None")
+        if not isinstance(data, pd.DataFrame):
+            raise ValueError("data must be a pandas DataFrame")
+
         try:
             model_params = self.config.get('models', {}).get(model_type, {})
             test_split_ratio = self.config.get('test_split_ratio', 0.2)
             random_state = self.config.get('random_state', 42)
 
             X_scaled, y, feature_names = self.prepare_data(data, model_type)
-            if X_scaled is None or y is None:
-                self.logger.error(f"Data preparation failed for {model_type}. Skipping training.")
-                return
             if len(np.unique(y)) < 2 :
                  self.logger.error(f"Target variable for {model_type} has less than 2 unique classes. Classification model cannot be trained. Unique values: {np.unique(y)}")
                  return
@@ -268,10 +285,13 @@ class ArcModelTrainer:
 
         except Exception as e:
             self.logger.error(f"{model_type} model training failed: {str(e)}", exc_info=True)
+            raise
 
     def save_models(self, output_dir: str) -> None:
         """Save trained models, scalers, and feature importance data."""
         try:
+            if output_dir is None or not isinstance(output_dir, str) or not output_dir.strip():
+                raise ValueError("output_dir must be a non-empty string")
             os.makedirs(output_dir, exist_ok=True)
             self.logger.info(f"Saving models to directory: {output_dir}")
 
@@ -296,25 +316,98 @@ class ArcModelTrainer:
             self.logger.error(f"Failed to save models: {str(e)}", exc_info=True)
             raise # Re-raise to indicate failure in saving
 
-    def update_models_with_remediation(self, remediation_data: Dict[str, Any]) -> None:
-        """Placeholder method for updating models with remediation data. Currently logs receipt of data and warns that full retraining logic is not implemented."""
+    def update_models_with_remediation(self, remediation_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Queue remediation samples for future retraining and validate inputs.
+
+        The current models (RandomForest/IsolationForest) do not support online updates.
+        This method buffers structured remediation samples and surfaces intent so callers
+        can trigger a full retrain pipeline when enough data has accrued.
+        """
+        response: Dict[str, Any] = {
+            "status": "rejected",
+            "reason": "unspecified",
+            "queued_count": 0,
+        }
+
         try:
-            self.logger.info(f"Received remediation data for learning: {remediation_data.get('action')}")
-            self.logger.warning("Full retraining logic for models with new remediation data is not yet implemented. Models were not updated.")
-            # Pseudocode from prompt:
-            # model_type_to_update = "failure_prediction" # or determine based on remediation_data
-            # if model_type_to_update in self.models:
-            #     self.logger.info(f"Attempting to update {model_type_to_update} model with remediation data.")
-            #     # 1. Convert remediation_data to feature vector and target
-            #     # This is highly dependent on the structure of remediation_data and model features
-            #     # X_sample, y_sample = self._preprocess_remediation_for_model(remediation_data, model_type_to_update)
-            #
-            #     # 2. If valid sample obtained:
-            #     # self.logger.info("New sample processed. Retraining model (simulation).")
-            #     # This would require access to the original full dataset to append and retrain,
-            #     # or a strategy for online learning if the model supports it.
-            # else:
-            #     self.logger.warning(f"Model type {model_type_to_update} not found for updating.")
+            if not isinstance(remediation_data, dict):
+                response["reason"] = "remediation_data must be a dict"
+                return response
+
+            model_type = str(remediation_data.get("model_type", "failure_prediction"))
+            if not model_type:
+                response["reason"] = "model_type missing"
+                return response
+
+            features_payload = remediation_data.get("features") or remediation_data.get("context")
+            if not isinstance(features_payload, dict) or not features_payload:
+                response["reason"] = "features missing or not a dict"
+                return response
+
+            target_value = remediation_data.get("target")
+            # Target is optional; if provided, require it to be int/bool/float
+            if target_value is not None and not isinstance(target_value, (int, float, bool)):
+                response["reason"] = "target must be numeric/bool if provided"
+                return response
+
+            # Determine expected features from trained metadata if available
+            required_features: List[str] = self.feature_importance.get(model_type, {}).get("names", [])
+            feature_vector: Dict[str, float] = {}
+            if required_features:
+                for name in required_features:
+                    raw_val = features_payload.get(name)
+                    try:
+                        feature_vector[name] = float(raw_val) if raw_val is not None else 0.0
+                    except Exception:
+                        self.logger.warning(
+                            f"Could not convert remediation feature '{name}' value '{raw_val}' to float; defaulting to 0.0"
+                        )
+                        feature_vector[name] = 0.0
+            else:
+                # Fallback: take numeric-like entries from payload
+                for key, val in features_payload.items():
+                    if isinstance(val, (int, float, bool)):
+                        feature_vector[key] = float(val)
+
+            if not feature_vector:
+                response["reason"] = "no numeric features extracted"
+                return response
+
+            # Buffer the sample for later offline retraining
+            if model_type not in self.remediation_buffer:
+                self.remediation_buffer[model_type] = []
+            self.remediation_buffer[model_type].append({
+                "features": feature_vector,
+                "target": target_value,
+                "received_at": datetime.now().isoformat(),
+            })
+
+            threshold = int(self.config.get("remediation_update_batch_size", 10))
+            queued_count = len(self.remediation_buffer[model_type])
+            response.update({
+                "status": "queued",
+                "reason": "models require offline retrain; sample buffered",
+                "queued_count": queued_count,
+                "threshold": threshold,
+                "model_type": model_type,
+            })
+
+            if queued_count >= threshold:
+                # Signal that a full retrain should be initiated by a higher-level orchestrator
+                response["status"] = "retrain_required"
+                self.logger.info(
+                    f"Remediation buffer for {model_type} reached {queued_count} samples (threshold {threshold}). "
+                    "Trigger a full retrain with accumulated remediation data."
+                )
+            else:
+                self.logger.info(
+                    f"Buffered remediation sample for {model_type}. Count={queued_count}, threshold={threshold}."
+                )
+
+            return response
+
         except Exception as e:
             self.logger.error(f"Failed to process remediation data for model update: {str(e)}", exc_info=True)
-            # Do not re-raise, as this is a background learning process in the placeholder
+            response["status"] = "error"
+            response["reason"] = str(e)
+            return response

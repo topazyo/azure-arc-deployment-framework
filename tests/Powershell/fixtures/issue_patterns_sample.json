@@ -1,0 +1,33 @@
+{
+  "issuePatterns": [
+    {
+      "IssueId": "JSONDetected",
+      "Description": "Detected via JSON pattern file.",
+      "Severity": "High",
+      "SuggestedRemediationId": "REM_JSON_Action",
+      "DataSignatures": [
+        { "Property": "Message", "Operator": "Contains", "Value": "json-hit" }
+      ]
+    },
+    {
+      "IssueId": "CPUSustainedHighJson",
+      "Description": "CPU above threshold for prolonged period.",
+      "Severity": "Medium",
+      "SuggestedRemediationId": "REM_JSON_CPUCapture",
+      "DataSignatures": [
+        { "Property": "CpuPercentage", "Operator": "GreaterThanOrEqual", "Value": 90 },
+        { "Property": "DurationSeconds", "Operator": "GreaterThanOrEqual", "Value": 120 }
+      ]
+    },
+    {
+      "IssueId": "AgentPrefixDown",
+      "Description": "Arc agent message indicates disconnect using prefix string.",
+      "Severity": "High",
+      "SuggestedRemediationId": "REM_JSON_RestartAgent",
+      "DataSignatures": [
+        { "Property": "Message", "Operator": "StartsWith", "Value": "prefix:" },
+        { "Property": "Source", "Operator": "Contains", "Value": "AzureConnectedMachineAgent" }
+      ]
+    }
+  ]
+}

@@ -13,26 +13,27 @@ param (
     # In a real scenario, ensure C:\ProgramData\AzureArcFramework\Logs exists or create it.
 )
 
-# --- Logging Function ---
-function Write-Log {
-    param (
-        [string]$Message,
-        [string]$Level = "INFO", # INFO, WARNING, ERROR, DEBUG
-        [string]$Path = $LogPath
-    )
-    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-    $logEntry = "[$timestamp] [$Level] $Message"
-    
-    try {
-        if (-not (Test-Path (Split-Path $Path -Parent))) {
-            New-Item -ItemType Directory -Path (Split-Path $Path -Parent) -Force -ErrorAction Stop | Out-Null
-        }
-        Add-Content -Path $Path -Value $logEntry -ErrorAction Stop
-    }
-    catch {
-        Write-Warning "Failed to write to log file $Path. Error: $($_.Exception.Message). Logging to console instead."
-        Write-Host $logEntry
-    }
+# --- Logging (shared utility) ---
+$ScriptRoot = if ($PSScriptRoot) {
+    $PSScriptRoot
+} elseif ($PSCommandPath) {
+    Split-Path -Parent $PSCommandPath
+} elseif ($MyInvocation.MyCommand.Path) {
+    Split-Path -Parent $MyInvocation.MyCommand.Path
+} else {
+    (Get-Location).Path
+}
+
+if (-not (Get-Command Write-Log -ErrorAction SilentlyContinue)) {
+    . (Join-Path $ScriptRoot '..\utils\Write-Log.ps1')
+}
+
+if (-not (Get-Command Test-IsAdministrator -ErrorAction SilentlyContinue)) {
+    . (Join-Path $ScriptRoot '..\utils\Test-IsAdministrator.ps1')
+}
+
+if (-not (Get-Command Invoke-GetNetFirewallRule -ErrorAction SilentlyContinue)) {
+    . (Join-Path $ScriptRoot '..\utils\Invoke-NetFirewallRule.ps1')
 }
 
 # --- Backup Function ---
@@ -45,7 +46,7 @@ function Backup-FirewallPolicy {
         if (-not (Test-Path (Split-Path $BackupFilePath -Parent))) {
             New-Item -ItemType Directory -Path (Split-Path $BackupFilePath -Parent) -Force -ErrorAction Stop | Out-Null
         }
-        netsh advfirewall export "$BackupFilePath" | Out-Null
+        Invoke-Expression "netsh advfirewall export `"$BackupFilePath`"" | Out-Null
         Write-Log "Firewall policy successfully backed up to $BackupFilePath."
     }
     catch {
@@ -59,13 +60,12 @@ try {
     Write-Log "Starting firewall configuration script."
 
     # Check for Admin Privileges
-    if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+    if (-not (Test-IsAdministrator)) {
         Write-Log "This script requires Administrator privileges to manage firewall rules." -Level "ERROR"
         throw "Administrator privileges required."
     }
 
     # Define paths
-    $ScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
     $ConfigFile = Join-Path -Path $ScriptRoot -ChildPath "..\..\config\security-baseline.json"
 
     # Read configuration
@@ -99,6 +99,7 @@ try {
 
     # Process rules (Outbound and Inbound)
     foreach ($direction in @("outbound", "inbound")) {
+        $directionParam = if ($direction -eq 'outbound') { 'Outbound' } else { 'Inbound' }
         Write-Log "Processing $direction rules..."
         if ($FirewallSettings.$direction) {
             foreach ($ruleDef in $FirewallSettings.$direction) {
@@ -106,14 +107,14 @@ try {
                 Write-Log "Processing rule: '$ruleName' (Direction: $direction)"
 
                 try {
-                    $existingRule = Get-NetFirewallRule -DisplayName $ruleName -ErrorAction SilentlyContinue
+                    $existingRule = Invoke-GetNetFirewallRule -DisplayName $ruleName
 
                     $params = @{
                         DisplayName = $ruleName
-                        Direction   = $direction
+                        Direction   = $directionParam
                         Action      = if ($ruleDef.action) { $ruleDef.action } else { "Allow" } # Default to Allow
                         Protocol    = if ($ruleDef.protocol) { $ruleDef.protocol } else { "Any" } # Default to Any
-                        Enabled     = if ($null -ne $ruleDef.required) { [bool]$ruleDef.required } else { $true } # Default to enabled
+                        Enabled     = if ($null -ne $ruleDef.required) { if ([bool]$ruleDef.required) { 'True' } else { 'False' } } else { 'True' } # Default to enabled
                     }
 
                     if ($ruleDef.port) {
@@ -147,11 +148,11 @@ try {
                         Write-Log "Rule '$ruleName' already exists. Updating..."
                         # Note: Comparing all properties to see if an update is truly needed can be complex.
                         # For simplicity, we're using Set-NetFirewallRule, which will update if different.
-                        Set-NetFirewallRule -DisplayName $ruleName @params -ErrorAction Stop
+                        Invoke-SetNetFirewallRule -Params $params
                         Write-Log "Rule '$ruleName' updated successfully."
                     } else {
                         Write-Log "Rule '$ruleName' does not exist. Creating..."
-                        New-NetFirewallRule @params -ErrorAction Stop
+                        Invoke-NewNetFirewallRule -Params $params
                         Write-Log "Rule '$ruleName' created successfully."
                     }
                 }

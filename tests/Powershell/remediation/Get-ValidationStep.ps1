@@ -1,0 +1,1 @@
+param([pscustomobject]$RemediationAction,[string]$ValidationRulesPath,[string]$LogPath) return @([pscustomobject]@{ ValidationStepId = 'VAL_RULE'; RemediationActionId = $RemediationAction.RemediationActionId; Description = 'rule step'; ValidationType = 'ManualCheck'; ValidationTarget = 'Operator'; ExpectedResult = 'Confirmed'; ActualResult = ; Status = 'NotRun'; Parameters =  })

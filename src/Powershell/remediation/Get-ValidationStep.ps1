@@ -67,25 +67,41 @@ Function Get-ValidationStep {
         }
     }
 
-    # Check for a specific rule override first
-    $overrideRule = $validationRules | Where-Object { $_.AppliesToRemediationActionId -eq $RemediationAction.RemediationActionId } | Select-Object -First 1
-    
-    if ($overrideRule) {
-        Write-Log "Found override validation rule for '$($RemediationAction.RemediationActionId)' (RuleId: $($overrideRule.ValidationStepId | Get-Member -MemberType NoteProperty | Select-Object -ExpandProperty Name -Default 'N/A')). Using defined steps." # RuleId might not exist
-        # If the rule itself defines multiple steps, iterate them. Assume rule defines one step for now for simplicity.
-        $validationSteps.Add([PSCustomObject]@{
-            ValidationStepId    = $overrideRule.ValidationStepId # Or generate one
-            RemediationActionId = $RemediationAction.RemediationActionId
-            Description         = $overrideRule.Description
-            ValidationType      = $overrideRule.ValidationType
-            ValidationTarget    = $overrideRule.ValidationTarget
-            ExpectedResult      = $overrideRule.ExpectedResult
-            ActualResult        = $null
-            Status              = "NotRun"
-        }) | Out-Null
-        Write-Log "Added validation step from override rule: $($overrideRule | Out-String)" -Level "DEBUG"
-    } else {
-        Write-Log "No override rule found. Attempting to derive validation steps from RemediationAction.SuccessCriteria."
+    # Check for rule overrides and append/replace derived steps based on MergeBehavior
+    $overrideRules = $validationRules | Where-Object { $_.AppliesToRemediationActionId -eq $RemediationAction.RemediationActionId }
+    $mergeBehavior = "Replace"
+
+    if ($overrideRules -and $overrideRules.Count -gt 0) {
+        Write-Log "Found $($overrideRules.Count) validation rule(s) for '$($RemediationAction.RemediationActionId)'." -Level "DEBUG"
+        foreach ($overrideRule in $overrideRules) {
+            if ($overrideRule.PSObject.Properties['MergeBehavior']) { $mergeBehavior = $overrideRule.MergeBehavior }
+
+            $stepsToAdd = @()
+            if ($overrideRule.PSObject.Properties['Steps'] -and $overrideRule.Steps -is [System.Collections.IEnumerable]) {
+                $stepsToAdd = $overrideRule.Steps
+            } else {
+                $stepsToAdd = @($overrideRule)
+            }
+
+            foreach ($ruleStep in $stepsToAdd) {
+                $validationSteps.Add([PSCustomObject]@{
+                    ValidationStepId    = $ruleStep.ValidationStepId
+                    RemediationActionId = $RemediationAction.RemediationActionId
+                    Description         = $ruleStep.Description
+                    ValidationType      = $ruleStep.ValidationType
+                    ValidationTarget    = $ruleStep.ValidationTarget
+                    ExpectedResult      = $ruleStep.ExpectedResult
+                    ActualResult        = $null
+                    Status              = "NotRun"
+                    Parameters          = if ($ruleStep.PSObject.Properties['Parameters']) { $ruleStep.Parameters } else { $null }
+                }) | Out-Null
+            }
+        }
+        Write-Log "Added $($validationSteps.Count) validation step(s) from rule overrides (MergeBehavior=$mergeBehavior)." -Level "DEBUG"
+    }
+
+    if (-not $overrideRules -or $mergeBehavior -eq "AppendDerived") {
+        Write-Log "Deriving validation steps from RemediationAction.SuccessCriteria." -Level "DEBUG"
         $successCriteriaText = $RemediationAction.SuccessCriteria
         
         if ([string]::IsNullOrWhiteSpace($successCriteriaText)) {
@@ -99,6 +115,7 @@ Function Get-ValidationStep {
                 ExpectedResult      = "ConfirmationOfSuccess"
                 ActualResult        = $null
                 Status              = "NotRun"
+                Parameters          = $null
             }) | Out-Null
         } else {
             # Heuristic parsing of SuccessCriteria
@@ -129,6 +146,7 @@ Function Get-ValidationStep {
                         ValidationType      = "ServiceStateCheck"
                         ValidationTarget    = $serviceName
                         ExpectedResult      = $expectedState
+                        Parameters          = $null
                     }
                     Write-Log "Derived ServiceStateCheck for service '$serviceName', expected state '$expectedState'."
                 }
@@ -145,6 +163,7 @@ Function Get-ValidationStep {
                     ValidationType      = "EventLogQuery"
                     ValidationTarget    = $kqlQueryPlaceholder # This would be the KQL query or parameters for Get-WinEvent
                     ExpectedResult      = "EventFound"
+                          Parameters          = $null
                  }
                  Write-Log "Derived EventLogQuery for EventID '$eventId', Source '$eventSource'."
             }
@@ -159,6 +178,7 @@ Function Get-ValidationStep {
                     ValidationType      = "ManualCheck"
                     ValidationTarget    = "Operator/User based on criteria"
                     ExpectedResult      = "CriteriaMet"
+                    Parameters          = $null
                 }
             }
 
@@ -171,6 +191,7 @@ Function Get-ValidationStep {
                 ExpectedResult      = $derivedStep.ExpectedResult
                 ActualResult        = $null
                 Status              = "NotRun"
+                Parameters          = $derivedStep.Parameters
             }) | Out-Null
         }
     }

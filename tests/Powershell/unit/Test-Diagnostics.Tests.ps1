@@ -1,9 +1,40 @@
 BeforeAll {
-    . $PSScriptRoot/../../src/PowerShell/Core/Start-ArcDiagnostics.ps1
-    . $PSScriptRoot/../../src/PowerShell/Utils/Write-Log.ps1
+    Import-Module (Join-Path $PSScriptRoot '..\..\..\src\Powershell\AzureArcFramework.psd1') -Force
+    . (Join-Path $PSScriptRoot '..\..\..\src\Powershell\core\Start-ArcDiagnostics.ps1')
+    . (Join-Path $PSScriptRoot '..\..\..\src\Powershell\utils\Write-Log.ps1')
 
     $testServer = "TestServer"
     $testWorkspaceId = "TestWorkspaceId"
+    $env:ARC_DIAG_TESTDATA = '1'
+
+    # Ensure helper commands exist for mocking
+    $commandsToStub = @(
+        'Get-SystemState','Get-ArcAgentConfig','Get-LastHeartbeat','Get-AMAConfig','Get-DataCollectionStatus',
+        'Test-ArcConnectivity','Test-AMAConnectivity','Get-ProxyConfiguration','Test-NetworkPaths',
+        'Get-ArcAgentLogs','Get-AMALogs','Get-SystemLogs','Get-SecurityLogs','Get-DCRAssociationStatus',
+        'Test-CertificateTrust','Get-DetailedProxyConfig','Get-FirewallConfiguration','Get-PerformanceMetrics','Test-SecurityBaseline'
+    )
+    foreach ($cmd in $commandsToStub) {
+        if (-not (Get-Command -Name $cmd -ErrorAction SilentlyContinue)) {
+            Set-Item -Path "Function:global:$cmd" -Value ([scriptblock]::Create("throw 'Command $cmd must be mocked in unit tests.'"))
+        }
+    }
+
+    # Baseline mocks to keep diagnostics self-contained (overridden in contexts as needed)
+    Mock Get-SystemState { @{ OS = @{ Version = "10.0.17763"; BuildNumber = "17763" }; Hardware = @{ CPU = @{ LoadPercentage = 10 }; Memory = @{ AvailableGB = 16 } } } }
+    Mock Get-ArcAgentConfig { @{ Version = "1.0"; Settings = @{} } }
+    Mock Get-LastHeartbeat { (Get-Date).AddMinutes(-5) }
+    Mock Test-ArcConnectivity { @{ Success = $true } }
+    Mock Test-AMAConnectivity { @{ Success = $true } }
+    Mock Get-ProxyConfiguration { @{ ProxyServer = $null; ProxyPort = $null } }
+    Mock Test-NetworkPaths { @() }
+    Mock Get-ArcAgentLogs { @() }
+    Mock Get-AMALogs { @() }
+    Mock Get-SystemLogs { @() }
+    Mock Get-SecurityLogs { @() }
+    Mock Get-AMAConfig { @{ Version = "1.0" } }
+    Mock Get-DataCollectionStatus { @{ Status = "Active"; LastHeartbeat = (Get-Date) } }
+    Mock Get-DCRAssociationStatus { @{ State = "Enabled" } }
 }
 
 Describe 'Start-ArcDiagnostics' {
@@ -30,9 +61,15 @@ Describe 'Start-ArcDiagnostics' {
         }
 
         It 'Should handle system state collection failures' {
+            $env:ARC_DIAG_TESTDATA = '0'
             Mock Get-SystemState { throw "Collection error" }
 
-            $result = Start-ArcDiagnostics -ServerName $testServer
+            try {
+                $result = Start-ArcDiagnostics -ServerName $testServer
+            }
+            finally {
+                $env:ARC_DIAG_TESTDATA = '1'
+            }
             $result.Error | Should -Not -BeNullOrEmpty
         }
     }
@@ -189,10 +226,16 @@ Describe 'Start-ArcDiagnostics' {
         }
 
         It 'Should handle and log errors appropriately' {
+            $env:ARC_DIAG_TESTDATA = '0'
             Mock Write-Log { }
             Mock Get-SystemState { throw "Test error" }
 
-            $result = Start-ArcDiagnostics -ServerName $testServer
+            try {
+                $result = Start-ArcDiagnostics -ServerName $testServer
+            }
+            finally {
+                $env:ARC_DIAG_TESTDATA = '1'
+            }
             Should -Invoke Write-Log -ParameterFilter { 
                 $Level -eq 'Error' -and $Message -match 'Test error'
             }

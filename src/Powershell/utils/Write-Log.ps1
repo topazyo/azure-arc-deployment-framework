@@ -4,23 +4,42 @@ function Write-Log {
         [Parameter(Mandatory)]
         [string]$Message,
         [Parameter()]
-        [ValidateSet('Information', 'Warning', 'Error', 'Debug', 'Verbose')]
+        [ValidateSet('Information', 'Info', 'INFO', 'Warning', 'Warn', 'WARN', 'WARNING', 'Error', 'ERROR', 'Fatal', 'FATAL', 'Debug', 'DEBUG', 'Verbose', 'VERBOSE')]
         [string]$Level = ($global:AzureArcFramework_LogLevel | Get-Variable -ErrorAction SilentlyContinue -ValueOnly),
         [Parameter()]
         [string]$Component = 'General',
         [Parameter()]
+        [Alias('Path')]
         [string]$LogPath = ($global:AzureArcFramework_LogPath | Get-Variable -ErrorAction SilentlyContinue -ValueOnly),
         [Parameter()]
         [switch]$PassThru
     )
 
     begin {
+        # Prefer a caller-provided $LogPath variable (common in script-style tools) if no path was passed
+        if ([string]::IsNullOrEmpty($LogPath)) {
+            $callerLogPath = Get-Variable -Name LogPath -Scope 1 -ErrorAction SilentlyContinue
+            if ($callerLogPath -and -not [string]::IsNullOrEmpty($callerLogPath.Value)) {
+                $LogPath = $callerLogPath.Value
+            }
+        }
+
         # Set effective defaults if parameters were not passed and global vars were not set (or null/empty)
         if ([string]::IsNullOrEmpty($LogPath)) {
             $LogPath = Join-Path $env:TEMP "AzureArcFramework/Default.log"
         }
         if ([string]::IsNullOrEmpty($Level)) {
             $Level = 'Information'
+        }
+
+        # Normalize common level synonyms used across scripts
+        switch -Regex ($Level) {
+            '^(info|information)$' { $Level = 'Information' }
+            '^(warn|warning)$' { $Level = 'Warning' }
+            '^(err|error|fatal)$' { $Level = 'Error' }
+            '^(debug)$' { $Level = 'Debug' }
+            '^(verbose)$' { $Level = 'Verbose' }
+            default { $Level = 'Information' }
         }
 
         # Ensure log directory exists
@@ -36,7 +55,7 @@ function Write-Log {
     process {
         try {
             # Write to log file
-            Add-Content -Path $LogPath -Value $logEntry
+            Write-LogSink -Path $LogPath -Value $logEntry
 
             # Write to appropriate output stream
             switch ($Level) {
@@ -57,6 +76,20 @@ function Write-Log {
         catch {
             Write-Error "Failed to write log entry: $_"
         }
+    }
+}
+
+if (-not (Get-Command Write-LogSink -CommandType Function -ErrorAction SilentlyContinue)) {
+    function Write-LogSink {
+        [CmdletBinding()]
+        param(
+            [Parameter(Mandatory)]
+            [string]$Path,
+            [Parameter(Mandatory)]
+            [string]$Value
+        )
+
+        Add-Content -Path $Path -Value $Value
     }
 }
 

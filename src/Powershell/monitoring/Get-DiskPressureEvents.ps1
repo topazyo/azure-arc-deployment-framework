@@ -18,34 +18,15 @@ param (
     [string]$LogPath = "C:\ProgramData\AzureArcFramework\Logs\DiskPressureEvents_Activity.log"
 )
 
-# --- Logging Function (for script activity) ---
-function Write-Log {
-    param (
-        [string]$Message,
-        [string]$Level = "INFO", # INFO, WARNING, ERROR
-        [string]$Path = $LogPath
-    )
-    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-    $logEntry = "[$timestamp] [$Level] $Message"
-    
-    try {
-        if (-not (Test-Path (Split-Path $Path -Parent))) {
-            New-Item -ItemType Directory -Path (Split-Path $Path -Parent) -Force -ErrorAction Stop | Out-Null
-        }
-        Add-Content -Path $Path -Value $logEntry -ErrorAction Stop
-    }
-    catch {
-        Write-Warning "Failed to write to activity log file $Path. Error: $($_.Exception.Message). Logging to console instead."
-        Write-Host $logEntry
-    }
-}
+# --- Logging (shared utility) ---
+. (Join-Path $PSScriptRoot '..\utils\Write-Log.ps1')
 
 # --- Helper to Extract Drive Letter from Event 2013 Message ---
 function Get-DriveLetterFromSrvEvent2013 {
     param ([string]$Message)
     # Message for Event ID 2013 from SRV is typically:
     # "The <DriveLetter>: disk is at or near capacity. You may need to delete some files."
-    if ($Message -match "The (.*?): disk is at or near capacity.") {
+    if ($Message -match "The\s+([A-Za-z]:)\s+disk\s+is\s+at\s+or\s+near\s+capacity\.") {
         return $Matches[1]
     }
     return $null
@@ -154,8 +135,8 @@ try {
                 Write-Log "No events found for query [Label: $($query.Label)] before keyword filtering."
             }
         }
-        catch [System.Management.Automation.भूतियाException] { 
-             Write-Log "Failed to execute query [Label: $($query.Label)]. Log '$($query.LogName)' might not exist or is inaccessible on '$ServerName'. Error: $($_.Exception.Message)" -Level "WARNING"
+        catch [System.Diagnostics.Eventing.Reader.EventLogNotFoundException],[System.UnauthorizedAccessException] { 
+            Write-Log "Failed to execute query [Label: $($query.Label)]. Log '$($query.LogName)' might not exist or is inaccessible on '$ServerName'. Error: $($_.Exception.Message)" -Level "WARNING"
         }
         catch { 
             Write-Log "An error occurred while executing query [Label: $($query.Label)] on '$ServerName'. Error: $($_.Exception.Message)" -Level "ERROR"

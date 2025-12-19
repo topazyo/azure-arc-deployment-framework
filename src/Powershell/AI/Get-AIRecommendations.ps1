@@ -43,6 +43,68 @@ Function Get-AIRecommendations {
 
     Write-Log "Starting Get-AIRecommendations script. InputFeatures count: $($InputFeatures.Count)."
 
+    function Test-Condition {
+        param(
+            [Parameter(Mandatory=$true)] $InputItem,
+            [Parameter(Mandatory=$true)] [string]$PropertyName,
+            [Parameter(Mandatory=$true)] $ConditionValue
+        )
+
+        if (-not $InputItem.PSObject.Properties[$PropertyName]) { return $false }
+        $inputValue = $InputItem.$PropertyName
+
+        if ($ConditionValue -is [scriptblock]) {
+            return & $ConditionValue $InputItem
+        }
+
+        if (-not ($ConditionValue -is [hashtable]) -and $ConditionValue -and $ConditionValue.PSObject -and $ConditionValue.PSObject.Properties.Count -gt 0) {
+            $converted = @{}
+            foreach ($prop in $ConditionValue.PSObject.Properties) {
+                $converted[$prop.Name] = $prop.Value
+            }
+            $ConditionValue = $converted
+        }
+
+        if ($ConditionValue -is [hashtable]) {
+            if ($ConditionValue.ContainsKey('GreaterThan')) {
+                return ([double]$inputValue -gt [double]$ConditionValue.GreaterThan)
+            }
+            if ($ConditionValue.ContainsKey('LessThan')) {
+                return ([double]$inputValue -lt [double]$ConditionValue.LessThan)
+            }
+            if ($ConditionValue.ContainsKey('Between')) {
+                $range = $ConditionValue.Between
+                if ($range -is [System.Collections.IEnumerable] -and $range.Count -ge 2) {
+                    return ([double]$inputValue -ge [double]$range[0] -and [double]$inputValue -le [double]$range[1])
+                }
+            }
+            if ($ConditionValue.ContainsKey('Contains')) {
+                return ($inputValue -like "*${($ConditionValue.Contains)}*")
+            }
+            if ($ConditionValue.ContainsKey('RegexMatch')) {
+                return [regex]::IsMatch($inputValue.ToString(), $ConditionValue.RegexMatch, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+            }
+            if ($ConditionValue.ContainsKey('Equals')) {
+                if ($inputValue -is [string]) { return ($inputValue.ToString() -ieq $ConditionValue.Equals.ToString()) }
+                return ($inputValue -eq $ConditionValue.Equals)
+            }
+        }
+
+        if ($ConditionValue -is [System.Collections.IEnumerable] -and -not ($ConditionValue -is [string])) {
+            return $ConditionValue -contains $inputValue
+        }
+
+        if ($PropertyName -eq "Feature_Message_Keyword_application_error_Count_Exists") {
+            return ($InputItem.PSObject.Properties["Feature_Message_Keyword_application_error_Count"] -and $InputItem."Feature_Message_Keyword_application_error_Count" -gt 0)
+        }
+
+        if ($inputValue -is [string] -and $ConditionValue -is [string]) {
+            return ($inputValue -ieq $ConditionValue)
+        }
+
+        return ($inputValue -eq $ConditionValue)
+    }
+
     $recommendationRules = @()
 
     if (-not [string]::IsNullOrWhiteSpace($RecommendationRulesPath)) {
@@ -115,35 +177,21 @@ Function Get-AIRecommendations {
 
             $conditionMet = $false
             # --- Condition Evaluation (Simplified: exact match for now) ---
+            $conditionBlock = $null
             if ($rule.IfCondition -is [hashtable]) {
-                $allSubConditionsMet = $true
-                foreach ($key in $rule.IfCondition.Keys) {
-                    if ($inputItem.PSObject.Properties[$key]) {
-                        $inputValue = $inputItem.$($key)
-                        $conditionValue = $rule.IfCondition[$key]
+                $conditionBlock = $rule.IfCondition
+            } elseif ($rule.IfCondition) {
+                $conditionBlock = @{}
+                foreach ($prop in $rule.IfCondition.PSObject.Properties) {
+                    $conditionBlock[$prop.Name] = $prop.Value
+                }
+            }
 
-                        if ($conditionValue -is [hashtable] -and $conditionValue.ContainsKey("GreaterThan")) {
-                             # Placeholder for GreaterThan logic - current version will not satisfy this
-                            if (-not ($inputValue -is [int] -or $inputValue -is [double])) { $allSubConditionsMet = $false; break }
-                            if ($inputValue -gt $conditionValue.GreaterThan) { 
-                                # Condition met
-                            } else { $allSubConditionsMet = $false; break }
-                        } elseif ($key -eq "Feature_Message_Keyword_application_error_Count_Exists") {
-                            # Special handling for the example rule (checking existence and non-zero)
-                            if ($inputItem.PSObject.Properties["Feature_Message_Keyword_application_error_Count"] -and `
-                                $inputItem."Feature_Message_Keyword_application_error_Count" -gt 0) {
-                                # Condition met
-                            } else { $allSubConditionsMet = $false; break}
-                        }
-                        elseif ($inputValue -ne $conditionValue) { # Simple equality check
-                            $allSubConditionsMet = $false
-                            break
-                        }
-                        # TODO: Add more operators like Contains, RegexMatch, LessThan etc.
-                    } else { # Property for condition does not exist on input item
-                        $allSubConditionsMet = $false
-                        break
-                    }
+            if ($conditionBlock) {
+                $allSubConditionsMet = $true
+                foreach ($key in $conditionBlock.Keys) {
+                    $subCondition = Test-Condition -InputItem $inputItem -PropertyName $key -ConditionValue $conditionBlock[$key]
+                    if (-not $subCondition) { $allSubConditionsMet = $false; break }
                 }
                 if ($allSubConditionsMet) { $conditionMet = $true }
             }

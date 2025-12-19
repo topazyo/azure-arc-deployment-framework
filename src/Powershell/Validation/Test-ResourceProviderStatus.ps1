@@ -20,24 +20,26 @@ param (
 )
 
 # --- Logging Function ---
-function Write-Log {
-    param (
-        [string]$Message,
-        [string]$Level = "INFO", # INFO, WARNING, ERROR, DEBUG
-        [string]$Path = $LogPath
-    )
-    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-    $logEntry = "[$timestamp] [$Level] $Message"
-    
-    try {
-        if (-not (Test-Path (Split-Path $Path -Parent))) {
-            New-Item -ItemType Directory -Path (Split-Path $Path -Parent) -Force -ErrorAction Stop | Out-Null
+if (-not (Get-Command Write-Log -ErrorAction SilentlyContinue)) {
+    function Write-Log {
+        param (
+            [string]$Message,
+            [string]$Level = "INFO", # INFO, WARNING, ERROR, DEBUG
+            [string]$Path = $LogPath
+        )
+        $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+        $logEntry = "[$timestamp] [$Level] $Message"
+        
+        try {
+            if (-not (Test-Path (Split-Path $Path -Parent))) {
+                New-Item -ItemType Directory -Path (Split-Path $Path -Parent) -Force -ErrorAction Stop | Out-Null
+            }
+            Add-Content -Path $Path -Value $logEntry -ErrorAction Stop
         }
-        Add-Content -Path $Path -Value $logEntry -ErrorAction Stop
-    }
-    catch {
-        Write-Warning "Failed to write to log file $Path. Error: $($_.Exception.Message). Logging to console instead."
-        Write-Host $logEntry
+        catch {
+            Write-Warning "Failed to write to log file $Path. Error: $($_.Exception.Message). Logging to console instead."
+            Write-Host $logEntry
+        }
     }
 }
 

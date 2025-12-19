@@ -1,5 +1,6 @@
 # Start-RemediationAction.ps1
 # This script executes an approved remediation action.
+# Requires admin rights for registry/service changes. Use -BackupStateBeforeExecution with optional -BackupCompress/-BackupKeepUncompressed to capture state.
 # TODO: Implement actual call to Backup-OperationState.ps1 when available.
 # TODO: Enhance argument string conversion for executables if complex scenarios arise.
 
@@ -16,6 +17,15 @@ Function Start-RemediationAction {
         [string]$BackupPath, # Default will be constructed if not provided but backup is true
 
         [Parameter(Mandatory=$false)]
+        [string]$BackupScriptPath, # Optional override for Backup-OperationState.ps1
+
+        [Parameter(Mandatory=$false)]
+        [switch]$BackupCompress,
+
+        [Parameter(Mandatory=$false)]
+        [switch]$BackupKeepUncompressed,
+
+        [Parameter(Mandatory=$false)]
         [string]$LogPath = "C:\ProgramData\AzureArcFramework\Logs\StartRemediationAction_Activity.log"
     )
 
@@ -28,12 +38,18 @@ Function Start-RemediationAction {
         )
         $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
         $logEntry = "[$timestamp] [$Level] $Message"
+        $targetPath = if (-not [string]::IsNullOrWhiteSpace($Path)) { $Path } elseif (-not [string]::IsNullOrWhiteSpace($LogPath)) { $LogPath } else { $null }
         
         try {
-            if (-not (Test-Path (Split-Path $Path -Parent) -PathType Container)) {
-                New-Item -ItemType Directory -Path (Split-Path $Path -Parent) -Force -ErrorAction Stop | Out-Null
+            if (-not $targetPath) { Write-Host $logEntry; return }
+
+            if ($WhatIfPreference) { Write-Host $logEntry; return }
+
+            $parentPath = if (-not [string]::IsNullOrWhiteSpace($targetPath)) { Split-Path -Path $targetPath -Parent } else { $null }
+            if ($parentPath -and -not (Test-Path $parentPath -PathType Container)) {
+                New-Item -ItemType Directory -Path $parentPath -Force -ErrorAction Stop | Out-Null
             }
-            Add-Content -Path $Path -Value $logEntry -ErrorAction Stop
+            Add-Content -Path $targetPath -Value $logEntry -ErrorAction Stop
         }
         catch {
             Write-Warning "ACTIVITY_LOG_FAIL: Failed to write to activity log file $Path. Error: $($_.Exception.Message). Logging to console instead."
@@ -78,7 +94,20 @@ Function Start-RemediationAction {
     $actionErrors = [System.Collections.Generic.List[string]]::new()
     $actionExitCode = $null
     $backupAttempted = $false
+    $backupSucceeded = $false
     $actualBackupPath = $null
+    $resolvedParameters = @{}
+    if ($ApprovedAction.PSObject.Properties['ResolvedParameters'] -and $ApprovedAction.ResolvedParameters -is [hashtable]) {
+        $resolvedParameters = $ApprovedAction.ResolvedParameters
+    }
+
+    # Resolve backup script path relative to remediation folder if not provided
+    if (-not $BackupScriptPath) {
+        $callerPath = $MyInvocation.PSCommandPath
+        if (-not $callerPath) { $callerPath = $MyInvocation.MyCommand.Path }
+        $resolvedRoot = if (-not [string]::IsNullOrWhiteSpace($callerPath)) { Split-Path -Parent $callerPath } elseif ($PSCommandPath) { Split-Path -Parent $PSCommandPath } elseif ($PSScriptRoot) { $PSScriptRoot } else { Get-Location }
+        $BackupScriptPath = Join-Path $resolvedRoot "..\utils\Backup-OperationState.ps1"
+    }
 
     # --- Backup State (Conceptual for V1) ---
     if ($BackupStateBeforeExecution) {
@@ -89,10 +118,26 @@ Function Start-RemediationAction {
         } else {
             $actualBackupPath = $BackupPath
         }
-        Write-Log "BackupStateBeforeExecution is true. Backup would be attempted to: $actualBackupPath"
-        Write-Log "Conceptual: Calling Backup-OperationState.ps1 -ActionId '$($ApprovedAction.RemediationActionId)' -BackupPath '$actualBackupPath'"
-        # Future: . (Join-Path $PSScriptRoot '..\utils\Backup-OperationState.ps1') -OperationName "Before_$($ApprovedAction.RemediationActionId)" -BackupPath $actualBackupPath
-        # For now, just log intent.
+        if (Test-Path $BackupScriptPath -PathType Leaf) {
+            try {
+                Write-Log "Initiating backup using '$BackupScriptPath' to '$actualBackupPath' for action '$($ApprovedAction.RemediationActionId)'."
+                $backupParams = @{ OperationName = "Before_$($ApprovedAction.RemediationActionId)"; BackupPath = $actualBackupPath; ErrorAction = 'Stop' }
+                $backupCmd = Get-Command -Path $BackupScriptPath -ErrorAction SilentlyContinue
+                if ($backupCmd -and $backupCmd.Parameters.ContainsKey('Compress') -and $BackupCompress) { $backupParams.Compress = $true }
+                if ($backupCmd -and $backupCmd.Parameters.ContainsKey('KeepUncompressed') -and $BackupKeepUncompressed) { $backupParams.KeepUncompressed = $true }
+                & $BackupScriptPath @backupParams
+                $backupSucceeded = $true
+                Write-Log "Backup completed for action '$($ApprovedAction.RemediationActionId)' to '$actualBackupPath'."
+            } catch {
+                Write-Log "Backup script failed for '$($ApprovedAction.RemediationActionId)'. Error: $($_.Exception.Message)" -Level "ERROR"
+            }
+        } else {
+            Write-Log "Backup-OperationState.ps1 not found at '$BackupScriptPath'. Proceeding without backup." -Level "WARNING"
+        }
+    }
+
+    if (-not $backupSucceeded -and $backupAttempted -and $actualBackupPath -and (Test-Path $actualBackupPath -ErrorAction SilentlyContinue)) {
+        $backupSucceeded = $true
     }
 
     # --- Execute Action based on ImplementationType ---
@@ -106,7 +151,7 @@ Function Start-RemediationAction {
                     }
                     Write-Log "Executing script: '$($ApprovedAction.TargetScriptPath)' with params: $($ApprovedAction.ResolvedParameters | Out-String)"
                     # Using try/catch for the script execution itself to capture its specific errors
-                    $scriptOutput = . $ApprovedAction.TargetScriptPath @ApprovedAction.ResolvedParameters *>&1 # Merge all streams
+                    $scriptOutput = . $ApprovedAction.TargetScriptPath @resolvedParameters *>&1 # Merge all streams
                     
                     $scriptOutput | ForEach-Object {
                         if ($_ -is [System.Management.Automation.ErrorRecord]) {
@@ -126,7 +171,7 @@ Function Start-RemediationAction {
                         throw "Target function not found or not a Function: '$($ApprovedAction.TargetFunction)'"
                     }
                     Write-Log "Executing function: '$($ApprovedAction.TargetFunction)' with params: $($ApprovedAction.ResolvedParameters | Out-String)"
-                    $funcOutput = . $ApprovedAction.TargetFunction @ApprovedAction.ResolvedParameters *>&1
+                    $funcOutput = . $ApprovedAction.TargetFunction @resolvedParameters *>&1
 
                     $funcOutput | ForEach-Object {
                         if ($_ -is [System.Management.Automation.ErrorRecord]) {
@@ -141,7 +186,7 @@ Function Start-RemediationAction {
                     if (-not (Test-Path $ApprovedAction.TargetScriptPath -PathType Leaf)) {
                         throw "Target executable not found: $($ApprovedAction.TargetScriptPath)"
                     }
-                    $argString = ConvertTo-ArgumentListString -Parameters $ApprovedAction.ResolvedParameters
+                    $argString = ConvertTo-ArgumentListString -Parameters $resolvedParameters
                     Write-Log "Executing executable: '$($ApprovedAction.TargetScriptPath)' with args: '$argString'"
                     
                     # For executables, capturing stdout/stderr directly while using -Wait -PassThru is tricky.
@@ -194,7 +239,10 @@ Function Start-RemediationAction {
         Errors                = $actionErrors -join [System.Environment]::NewLine 
         ExitCode              = $actionExitCode # Relevant for executables
         BackupPerformed       = $backupAttempted
+        BackupSuccessful      = $backupSucceeded
         BackupPathUsed        = $actualBackupPath
+        BackupCompressRequested = [bool]$BackupCompress
+        BackupKeepUncompressedRequested = [bool]$BackupKeepUncompressed
     }
     
     Write-Log "Start-RemediationAction script finished. Final Status: $actionStatus for Action ID '$($ApprovedAction.RemediationActionId)'."
