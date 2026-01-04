@@ -24,13 +24,13 @@
 1. Fork the repository
 2. Clone your fork:
 ```bash
-git clone https://github.com/yourusername/AzureArcDeploymentFramework.git
-cd AzureArcDeploymentFramework
+git clone https://github.com/topazyo/azure-arc-deployment-framework.git
+cd azure-arc-deployment-framework
 ```
 
 3. Add upstream remote:
 ```bash
-git remote add upstream https://github.com/originalowner/AzureArcDeploymentFramework.git
+git remote add upstream https://github.com/topazyo/azure-arc-deployment-framework.git
 ```
 
 4. Create a new branch:
@@ -61,15 +61,17 @@ Import-Module .\src\PowerShell\AzureArcFramework.psd1 -Force
 ```
 
 ### Python Environment
-1. Create virtual environment:
+1. Run the dev environment setup script (creates venv, installs dependencies, adds PS profile entries):
+```powershell
+pwsh -File scripts/Initialize-DevEnvironment.ps1 -CreateVirtualEnv -InstallDependencies
+```
+
+2. Alternatively, manual setup:
 ```bash
 python -m venv .venv
 source .venv/bin/activate  # Linux/Mac
 .venv\Scripts\activate     # Windows
-```
 
-2. Install dependencies:
-```bash
 pip install -r requirements.txt
 pip install -r requirements-dev.txt
 ```

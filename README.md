@@ -1,6 +1,5 @@
 # Azure Arc Deployment Framework
 
-## Overview
 Enterprise-grade automation framework for Azure Arc agent deployment, management, and monitoring, built from real-world experience with 5000+ server deployments. Features AI-driven insights, advanced troubleshooting, and comprehensive monitoring capabilities.
 
 ## Features
@@ -33,6 +32,33 @@ Enterprise-grade automation framework for Azure Arc agent deployment, management
 - Compliance enforcement
 - Security baseline management
 
+## Quickstart
+
+1. Clone the repo:
+   ```bash
+   git clone https://github.com/topazyo/azure-arc-deployment-framework.git
+   cd azure-arc-deployment-framework
+   ```
+
+2. Set up the dev environment (creates venv, installs dependencies, adds PS profile entries):
+   ```powershell
+   pwsh -File scripts/Initialize-DevEnvironment.ps1 -CreateVirtualEnv -InstallDependencies
+   ```
+
+3. Run tests to verify setup:
+   ```bash
+   python -m pytest tests/Python
+   ```
+   ```powershell
+   pwsh -Command "Invoke-Pester -Path ./tests/PowerShell -CI"
+   ```
+
+4. Deploy to a test server:
+   ```powershell
+   Initialize-ArcDeployment -SubscriptionId "your-subscription-id" -ResourceGroupName "your-arc-rg" -Location "eastus"
+   New-ArcDeployment -ServerName "TESTSERVER" -DeployAMA
+   ```
+
 ## Prerequisites
 
 ### System Requirements
@@ -57,7 +83,7 @@ Enterprise-grade automation framework for Azure Arc agent deployment, management
 ### Quick Start
 ```powershell
 # Clone the repository
-git clone https://github.com/your-org/azure-arc-deployment-framework.git
+git clone https://github.com/topazyo/azure-arc-deployment-framework.git
 
 # Run installer
 .\install.ps1 -InstallPath "C:\Program Files\AzureArcFramework"
@@ -77,95 +103,62 @@ pip install -r requirements.txt
 Import-Module AzureArcFramework
 ```
 
+## Configuration
+
+### Required Environment Variables
+| Variable | Description | Example |
+|----------|-------------|---------|
+| ARC_WORKSPACE_ID | Azure Monitor workspace ID | `12345678-1234-1234-1234-123456789012` |
+| ARC_WORKSPACE_KEY | Azure Monitor workspace key | `your-key-here` |
+
+### Optional Environment Variables
+- `ARC_PREREQ_TESTDATA`: Set to '1' for mock data in tests (default: off).
+- `PYTHONPATH`: Add to include src/Python for AI scripts.
+
+### Config Files
+- [`src/config/ai_config.json`](src/config/ai_config.json ): AI engine settings (e.g., model dirs, telemetry features). Defaults to placeholder models; update for production.
+- [`src/config/server_inventory.json`](src/config/server_inventory.json ): Server list for bulk ops.
+- [`src/config/validation_matrix.json`](src/config/validation_matrix.json ): Validation rules.
+
+Do not commit secrets (e.g., workspace keys) to repo; use secure storage or env vars.
+
 ## Usage
 
-### Basic Deployment
-```powershell
-# Initialize framework
-Initialize-ArcDeployment -WorkspaceId "<workspace-id>" -WorkspaceKey "<workspace-key>"
+### Common Commands
+- **Build docs**: `pwsh -File scripts/Build-Documentation.ps1`
+- **Run Python tests**: `python -m pytest tests/Python`
+- **Run PowerShell tests**: `pwsh -Command "Invoke-Pester -Path ./tests/PowerShell -CI"`
+- **Lint Python**: `python -m flake8 src/Python`
+- **Lint PowerShell**: `pwsh -Command "Invoke-ScriptAnalyzer -Path ./src/PowerShell -Recurse"`
 
-# Single server deployment
-New-ArcDeployment -ServerName "SERVER01" -DeployAMA
+### Typical Workflows
+- **Deployment**: Use `Initialize-ArcDeployment` then `New-ArcDeployment` for single/bulk servers.
+- **AI Insights**: Run `Get-PredictiveInsights -ServerName "SERVER01"` (requires Python and ai_config.json).
+- **Troubleshooting**: `Start-ArcTroubleshooter -ServerName "SERVER01"` for diagnostics.
+- **Monitoring**: `Get-ArcHealthStatus -ServerName "SERVER01" -Detailed`.
 
-# Bulk deployment
-$servers = Get-Content .\servers.txt
-Start-ParallelDeployment -Servers $servers -BatchSize 10
+## Project Layout
 ```
-
-### AI-Enhanced Operations
-```powershell
-# Get predictive insights
-Get-PredictiveInsights -ServerName "SERVER01"
-
-# Start AI-enhanced troubleshooting
-Start-AIEnhancedTroubleshooting -ServerName "SERVER01" -AutoRemediate
-
-# Analyze patterns
-Invoke-AIPatternAnalysis -ServerName "SERVER01"
-```
-
-### Monitoring & Management
-```powershell
-# Check health status
-Get-ArcHealthStatus -ServerName "SERVER01" -Detailed
-
-# Configure monitoring
-Set-DataCollectionRules -ServerName "SERVER01" -RuleType Security
-
-# Validate security
-Test-SecurityCompliance -ServerName "SERVER01"
-```
-
-## Documentation
-
-### Core Documentation
-- [Installation Guide](docs/Installation.md)
-- [Usage Guide](docs/Usage.md)
-- [Architecture Overview](docs/Architecture.md)
-
-### Advanced Topics
-- [AI Components](docs/AI-Components.md)
-- [Security Guide](docs/Security-Guide.md)
-- [Monitoring Guide](docs/Monitoring-Guide.md)
-- [Troubleshooting Guide](docs/Troubleshooting-Guide.md)
-
-### API Reference
-- [PowerShell Cmdlets](docs/PowerShell-Reference.md)
-- [Python API](docs/Python-API.md)
-- [Configuration Reference](docs/Configuration-Reference.md)
-
-## Project Structure
-```
-azure-arc-framework/
+azure-arc-deployment-framework/
 ├── src/
-│   ├── PowerShell/        # PowerShell components
-│   ├── Python/           # Python AI components
-│   └── Config/           # Configuration templates
-├── docs/                # Documentation
-├── tests/              # Test suites
-├── examples/           # Example scripts
-└── tools/             # Utility tools
+│   ├── PowerShell/        # Core cmdlets (e.g., deployment, monitoring)
+│   ├── Python/           # AI/ML components (e.g., predictive analytics)
+│   └── config/           # Config files (ai_config.json, etc.)
+├── docs/                # Documentation (AI-Components.md, Usage.md)
+├── tests/              # Test suites (Python via pytest, PowerShell via Pester)
+├── scripts/           # Utilities (e.g., Initialize-DevEnvironment.ps1)
+├── examples/           # Sample scripts
+└── requirements.txt    # Python deps
 ```
+
+## CI/CD
+GitHub Actions workflows handle linting and tests (see .github/workflows/). Pre-commit hooks (added by Initialize-DevEnvironment.ps1) run pytest, Pester, flake8, and ScriptAnalyzer.
 
 ## Contributing
-Please read [CONTRIBUTING.md](CONTRIBUTING.md) for details on our code of conduct, development process, and submitting pull requests.
+See [`CONTRIBUTING.md`](CONTRIBUTING.md "CONTRIBUTING.md") for setup, standards, and PR process.
 
-## Support
-- Create an issue for bug reports
-- Check [Troubleshooting Guide](docs/Troubleshooting-Guide.md)
-- Review [FAQ](docs/FAQ.md)
+## Security
+Report security issues via [SECURITY.md](SECURITY.md). Do not commit sensitive data.
 
 ## License
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## Acknowledgments
-- Azure Arc product team
-- Community contributors
-- Enterprise deployment teams
-
-## Roadmap
-- Enhanced AI capabilities
-- Additional monitoring features
-- Extended security controls
-- Cross-platform support
-- Container integration
+This project is licensed under the MIT License - see the [`LICENSE`](LICENSE) file for details.
