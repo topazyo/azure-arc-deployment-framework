@@ -25,7 +25,7 @@ The Python AI engine, primarily located under `src/Python/`, performs the heavy 
 ### 1. Entrypoint: `invoke_ai_engine.py`
     *   **Role**: Acts as the command-line interface (CLI) for the Python AI engine, primarily called by the `Get-PredictiveInsights.ps1` PowerShell cmdlet.
     *   **Inputs**: Accepts arguments like `--servername` and `--analysistype`.
-    *   **Current State**: This script currently utilizes a `PlaceholderPredictiveAnalyticsEngine`. This placeholder simulates the output structure of a fully implemented engine, providing deterministic JSON responses based on input arguments. This allows for end-to-end testing of the PowerShell-Python interaction while the more complex Python components are being fully developed.
+    *   **Current State**: This script loads the `PredictiveAnalyticsEngine` from `aiComponents` config and orchestrates telemetry processing, pattern analysis, and predictive modeling.
 
 ### 2. Telemetry Processing: `TelemetryProcessor`
     *   **Class**: `src/Python/analysis/telemetry_processor.py::TelemetryProcessor`

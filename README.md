@@ -12,11 +12,11 @@ Enterprise-grade automation framework for Azure Arc agent deployment, management
 - Wave-based deployment automation
 
 ### AI/ML Features
-- Predictive failure analysis
-- Pattern recognition
-- Anomaly detection
-- Automated root cause analysis
-- Self-learning remediation
+- Predictive failure analysis using PredictiveAnalyticsEngine
+- Pattern recognition via PatternAnalyzer (temporal, behavioral, failure patterns)
+- Anomaly detection with TelemetryProcessor
+- Automated root cause analysis via RootCauseAnalyzer
+- Self-learning remediation with ArcRemediationLearner
 
 ### Monitoring & Management
 - Real-time health monitoring
@@ -106,19 +106,21 @@ Import-Module AzureArcFramework
 ## Configuration
 
 ### Required Environment Variables
-| Variable | Description | Example |
-|----------|-------------|---------|
-| ARC_WORKSPACE_ID | Azure Monitor workspace ID | `12345678-1234-1234-1234-123456789012` |
-| ARC_WORKSPACE_KEY | Azure Monitor workspace key | `your-key-here` |
+| Variable | Required | Default | Description | Where Used |
+|----------|----------|---------|-------------|------------|
+| ARC_WORKSPACE_ID | Yes | N/A | Azure Monitor workspace ID | PowerShell cmdlets for monitoring |
+| ARC_WORKSPACE_KEY | Yes | N/A | Azure Monitor workspace key | PowerShell cmdlets for monitoring |
 
 ### Optional Environment Variables
-- `ARC_PREREQ_TESTDATA`: Set to '1' for mock data in tests (default: off).
-- `PYTHONPATH`: Add to include src/Python for AI scripts.
+| Variable | Required | Default | Description | Where Used |
+|----------|----------|---------|-------------|------------|
+| ARC_PREREQ_TESTDATA | No | off | Set to '1' for mock data in tests | Test scripts |
+| PYTHONPATH | No | N/A | Add src/Python for AI scripts | Python AI components |
 
 ### Config Files
-- [`src/config/ai_config.json`](src/config/ai_config.json ): AI engine settings (e.g., model dirs, telemetry features). Defaults to placeholder models; update for production.
-- [`src/config/server_inventory.json`](src/config/server_inventory.json ): Server list for bulk ops.
-- [`src/config/validation_matrix.json`](src/config/validation_matrix.json ): Validation rules.
+- [`src/config/ai_config.json`](src/config/ai_config.json): AI engine settings (e.g., model dirs, telemetry features). Defaults to placeholder models; update for production.
+- [`src/config/server_inventory.json`](src/config/server_inventory.json): Server list for bulk ops.
+- [`src/config/validation_matrix.json`](src/config/validation_matrix.json): Validation rules.
 
 Do not commit secrets (e.g., workspace keys) to repo; use secure storage or env vars.
 
@@ -148,6 +150,9 @@ azure-arc-deployment-framework/
 ├── tests/              # Test suites (Python via pytest, PowerShell via Pester)
 ├── scripts/           # Utilities (e.g., Initialize-DevEnvironment.ps1)
 ├── examples/           # Sample scripts
+├── build/              # Build artifacts
+├── Diagnostics/        # Diagnostic logs
+├── .pytest_cache/      # Python test cache
 └── requirements.txt    # Python deps
 ```
 

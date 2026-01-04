@@ -21,11 +21,9 @@
 
 ### Azure Requirements
 - Azure subscription
-- Contributor rights on target subscription
-- Resource provider registration:
-  - Microsoft.HybridCompute
-  - Microsoft.GuestConfiguration
-  - Microsoft.HybridConnectivity
+- Service Principal with appropriate permissions
+- Azure Monitor Log Analytics workspace
+- Required resource providers registered
 
 ## Installation Options
 

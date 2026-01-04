@@ -40,7 +40,24 @@ git checkout -b feature/your-feature-name
 
 ## Development Environment Setup
 
-### PowerShell Environment
+### Automated Setup (Recommended)
+1. Clone the repository:
+```bash
+git clone https://github.com/topazyo/azure-arc-deployment-framework.git
+cd azure-arc-deployment-framework
+```
+
+2. Run the dev environment setup script:
+```powershell
+pwsh -File scripts/Initialize-DevEnvironment.ps1 -CreateVirtualEnv -InstallDependencies
+```
+
+This creates a Python virtual environment, installs dependencies, and sets up PowerShell profile entries.
+
+### Manual Setup
+If you prefer manual setup:
+
+#### PowerShell Environment
 1. Install required PowerShell modules:
 ```powershell
 # Install required modules

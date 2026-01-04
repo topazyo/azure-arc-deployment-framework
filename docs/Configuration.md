@@ -2,9 +2,25 @@
 
 ## Introduction
 
-The primary configuration for the Python AI engine within the Azure Arc Framework is managed through the `src/config/ai_config.json` file. This JSON file allows users to customize various aspects of data processing, pattern analysis, feature engineering, and model training without modifying the Python code directly.
+The Azure Arc Framework uses environment variables for sensitive configuration and optional settings. The primary configuration for the Python AI engine is managed through the `src/config/ai_config.json` file. This JSON file allows users to customize various aspects of data processing, pattern analysis, feature engineering, and model training without modifying the Python code directly.
 
 Understanding and correctly setting these configurations is crucial for tailoring the AI engine's behavior to specific datasets and operational goals.
+
+## Environment Variables
+
+### Required Environment Variables
+| Variable | Required | Default | Description | Where Used |
+|----------|----------|---------|-------------|------------|
+| ARC_WORKSPACE_ID | Yes | N/A | Azure Monitor workspace ID | PowerShell cmdlets for monitoring |
+| ARC_WORKSPACE_KEY | Yes | N/A | Azure Monitor workspace key | PowerShell cmdlets for monitoring |
+
+### Optional Environment Variables
+| Variable | Required | Default | Description | Where Used |
+|----------|----------|---------|-------------|------------|
+| ARC_PREREQ_TESTDATA | No | off | Set to '1' for mock data in tests | Test scripts |
+| PYTHONPATH | No | N/A | Add src/Python for AI scripts | Python AI components |
+
+Do not commit secrets (e.g., workspace keys) to repo; use secure storage or env vars.
 
 ## Main Configuration Structure: `ai_config.json`
 

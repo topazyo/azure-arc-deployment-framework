@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Azure Arc Framework is a comprehensive solution for deploying, managing, and monitoring Azure Arc-enabled servers. It combines PowerShell and Python components to provide advanced automation, AI-driven insights, and robust error handling.
+The Azure Arc Framework is an enterprise-grade automation framework for Azure Arc agent deployment, management, and monitoring, built from real-world experience with 5000+ server deployments. It combines PowerShell orchestration with Python AI/ML components to provide advanced automation, predictive insights, and robust error handling.
 
 ## System Architecture
 
@@ -54,19 +54,35 @@ graph TD
 
 ### 2. Python AI Components
 
-#### Predictive Analytics
-- Failure prediction
-- Performance forecasting
-- Resource optimization
-- Pattern recognition
-- Anomaly detection
+#### PredictiveAnalyticsEngine
+- Orchestrates telemetry processing, pattern analysis, and model inference
+- Integrates TelemetryProcessor, PatternAnalyzer, and ArcPredictor
+- Provides predictive failure analysis and root cause analysis
 
-#### Machine Learning
-- Model training
-- Feature engineering
-- Pattern analysis
-- Recommendation generation
-- Continuous learning
+#### TelemetryProcessor
+- Preprocesses server telemetry data
+- Performs anomaly detection
+- Feeds cleaned data to pattern analyzers and predictors
+
+#### PatternAnalyzer
+- Recognizes temporal, behavioral, and failure patterns
+- Analyzes performance and security trends
+- Generates insights for predictive modeling
+
+#### ArcPredictor
+- Executes model inference for failure prediction
+- Loads trained models and scalers from config-specified directories
+- Returns structured predictions with confidence scores
+
+#### RootCauseAnalyzer
+- Performs automated root cause analysis on detected issues
+- Correlates patterns and anomalies
+- Provides actionable recommendations
+
+#### ArcRemediationLearner
+- Implements self-learning remediation strategies
+- Learns from successful remediation outcomes
+- Adapts recommendations based on historical data
 
 ### 3. Integration Layer
 
