@@ -58,7 +58,7 @@ SENSITIVE_VALUE_PATTERNS: List[re.Pattern] = [
 REDACTED_VALUE = '*** REDACTED ***'
 
 
-def is_sensitive_key(key: str) -> bool:
+def is_sensitive_key(key: Any) -> bool:
     """
     Check if a key name indicates sensitive data.
 
@@ -184,7 +184,7 @@ DEFAULT_MAX_JSON_KEYS = 10000
 class InputValidationError(Exception):
     """Exception raised for input validation failures."""
 
-    def __init__(self, message: str, validation_type: str, details: dict = None):
+    def __init__(self, message: str, validation_type: str, details: Optional[Dict[str, Any]] = None):
         super().__init__(message)
         self.message = message
         self.validation_type = validation_type
@@ -329,7 +329,7 @@ def parse_json_safely(
 
     if not is_valid:
         raise InputValidationError(
-            message=error_msg,
+            message=error_msg or "JSON validation failed",
             validation_type="json_validation",
             details={
                 "param_name": param_name,

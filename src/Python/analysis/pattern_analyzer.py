@@ -75,9 +75,12 @@ class PatternAnalyzer:
             if results["peak_hours"]:
                 results["recommendations"].append({
                     'action': "Optimize resource allocation during identified peak hours.",
-                   'priority': 0.6,
-                   'details': f"Peak hours observed for metrics: {list(results['peak_hours'].keys())}. Review specific hours in 'peak_hours' field."
-                    })
+                    'priority': 0.6,
+                    'details': (
+                        f"Peak hours observed for metrics: {list(results['peak_hours'].keys())}. "
+                        f"Review specific hours in 'peak_hours' field."
+                    )
+                })
             return results
         except Exception as e:
             self.logger.error(f"Daily pattern analysis failed: {str(e)}", exc_info=True)
@@ -128,7 +131,10 @@ class PatternAnalyzer:
                 results["recommendations"].append({
                     'action': "Plan for weekly peak load on identified days.",
                     'priority': 0.6,
-                    'details': f"Peak days observed for metrics: {list(results['peak_days'].keys())}. Review 'peak_days' for specific days (0=Monday)."
+                    'details': (
+                        f"Peak days observed for metrics: {list(results['peak_days'].keys())}. "
+                        f"Review 'peak_days' for specific days (0=Monday)."
+                    )
                 })
             return results
         except Exception as e:
@@ -252,10 +258,17 @@ class PatternAnalyzer:
             # For now, a generic recommendation:
             if results["clusters"] and len(results["clusters"]) > 0 :
                 results["recommendations"].append({
-                    'action': "Review identified behavioral clusters for distinct operational states or anomalies.",
-                   'priority': 0.4,
-                   'details': f"Found {len(results['clusters'])} distinct behavioral clusters. Examine their characteristics."
-                    })
+                    'action': (
+                        "Review identified behavioral clusters for "
+                        "distinct operational states or anomalies."
+                    ),
+                    'priority': 0.4,
+                    'details': (
+                        f"Found {len(results['clusters'])} distinct "
+                        f"behavioral clusters. Examine their "
+                        f"characteristics."
+                    )
+                })
             return results
         except Exception as e:
             self.logger.error(f"Behavioral pattern analysis failed: {str(e)}", exc_info=True)
@@ -273,7 +286,10 @@ class PatternAnalyzer:
             error_col_name = 'failure_category'
 
         if not error_col_name:
-            self.logger.info("No 'error_type' or 'failure_category' column found for identifying common failure causes.")
+            self.logger.info(
+                "No 'error_type' or 'failure_category' column found "
+                "for identifying common failure causes."
+            )
             return results
         try:
             if data[error_col_name].isnull().all():
@@ -296,7 +312,10 @@ class PatternAnalyzer:
                 results['recommendations'].append({
                     'action': f"Address the most frequently occurring error: {top_cause}.",
                     'priority': 0.7,
-                    'details': f"{top_cause} accounts for {results['common_causes'][0]['percentage']}% of recorded errors."
+                    'details': (
+                        f"{top_cause} accounts for "
+                        f"{results['common_causes'][0]['percentage']}% of recorded errors."
+                    )
                 })
             return results
         except Exception as e:
@@ -360,7 +379,10 @@ class PatternAnalyzer:
             if results['precursors']:
                 sample_precursor_metric = results['precursors'][0]['metric']
                 results['recommendations'].append({
-                    'action': f"Monitor metrics like {sample_precursor_metric} as they show significant changes before failures.",
+                    'action': (
+                        f"Monitor metrics like {sample_precursor_metric} as they show significant "
+                        "changes before failures."
+                    ),
                     'priority': 0.65,
                     'details': "Review 'precursors' list for specific metric changes."
                 })
@@ -431,10 +453,17 @@ class PatternAnalyzer:
             # Basic placeholder recommendation if no specific ones generated
             if not all_recommendations:
                 all_recommendations.append({
-                    'action': "Review failure logs and metrics for deeper insights.",
-                   'priority': 0.5,
-                   'details': "No specific high-level failure patterns automatically generated from provided data subsets."
-                    })
+                    'action': (
+                        "Review failure logs and metrics for deeper "
+                        "insights."
+                    ),
+                    'priority': 0.5,
+                    'details': (
+                        "No specific high-level failure patterns "
+                        "automatically generated from provided data "
+                        "subsets."
+                    )
+                })
 
             return {
                 'common_causes': common_causes_res.get('common_causes', []),
@@ -475,8 +504,13 @@ class PatternAnalyzer:
                     'std_dev': round(series.std(), 2)
                 }
 
-                # Sustained high usage (e.g., N consecutive points above X percentile)
-                high_usage_threshold = series.quantile(self.config.get('sustained_high_usage_percentile', 0.90))
+                # Sustained high usage (e.g., N consecutive points
+                # above X percentile)
+                high_usage_threshold = series.quantile(
+                    self.config.get(
+                        'sustained_high_usage_percentile', 0.90
+                    )
+                )
                 min_consecutive_points = self.config.get('sustained_high_usage_min_points', 5)
 
                 high_periods = (series > high_usage_threshold).astype(int).groupby(
@@ -485,20 +519,36 @@ class PatternAnalyzer:
 
                 if not sustained_periods.empty:
                     # Store start index and length of sustained periods
-                    # This part is a bit complex to extract precise start/end timestamps without more context on data frequency
-                    # For now, just noting that sustained high usage was found.
+                    # This part is complex to extract precise start/end
+                    # timestamps without more context on data frequency
+                    # For now, just noting that sustained high usage was
+                    # found.
                     results['sustained_high_usage'].append({
                         'metric': metric,
-                        'threshold_used': round(high_usage_threshold, 2),
+                        'threshold_used': round(
+                            high_usage_threshold, 2
+                        ),
                         # count starts of such periods
-                        'periods_detected_count': len(sustained_periods[sustained_periods == min_consecutive_points])
+                        'periods_detected_count': len(
+                            sustained_periods[
+                                sustained_periods ==
+                                min_consecutive_points
+                            ]
+                        )
                     })
 
             if results['metric_stats']:
                 results['recommendations'].append({
-                    'action': "Review resource utilization statistics and investigate any sustained high usage periods.",
+                    'action': (
+                        "Review resource utilization statistics and "
+                        "investigate any sustained high usage periods."
+                    ),
                     'priority': 0.5,
-                    'details': f"Analyzed metrics: {list(results['metric_stats'].keys())}. Check 'sustained_high_usage' for details."
+                    'details': (
+                        f"Analyzed metrics: "
+                        f"{list(results['metric_stats'].keys())}. "
+                        f"Check 'sustained_high_usage' for details."
+                    )
                 })
             return results
         except Exception as e:
@@ -550,7 +600,10 @@ class PatternAnalyzer:
                         'description': rule.get('description', f"Bottleneck '{rule_name}' conditions met."),
                         'occurrences': int(combined_condition.sum()),
                         # Optionally, add timestamps of occurrences if 'timestamp' column exists
-                        'example_timestamp': data.loc[combined_condition.idxmax(), 'timestamp'].isoformat() if 'timestamp' in data and combined_condition.any() else None
+                        'example_timestamp': (
+                            data.loc[combined_condition.idxmax(), 'timestamp'].isoformat()
+                            if 'timestamp' in data and combined_condition.any() else None
+                        )
                     })
 
             if results['detected_bottlenecks']:
@@ -606,7 +659,8 @@ class PatternAnalyzer:
                     elif slope < -slope_significance_threshold:
                         direction = 'decreasing'
 
-                    if p_value < p_value_threshold and direction != 'stable':
+                    if p_value < p_value_threshold and \
+                            direction != 'stable':
                         results['trends'].append({
                             'metric': metric,
                             'slope': round(slope, 4),
@@ -620,9 +674,15 @@ class PatternAnalyzer:
 
             if results['trends']:
                 results['recommendations'].append({
-                    'action': "Review significant performance trends for proactive capacity management or optimization.",
+                    'action': (
+                        "Review significant performance trends for "
+                        "proactive capacity management or optimization."
+                    ),
                     'priority': 0.6,
-                    'details': f"Significant trends identified for metrics: {[t['metric'] for t in results['trends']]}."
+                    'details': (
+                        f"Significant trends identified for metrics: "
+                        f"{[t['metric'] for t in results['trends']]}."
+                    )
                 })
             return results
         except Exception as e:
@@ -692,18 +752,27 @@ class PatternAnalyzer:
 
             # Calculate center (mean for each feature)
             center_values = np.mean(cluster_points, axis=0)
-            center_dict = {name: round(center_values[j], 3) for j, name in enumerate(feature_names)}
+            center_dict = {
+                name: round(center_values[j], 3)
+                for j, name in enumerate(feature_names)
+            }
 
             # Calculate variance for each feature
             variance_values = np.var(cluster_points, axis=0)
-            variance_dict = {name: round(variance_values[j], 3) for j, name in enumerate(feature_names)}
+            variance_dict = {
+                name: round(variance_values[j], 3)
+                for j, name in enumerate(feature_names)
+            }
 
             clusters_summary[f'cluster_{i}'] = {
                 'size': len(cluster_points),
                 'center_features': center_dict,
                 'variance_features': variance_dict,
-                # 'characteristics': self.analyze_cluster_characteristics(cluster_points) # Original method might be too generic
-                # Add more specific characteristics if needed, e.g. range of key features within cluster
+                # 'characteristics':
+                # self.analyze_cluster_characteristics(cluster_points)
+                # Original method might be too generic
+                # Add more specific characteristics if needed, e.g.
+                # range of key features within cluster
             }
 
         if n_noise_ > 0:

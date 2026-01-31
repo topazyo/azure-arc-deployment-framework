@@ -147,7 +147,10 @@ class ArcModelTrainer:
 
         nan_counts_after = df.isnull().sum().sum()
         self.logger.info(
-            f"Missing values handled for {model_type}. Original NaNs: {original_nan_counts}, Remaining NaNs: {nan_counts_after}")
+            f"Missing values handled for {model_type}. "
+            f"Original NaNs: {original_nan_counts}, "
+            f"Remaining NaNs: {nan_counts_after}"
+        )
         return df
 
     def train_health_prediction_model(self, data: pd.DataFrame) -> None:
@@ -175,8 +178,12 @@ class ArcModelTrainer:
             X_scaled, y, feature_names = self.prepare_data(data, model_type)
             if len(np.unique(y)) < 2:
                 self.logger.error(
-                    f"Target variable for {model_type} has less than 2 unique classes. Classification model cannot be trained. Unique values: {
-                        np.unique(y)}")
+                    (
+                        f"Target variable for {model_type} has less than 2 unique classes. "
+                        "Classification model cannot be trained. Unique values: "
+                        f"{np.unique(y)}"
+                    )
+                )
                 return
 
             X_train, X_test, y_train, y_test = train_test_split(
@@ -208,9 +215,15 @@ class ArcModelTrainer:
                 )
             else:
                 self.logger.error(
-                    f"Unsupported algorithm '{model_algorithm}' specified for {model_type}. Defaulting to RandomForestClassifier.")
-                # Default to RandomForest if algorithm specified is unknown
-                algo_params = model_type_config.get('random_forest_params', {})
+                    f"Unsupported algorithm '{model_algorithm}' "
+                    f"specified for {model_type}. Defaulting to "
+                    f"RandomForestClassifier."
+                )
+                # Default to RandomForest if algorithm specified is
+                # unknown
+                algo_params = model_type_config.get(
+                    'random_forest_params', {}
+                )
                 model = RandomForestClassifier(
                     n_estimators=algo_params.get('n_estimators', 100),
                     max_depth=algo_params.get('max_depth', None),
@@ -309,8 +322,12 @@ class ArcModelTrainer:
             X_scaled, y, feature_names = self.prepare_data(data, model_type)
             if len(np.unique(y)) < 2:
                 self.logger.error(
-                    f"Target variable for {model_type} has less than 2 unique classes. Classification model cannot be trained. Unique values: {
-                        np.unique(y)}")
+                    (
+                        f"Target variable for {model_type} has less than 2 unique classes. "
+                        "Classification model cannot be trained. Unique values: "
+                        f"{np.unique(y)}"
+                    )
+                )
                 return
 
             X_train, X_test, y_train, y_test = train_test_split(
@@ -442,11 +459,17 @@ class ArcModelTrainer:
                 for name in required_features:
                     raw_val = features_payload.get(name)
                     try:
-                        feature_vector[name] = float(
-                            raw_val) if raw_val is not None else 0.0
+                        feature_vector[name] = (
+                            float(raw_val)
+                            if raw_val is not None
+                            else 0.0
+                        )
                     except Exception:
                         self.logger.warning(
-                            f"Could not convert remediation feature '{name}' value '{raw_val}' to float; defaulting to 0.0")
+                            f"Could not convert remediation feature "
+                            f"'{name}' value '{raw_val}' to float; "
+                            f"defaulting to 0.0"
+                        )
                         feature_vector[name] = 0.0
             else:
                 # Fallback: take numeric-like entries from payload

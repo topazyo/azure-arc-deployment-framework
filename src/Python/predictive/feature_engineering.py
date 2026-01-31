@@ -78,7 +78,10 @@ class FeatureEngineer:
                 set(original_numerical_to_keep + original_categorical_to_keep))
             if not original_selected_cols:
                 self.logger.warning(
-                    "No original features specified or found in data based on configuration. Proceeding with generated features only.")
+                    "No original features specified or found in data "
+                    "based on configuration. Proceeding with generated "
+                    "features only."
+                )
                 original_selected_df = pd.DataFrame(index=data.index)
             else:
                 original_selected_df = data[original_selected_cols].copy()
@@ -326,13 +329,23 @@ class FeatureEngineer:
                     interaction_features[f'{col1_name}_x_{col2_name}_product'] = col1 * col2
                     # Add small epsilon to prevent division by zero
                     ratio_series = col1 / (col2 + 1e-8)
-                    interaction_features[f'{col1_name}_div_{col2_name}_ratio'] = ratio_series.replace([
-                                                                                                      np.inf, -np.inf], np.nan)
-                    interaction_features[f'{col1_name}_plus_{col2_name}_sum'] = col1 + col2
-                    interaction_features[f'{col1_name}_minus_{col2_name}_diff'] = col1 - col2
+                    ratio_col_name = (
+                        f'{col1_name}_div_{col2_name}_ratio'
+                    )
+                    interaction_features[ratio_col_name] = (
+                        ratio_series.replace([np.inf, -np.inf], np.nan)
+                    )
+                    sum_col_name = f'{col1_name}_plus_{col2_name}_sum'
+                    interaction_features[sum_col_name] = col1 + col2
+                    diff_col_name = (
+                        f'{col1_name}_minus_{col2_name}_diff'
+                    )
+                    interaction_features[diff_col_name] = col1 - col2
 
-            # Clipping extreme values is generally good, but might be better handled by robust scalers or transformations later.
-            # For now, keeping it simple. NaNs from ratios or products will be
+            # Clipping extreme values is generally good, but might be
+            # better handled by robust scalers or transformations later.
+            # For now, keeping it simple. NaNs from ratios or products
+            # will be
             # handled by _handle_missing_values.
         except Exception as e:
             self.logger.error(
@@ -401,7 +414,10 @@ class FeatureEngineer:
                             f"Mode not found for categorical column '{col}' (all NaNs?). Filled with 'unknown'.")
 
             elif self.categorical_nan_fill_strategy == 'unknown' or isinstance(self.categorical_nan_fill_strategy, str):
-                fill_val_cat = 'unknown' if self.categorical_nan_fill_strategy == 'unknown' else self.categorical_nan_fill_strategy
+                fill_val_cat = (
+                    'unknown' if self.categorical_nan_fill_strategy == 'unknown'
+                    else self.categorical_nan_fill_strategy
+                )
                 df_processed[cat_cols] = df_processed[cat_cols].fillna(
                     fill_val_cat)
                 self.logger.debug(
@@ -504,8 +520,12 @@ class FeatureEngineer:
                             column_data)
                     except Exception as e_transform_enc:
                         self.logger.error(
-                            f"Error transforming column {col} with existing encoder: {e_transform_enc}. Refitting encoder.",
-                            exc_info=True)
+                            (
+                                f"Error transforming column {col} with existing encoder: {e_transform_enc}. "
+                                "Refitting encoder."
+                            ),
+                            exc_info=True
+                        )
                         self.encoders[encoder_key] = OneHotEncoder(
                             sparse_output=False, handle_unknown='ignore')  # Re-initialize
                         encoded_values = self.encoders[encoder_key].fit_transform(

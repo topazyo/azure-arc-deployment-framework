@@ -10,16 +10,12 @@ Tests cover:
 import json
 import logging
 import pytest
-import re
 
 from Python.common.security import (
     # SEC-001: Secrets handling
     is_sensitive_key,
-    redact_value,
     redact_sensitive_data,
     safe_json_for_logging,
-    SENSITIVE_FIELD_PATTERNS,
-    SENSITIVE_VALUE_PATTERNS,
     REDACTED_VALUE,
     # SEC-002: Input validation
     validate_json_string,
@@ -28,9 +24,6 @@ from Python.common.security import (
     validate_analysis_type,
     validate_file_path,
     InputValidationError,
-    DEFAULT_MAX_JSON_SIZE,
-    DEFAULT_MAX_JSON_DEPTH,
-    DEFAULT_MAX_JSON_KEYS,
     # SEC-003: Safe logging
     SensitiveDataFilter,
     configure_secure_logging,
@@ -231,7 +224,7 @@ class TestValidateJsonString:
         is_valid, error = validate_json_string(json_str)
 
         assert is_valid is False
-        assert "Invalid JSON" in error
+        assert error is not None and "Invalid JSON" in error
 
     def test_size_limit_exceeded(self):
         """JSON exceeding size limit should fail."""
@@ -239,7 +232,7 @@ class TestValidateJsonString:
         is_valid, error = validate_json_string(json_str, max_size=100)
 
         assert is_valid is False
-        assert "size" in error.lower()
+        assert error is not None and "size" in error.lower()
 
     def test_depth_limit_exceeded(self):
         """Deeply nested JSON should fail validation."""

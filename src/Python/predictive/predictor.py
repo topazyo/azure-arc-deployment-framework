@@ -34,11 +34,17 @@ class ArcPredictor:
             model_path = f"{self.model_dir}/{model_type}_model.pkl"
             scaler_path = f"{self.model_dir}/{model_type}_scaler.pkl"
             # Path for feature info (assuming ArcModelTrainer saves it this way)
-            # Step 7 (ArcModelTrainer) saved 'feature_importance' which was a dict: {'names': [...], 'importances': [...]}
-            # This is more aligned with 'feature_info.pkl' than 'metadata.pkl' or 'feature_importance.pkl' alone.
-            # Let's assume the file is named more generically like 'feature_info.pkl' or use the existing 'feature_importance.pkl'
+            # Step 7 (ArcModelTrainer) saved 'feature_importance' which was a dict:
+            # {'names': [...], 'importances': [...]}
+            # This is more aligned with 'feature_info.pkl' than 'metadata.pkl' or
+            # 'feature_importance.pkl' alone.
+            # Let's assume the file is named more generically like 'feature_info.pkl' or
+            # use the existing 'feature_importance.pkl'
             # and derive ordered_features and importances from it.
-            # Based on prompt: "ArcModelTrainer saves feature_importance as a dictionary where model.feature_importances_ were zipped with an ordered list of feature names."
+            # Based on prompt: (
+            #   "ArcModelTrainer saves feature_importance as a dictionary where "
+            #   "model.feature_importances_ were zipped with an ordered list of feature names."
+            # )
             # So, list(loaded_feature_importance.keys()) would give the ordered
             # feature names.
 
@@ -46,7 +52,10 @@ class ArcPredictor:
             # {'names': ['feat1', 'feat2'], 'importances': [0.5, 0.5]}
             # OR, if it saved dict(zip(ordered_names, importances)), then keys() gives names.
             # The prompt for Step 7 (ArcModelTrainer) saved:
-            # self.feature_importance[model_type] = {'names': feature_names, 'importances': model.feature_importances_.tolist()}
+            # self.feature_importance[model_type] = {
+            #   'names': feature_names,
+            #   'importances': model.feature_importances_.tolist()
+            # }
             # So we load this dict.
             feature_info_path = f"{
                 self.model_dir}/{model_type}_feature_importance.pkl"
@@ -171,11 +180,14 @@ class ArcPredictor:
                 feature_impacts = self.calculate_feature_impacts(
                     scaled_features_array[0],
                     importances_map,  # This is the dict of name:importance
-                    ordered_feature_names  # This is the ordered list of names
+                    ordered_feature_names  # This is the ordered list
                 )
             else:
                 self.logger.warning(
-                    f"Feature importance map or ordered names not available for {model_type}. Skipping impact calculation.")
+                    f"Feature importance map or ordered names not "
+                    f"available for {model_type}. Skipping impact "
+                    f"calculation."
+                )
 
             return {
                 'prediction': {
@@ -224,7 +236,8 @@ class ArcPredictor:
                 'anomaly_score': float(anomaly_scores[0]),
                 # For consistency, one might invert this or use decision_function.
                 # Let's assume this score is directly usable/interpretable as is for now.
-                # 'threshold': self.models[model_type].threshold_, # threshold_ is for contamination if using it to predict.
+                # 'threshold': self.models[model_type].threshold_,
+                # threshold_ is for contamination if using it to predict.
                 # The score itself is more of a relative measure.
                 'timestamp': datetime.now().isoformat()
             }
@@ -269,7 +282,10 @@ class ArcPredictor:
                 )
             else:
                 self.logger.warning(
-                    f"Feature importance map or ordered names not available for {model_type}. Skipping impact calculation.")
+                    f"Feature importance map or ordered names not "
+                    f"available for {model_type}. Skipping impact "
+                    f"calculation."
+                )
 
             return {
                 'prediction': {
@@ -308,14 +324,17 @@ class ArcPredictor:
             for feature_name in ordered_feature_names:
                 if feature_name not in telemetry_data:
                     self.logger.warning(
-                        f"Feature '{feature_name}' (required by model '{model_type}') not found in telemetry_data. Using 0.0 as default.")
+                        f"Feature '{feature_name}' (required by model '{model_type}') not found in telemetry_data. "
+                        f"Using 0.0 as default."
+                    )
                     feature_values.append(0.0)
                 else:
                     value = telemetry_data[feature_name]
-                    if pd.isna(
-                            value):  # Handle if data source itself has NaN for a feature
+                    if pd.isna(value):  # Handle if data source itself has NaN for a feature
                         self.logger.warning(
-                            f"Feature '{feature_name}' has NaN value in telemetry_data for '{model_type}'. Using 0.0 as default.")
+                            f"Feature '{feature_name}' has NaN value in telemetry_data for '{model_type}'. "
+                            f"Using 0.0 as default."
+                        )
                         feature_values.append(0.0)
                     else:
                         try:

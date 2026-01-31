@@ -190,7 +190,10 @@ class ArcRemediationLearner:
                         'success_pattern_threshold', 0.8)
                     min_attempts_threshold = self.config.get(
                         'success_pattern_min_attempts', 5)
-                    if stats['success_rate'] >= success_rate_threshold and stats['total_attempts'] >= min_attempts_threshold:
+                    if (
+                        stats['success_rate'] >= success_rate_threshold
+                        and stats['total_attempts'] >= min_attempts_threshold
+                    ):
                         recommendations.append(
                             {
                                 'recommended_action': action_pattern,

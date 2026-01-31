@@ -219,7 +219,8 @@ class TelemetryProcessor:
 
         Supports two calling conventions used across the test suite:
         - Legacy: nested dict like {'cpu': {'average': ...}, 'memory': ..., 'errors': ...} -> returns np.ndarray
-        - Modern: flat dict of numeric feature_name->value and config['anomaly_detection_features'] -> returns (np.ndarray, feature_names)
+                - Modern: flat dict of numeric feature_name->value and config['anomaly_detection_features']
+                    -> returns (np.ndarray, feature_names)
         """
         try:
             # Legacy path: nested features
@@ -362,7 +363,11 @@ class TelemetryProcessor:
             if scaled_features.shape[0] == 0:
                 self.logger.warning("Scaled features are empty. Skipping PCA.")
                 pca_features = scaled_features
-            elif isinstance(self.pca.n_components, float) and self.pca.n_components < 1.0 and scaled_features.shape[1] < 2:
+            elif (
+                isinstance(self.pca.n_components, float)
+                and self.pca.n_components < 1.0
+                and scaled_features.shape[1] < 2
+            ):
                 self.logger.warning(
                     f"PCA n_components is {
                         self.pca.n_components} but only {
@@ -655,8 +660,12 @@ class TelemetryProcessor:
                             'priority': 'medium',
                             'component': feature,
                             'period': period_type,
-                            'message': f"Significant {trend_info['direction']} trend detected for '{feature}' in {period_type.replace('_', ' ')}.",
-                            'details': (f"Slope: {trend_info.get('slope'):.3f}, "
+                            'message': (
+                                f"Significant {trend_info['direction']} trend detected for '{feature}' in "
+                                f"{period_type.replace('_', ' ')}."
+                            ),
+                            'details': (
+                                f"Slope: {trend_info.get('slope'):.3f}, "
                                         f"R-value: {trend_info.get('r_value'):.2f}, "
                                         f"P-value: {trend_info.get('p_value'):.3g}, "
                                         f"Stderr: {trend_info.get('stderr'):.3f}")
@@ -1075,13 +1084,21 @@ class TelemetryProcessor:
                         # Store timestamps or row indices
                         detected_patterns[rule_name] = {
                             "description": rule.get(
-                                'description', f"Pattern '{rule_name}' detected."), "severity": rule.get(
-                                'severity', 'medium'), "count": int(
-                                combined_condition.sum()), "occurrences_timestamps": occurrences['timestamp'].apply(
-                                lambda dt: dt.isoformat()).tolist() if 'timestamp' in occurrences.columns and not occurrences['timestamp'].empty else occurrences.index.tolist()}
+                                'description',
+                                f"Pattern '{rule_name}' detected."
+                            ),
+                            "severity": rule.get('severity', 'medium'),
+                            "count": int(combined_condition.sum()),
+                            "occurrences_timestamps": (
+                                occurrences['timestamp'].apply(
+                                    lambda dt: dt.isoformat()
+                                ).tolist()
+                            )
+                        }
                         self.logger.info(
-                            f"Detected pattern '{rule_name}' at {
-                                len(occurrences)} locations.")
+                            f"Detected pattern '{rule_name}' at "
+                            f"{len(occurrences)} locations."
+                        )
                     else:  # No timestamp, just count
                         detected_patterns[rule_name] = {
                             "description": rule.get(
@@ -1212,7 +1229,8 @@ class TelemetryProcessor:
                     # For a single data point, throughput isn't well-defined over time.
                     # Could be total requests if interval is assumed to be 1 minute, or 0, or NaN.
                     # Let's consider it as total requests in an undefined (but implicitly short) interval.
-                    # Or, if we assume it represents a rate over a standard interval (e.g. 1 min), it would be just its value.
+                    # Or, if we assume it represents a rate over a standard interval (e.g. 1 min),
+                    # it would be just its value.
                     # For now, let's assign 0 if duration can't be calculated.
                     derived['requests_per_minute'] = 0.0
                     self.logger.debug(
