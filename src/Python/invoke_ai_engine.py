@@ -12,6 +12,15 @@ sys.path.insert(
 from Python.predictive.predictive_analytics_engine import (  # noqa: E402
     PredictiveAnalyticsEngine
 )
+from Python.common.resilience import (  # noqa: E402
+    ExitCode,
+    ErrorCategory,
+    create_error_response,
+    emit_error,
+    validate_config,
+    validate_model_directory,
+    retry_with_backoff
+)
 
 
 def main():
@@ -102,24 +111,35 @@ def main():
     )
 
     args = parser.parse_args()
-    ai_components_config = {}  # Initialize
+
+    # Use resilience utilities for config loading with retry
+    @retry_with_backoff(max_retries=2, initial_delay=0.5)
+    def load_config_with_retry(path: str) -> dict:
+        """Load configuration with retry for transient failures."""
+        with open(path, 'r') as f:
+            return json.load(f)
 
     try:
         # Load configuration from JSON file
         config_path = os.path.abspath(args.configpath)
         if not os.path.exists(config_path):
-            raise FileNotFoundError(
-                f"Configuration file not found at: {config_path}"
+            emit_error(
+                error_type=ErrorCategory.FILE_NOT_FOUND,
+                message=f"Configuration file not found at: {config_path}",
+                exit_code=ExitCode.CONFIG_ERROR,
+                details={"config_path": config_path},
+                server_name=args.servername,
+                analysis_type=args.analysistype
             )
 
-        with open(config_path, 'r') as f:
-            config_data = json.load(f)
-        ai_components_config = config_data.get('aiComponents', {})
-        if not ai_components_config:
-            raise ValueError(
-                f"Invalid configuration format in {config_path}. "
-                f"Missing 'aiComponents' key."
-            )
+        config_data = load_config_with_retry(config_path)
+        ai_components_config = validate_config(
+            config=config_data,
+            required_key="aiComponents",
+            config_path=config_path,
+            server_name=args.servername,
+            analysis_type=args.analysistype
+        )
 
         # Parse (or synthesize) JSON input for server data.
         if (
@@ -134,27 +154,28 @@ def main():
             try:
                 server_data_input = json.loads(args.serverdatajson)
             except json.JSONDecodeError as e:
-                error_output = {
-                    "error": "JSONDecodeError",
-                    "message": (
-                        f"Invalid JSON provided in --serverdatajson: "
-                        f"{str(e)}"
-                    ),
-                    "input_servername": args.servername,
-                    "input_analysistype": args.analysistype,
-                    "timestamp": datetime.now().isoformat(),
-                }
-                print(json.dumps(error_output, indent=4), file=sys.stderr)
-                sys.exit(1)
+                emit_error(
+                    error_type=ErrorCategory.JSON_PARSE,
+                    message=f"Invalid JSON in --serverdatajson: {str(e)}",
+                    exit_code=ExitCode.VALIDATION_ERROR,
+                    details={
+                        "param_name": "--serverdatajson",
+                        "error_position": e.pos,
+                        "error_line": e.lineno,
+                        "error_column": e.colno
+                    },
+                    server_name=args.servername,
+                    analysis_type=args.analysistype
+                )
 
-        # Ensure model directory exists
+        # Validate model directory exists and has content
         model_dir_abs = os.path.abspath(args.modeldir)
-        if not os.path.isdir(model_dir_abs):
-            # For this script, if models dir doesn't exist, fatal error
-            raise FileNotFoundError(
-                f"Model directory not found at: {model_dir_abs}. "
-                f"Please ensure models are trained and available."
-            )
+        validate_model_directory(
+            model_dir=model_dir_abs,
+            server_name=args.servername,
+            analysis_type=args.analysistype,
+            exit_on_error=True
+        )
 
         # Instantiate the real PredictiveAnalyticsEngine
         engine = PredictiveAnalyticsEngine(
@@ -197,30 +218,32 @@ def main():
 
         # Added indent for readability if run manually
         print(json.dumps(results, indent=4))
-        sys.exit(0)
+        sys.exit(ExitCode.SUCCESS)
+
+    except SystemExit:
+        # Re-raise SystemExit (from emit_error) without wrapping
+        raise
 
     except Exception as e:
-        # Ensure args are available for error reporting
+        # Catch-all for unexpected errors
         servername_for_error = "Unknown"
         analysistype_for_error = "Unknown"
         if 'args' in locals():
-            servername_for_error = (
-                args.servername if args.servername else "Unknown"
-            )
-            analysistype_for_error = (
-                args.analysistype if args.analysistype else "Unknown"
-            )
+            servername_for_error = getattr(args, 'servername', 'Unknown')
+            analysistype_for_error = getattr(args, 'analysistype', 'Unknown')
 
-        error_output = {
-            "error": type(e).__name__,  # More specific error type
-            "message": str(e),
-            "details": "An error occurred in the AI engine.",
-            "input_servername": servername_for_error,
-            "input_analysistype": analysistype_for_error,
-            "timestamp": datetime.now().isoformat()
-        }
-        print(json.dumps(error_output, indent=4), file=sys.stderr)
-        sys.exit(1)
+        error_response = create_error_response(
+            error_type=ErrorCategory.INTERNAL,
+            message=str(e),
+            details={
+                "exception_type": type(e).__name__,
+                "context": "Unexpected error in AI engine"
+            },
+            server_name=servername_for_error,
+            analysis_type=analysistype_for_error
+        )
+        print(json.dumps(error_response, indent=4), file=sys.stderr)
+        sys.exit(ExitCode.GENERAL_ERROR)
 
 
 if __name__ == "__main__":

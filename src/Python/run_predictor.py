@@ -3,7 +3,7 @@ import json
 import argparse
 import os
 import sys  # Ensure sys is imported for sys.path
-import traceback  # For detailed error reporting
+from datetime import datetime
 
 # Path setup to allow importing sibling modules (config) and parent
 # modules (predictive). Assuming this script (run_predictor.py) is in
@@ -16,6 +16,11 @@ if SRC_PATH not in sys.path:
 
 # Use full path from src/ to maintain package context for relative imports
 from Python.predictive.predictor import ArcPredictor  # noqa: E402
+from Python.common.resilience import (  # noqa: E402
+    ErrorCategory,
+    create_error_response,
+    retry_with_backoff
+)
 
 # If script is in src/Python/ and models in data/models/latest at
 # project root:
@@ -60,60 +65,74 @@ def main():
         help="JSON string containing the telemetry data for prediction.")
 
     args = parser.parse_args()
+    debug_indent = 4 if os.environ.get('DEBUG_PYTHON_WRAPPER') else None
 
-    output_results = {}  # Initialize with an empty dict
+    # Helper to emit structured errors (this CLI returns errors on stdout)
+    def emit_structured_error(
+        error_type: str,
+        message: str,
+        details: dict = None
+    ):
+        """Emit error JSON to stdout and return."""
+        response = create_error_response(
+            error_type=error_type,
+            message=message,
+            details=details,
+            server_name=args.server_name,
+            analysis_type=args.analysis_type
+        )
+        print(json.dumps(response, indent=debug_indent), flush=True)
 
     try:
+        # Validate model directory
         model_exists = os.path.exists(args.model_dir)
         model_has_files = model_exists and os.listdir(args.model_dir)
         if not model_exists or not model_has_files:
-            output_results = {
-                "error": (
-                    f"Model directory {args.model_dir} is empty or does "
-                    "not exist. Ensure models are trained and present."
-                )
-            }
-            print(json.dumps(output_results), flush=True)
+            emit_structured_error(
+                error_type=ErrorCategory.MODEL_ERROR,
+                message="Model directory is empty or does not exist",
+                details={"model_dir": args.model_dir}
+            )
             return
 
-        predictor = ArcPredictor(model_dir=args.model_dir)
-        # Check if models were loaded (e.g. pkl files were valid)
+        # Load predictor with retry for transient failures
+        @retry_with_backoff(max_retries=2, initial_delay=0.5)
+        def load_predictor(model_dir: str) -> ArcPredictor:
+            return ArcPredictor(model_dir=model_dir)
+
+        predictor = load_predictor(args.model_dir)
+
+        # Check if models were loaded
         if not predictor.models:
-            output_results = {
-                "error": (
-                    f"No models loaded successfully by ArcPredictor from "
-                    f"{args.model_dir}."
-                )
-            }
-            print(json.dumps(output_results), flush=True)
+            emit_structured_error(
+                error_type=ErrorCategory.MODEL_ERROR,
+                message="No models loaded successfully by ArcPredictor",
+                details={"model_dir": args.model_dir}
+            )
             return
 
+        # Parse telemetry data
         try:
             telemetry_data = json.loads(args.telemetrydatajson)
         except json.JSONDecodeError as e:
-            debug_indent = (
-                4 if os.environ.get('DEBUG_PYTHON_WRAPPER') else None
+            emit_structured_error(
+                error_type=ErrorCategory.JSON_PARSE,
+                message=f"Invalid JSON in --telemetrydatajson: {str(e)}",
+                details={
+                    "param_name": "--telemetrydatajson",
+                    "error_position": e.pos,
+                    "error_line": e.lineno,
+                    "error_column": e.colno
+                }
             )
-            output_results = {
-                "error": "JSONDecodeError",
-                "message": (
-                    f"Invalid JSON provided in --telemetrydatajson: "
-                    f"{str(e)}"
-                ),
-                "server_name": args.server_name,
-                "analysis_type": args.analysis_type,
-            }
-            print(json.dumps(output_results, indent=debug_indent),
-                  flush=True)
             return
 
+        # Build output results
         output_results = {
             "server_name": args.server_name,
-            "analysis_type": args.analysis_type
+            "analysis_type": args.analysis_type,
+            "timestamp": datetime.now().isoformat()
         }
-        # Optionally, add features provided:
-        # output_results["input_features_provided"] = list(
-        #     telemetry_data.keys())
 
         if args.analysis_type in ["Full", "Health"]:
             health_pred = predictor.predict_health(telemetry_data)
@@ -127,22 +146,15 @@ def main():
             failure_pred = predictor.predict_failures(telemetry_data)
             output_results["failure_prediction"] = failure_pred
 
-        debug_indent = (
-            4 if os.environ.get('DEBUG_PYTHON_WRAPPER') else None
-        )
         print(json.dumps(output_results, indent=debug_indent), flush=True)
 
     except Exception as e:
-        # Ensure output_results is defined before trying to add error key
-        # Should have been initialized earlier
-        if not output_results:
-            output_results = {}
-        output_results["error"] = str(e)
-        output_results["trace"] = traceback.format_exc()
-        debug_indent = (
-            4 if os.environ.get('DEBUG_PYTHON_WRAPPER') else None
+        # Catch-all for unexpected errors
+        emit_structured_error(
+            error_type=ErrorCategory.INTERNAL,
+            message=str(e),
+            details={"exception_type": type(e).__name__}
         )
-        print(json.dumps(output_results, indent=debug_indent), flush=True)
 
 
 if __name__ == "__main__":
