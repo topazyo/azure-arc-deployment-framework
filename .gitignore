@@ -398,6 +398,9 @@ MigrationBackup/
 FodyWeavers.xsd
 
 # VS Code files for those working on multiple tools
+
+# Ignore local helper scripts used to fix flake8 issues
+fix_flake8*.py
 .vscode/*
 !.vscode/settings.json
 !.vscode/tasks.json
