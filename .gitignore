@@ -27,6 +27,11 @@ config/local-settings.json
 # Mono auto generated files
 mono_crash.*
 
+# Python build artifacts (auto-generated, not source)
+build/
+dist/
+*.egg-info/
+
 # Build results
 [Dd]ebug/
 [Dd]ebugPublic/
