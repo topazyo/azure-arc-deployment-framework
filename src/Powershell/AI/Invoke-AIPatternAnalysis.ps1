@@ -34,24 +34,29 @@ function Invoke-AIPatternAnalysis {
         }
 
         $records = Get-PatternRecords -LogLines $lines -DaysToAnalyze $DaysToAnalyze
-        $analysisResults.Patterns = $records | Group-Object -Property Category | ForEach-Object {
-            $impact = Get-ErrorImpact -Errors $_.Group
-            @{
-                Category = $_.Name
-                Count = $_.Count
-                Samples = $_.Group | Select-Object -First 5
-                Impact = $impact
-                TimeDistribution = Get-TimeDistribution -Errors $_.Group
-                SeverityScore = Get-SeverityScore -Impact $impact
+        if ($records -and $records.Count -gt 0) {
+            $analysisResults.Patterns = $records | Group-Object -Property Category | ForEach-Object {
+                $groupErrors = @($_.Group)
+                $impact = Get-ErrorImpact -Errors $groupErrors
+                @{
+                    Category = $_.Name
+                    Count = $_.Count
+                    Samples = $groupErrors | Select-Object -First 5
+                    Impact = $impact
+                    TimeDistribution = Get-TimeDistribution -Errors $groupErrors
+                    SeverityScore = Get-SeverityScore -Impact $impact
+                }
             }
+        } else {
+            $analysisResults.Patterns = @()
         }
 
         $analysisResults.Statistics = @{
-            TotalErrors = $records.Count
-            UniquePatterns = ($records | Select-Object -ExpandProperty Pattern -Unique).Count
-            MostCommonCategory = if ($records.Count -gt 0) { ($analysisResults.Patterns | Sort-Object Count -Descending | Select-Object -First 1).Category } else { $null }
-            TimeBasedDistribution = Get-ErrorTimeDistribution -Errors $records
-            SeverityDistribution = Get-ErrorSeverityDistribution -Errors $records
+            TotalErrors = if ($records) { $records.Count } else { 0 }
+            UniquePatterns = if ($records -and $records.Count -gt 0) { ($records | Select-Object -ExpandProperty Pattern -Unique).Count } else { 0 }
+            MostCommonCategory = if ($records -and $records.Count -gt 0) { ($analysisResults.Patterns | Sort-Object Count -Descending | Select-Object -First 1).Category } else { $null }
+            TimeBasedDistribution = if ($records -and $records.Count -gt 0) { Get-ErrorTimeDistribution -Errors @($records) } else { @() }
+            SeverityDistribution = if ($records -and $records.Count -gt 0) { Get-ErrorSeverityDistribution -Errors @($records) } else { @() }
             AnomalyScore = Get-LocalAnomalyScore -Patterns $analysisResults.Patterns
         }
 
@@ -198,7 +203,7 @@ function Get-ErrorSeverityDistribution {
 }
 
 function Get-LocalAnomalyScore {
-    param([Parameter(Mandatory)] [object[]]$Patterns)
+    param([Parameter()] [object[]]$Patterns)
     if (-not $Patterns -or $Patterns.Count -eq 0) { return 0 }
     $highImpact = ($Patterns | Where-Object { $_.SeverityScore -ge 0.5 }).Count
     return [math]::Round($highImpact / $Patterns.Count, 2)

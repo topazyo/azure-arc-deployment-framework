@@ -11,9 +11,12 @@ Describe 'Invoke-AIPatternAnalysis.ps1' {
 
     It 'groups patterns, scores severity, and returns recommendations' {
         . $script:ScriptPath_Patterns
+        # Use recent dates (within DaysToAnalyze=30)
+        $recentDate1 = (Get-Date).AddDays(-5).ToString('yyyy-MM-dd HH:mm:ss')
+        $recentDate2 = (Get-Date).AddDays(-3).ToString('yyyy-MM-dd HH:mm:ss')
         $logs = @(
-            '2025-12-15 10:00:00 ERROR Disk failure detected on node01',
-            '2025-12-15 11:00:00 WARN CPU usage high on node02'
+            "$recentDate1 ERROR Disk failure detected on node01",
+            "$recentDate2 WARN CPU usage high on node02"
         )
 
         $result = Invoke-AIPatternAnalysis -LogPath 'unused' -LogContent $logs -DaysToAnalyze 30 -GenerateRecommendations

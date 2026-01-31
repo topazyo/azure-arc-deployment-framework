@@ -398,6 +398,9 @@ FodyWeavers.xsd
 !.vscode/tasks.json
 !.vscode/launch.json
 !.vscode/extensions.json
+
+# Ignore VIBE audit artifacts (consolidated audit and implementation worktrees)
+/VIBE/
 *.code-workspace
 
 # Local History for Visual Studio Code

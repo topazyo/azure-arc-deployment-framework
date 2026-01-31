@@ -1,0 +1,581 @@
+﻿<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<test-results xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="nunit_schema_2.5.xsd" name="Pester" total="228" errors="0" failures="0" not-run="0" inconclusive="0" ignored="0" skipped="2" invalid="0" date="2026-01-30" time="23:12:17">
+  <environment user="topazhu" os-version="10.0.26200" cwd="C:\Users\topazhu\Github\azure-arc-deployment-framework" machine-name="TOPAZH-LAP-HZ" clr-version="9.0.10" platform="Microsoft Windows 11 Pro|C:\WINDOWS|\Device\Harddisk0\Partition3" nunit-version="2.5.8.0" user-domain="TOPAZH-LAP-HZ" />
+  <culture-info current-culture="en-IL" current-uiculture="en-GB" />
+  <test-suite type="TestFixture" name="Pester" executed="True" result="Ignored" success="True" time="33.0103" asserts="0" description="Pester">
+    <results>
+      <test-suite type="TestFixture" name="C:\Users\topazhu\Github\azure-arc-deployment-framework\tests\Powershell\unit\AI.Functions.Tests.ps1" executed="True" result="Success" success="True" time="1.9235" asserts="0" description="C:\Users\topazhu\Github\azure-arc-deployment-framework\tests\Powershell\unit\AI.Functions.Tests.ps1">
+        <results>
+          <test-suite type="TestFixture" name="Get-PredictiveInsights AI Function" executed="True" result="Success" success="True" time="1.4872" asserts="0" description="Get-PredictiveInsights AI Function">
+            <results>
+              <test-case description="should THROW if AI Engine script is not found" name="Get-PredictiveInsights AI Function.should THROW if AI Engine script is not found" time="0.4444" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="should THROW if Python executable is not found" name="Get-PredictiveInsights AI Function.should THROW if Python executable is not found" time="0.1176" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="should successfully execute and parse valid JSON output from Python script" name="Get-PredictiveInsights AI Function.should successfully execute and parse valid JSON output from Python script" time="0.1687" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="should THROW if Python script returns non-zero exit code and provides stderr" name="Get-PredictiveInsights AI Function.should THROW if Python script returns non-zero exit code and provides stderr" time="0.1633" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="should return structured error if Python script returns non-zero exit code and stderr is JSON" name="Get-PredictiveInsights AI Function.should return structured error if Python script returns non-zero exit code and stderr is JSON" time="0.1333" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="should THROW if Python script returns zero exit code but empty stdout" name="Get-PredictiveInsights AI Function.should THROW if Python script returns zero exit code but empty stdout" time="0.0919" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="should THROW if Python script returns zero exit code but invalid JSON in stdout" name="Get-PredictiveInsights AI Function.should THROW if Python script returns zero exit code but invalid JSON in stdout" time="0.0913" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="should pass different AnalysisType parameters correctly to Python script" name="Get-PredictiveInsights AI Function.should pass different AnalysisType parameters correctly to Python script" time="0.1528" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="should use specified PythonExecutable and ScriptPath if provided" name="Get-PredictiveInsights AI Function.should use specified PythonExecutable and ScriptPath if provided" time="0.0721" asserts="0" success="True" result="Success" executed="True" />
+            </results>
+          </test-suite>
+        </results>
+      </test-suite>
+      <test-suite type="TestFixture" name="C:\Users\topazhu\Github\azure-arc-deployment-framework\tests\Powershell\unit\AI.Tests.ps1" executed="True" result="Success" success="True" time="1.2472" asserts="0" description="C:\Users\topazhu\Github\azure-arc-deployment-framework\tests\Powershell\unit\AI.Tests.ps1">
+        <results>
+          <test-suite type="TestFixture" name="Find-DiagnosticPattern.ps1 Tests" executed="True" result="Success" success="True" time="0.5889" asserts="0" description="Find-DiagnosticPattern.ps1 Tests">
+            <results>
+              <test-suite type="TestFixture" name="Find-DiagnosticPattern.ps1 Tests.KeywordMatch Logic" executed="True" result="Success" success="True" time="0.4779" asserts="0" description="Find-DiagnosticPattern.ps1 Tests.KeywordMatch Logic">
+                <results>
+                  <test-case description="Should match if all keywords are present in Message (case-insensitive) and MinOccurrences met" name="Find-DiagnosticPattern.ps1 Tests.KeywordMatch Logic.Should match if all keywords are present in Message (case-insensitive) and MinOccurrences met" time="0.0462" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should NOT match if not all keywords are present in Message" name="Find-DiagnosticPattern.ps1 Tests.KeywordMatch Logic.Should NOT match if not all keywords are present in Message" time="0.0386" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should NOT match if MinOccurrences is not met" name="Find-DiagnosticPattern.ps1 Tests.KeywordMatch Logic.Should NOT match if MinOccurrences is not met" time="0.0332" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should skip items with missing, null or non-string Message property for Message-based conditions" name="Find-DiagnosticPattern.ps1 Tests.KeywordMatch Logic.Should skip items with missing, null or non-string Message property for Message-based conditions" time="0.0333" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+              <test-case description="Should use hardcoded patterns if PatternDefinitionPath is not provided" name="Find-DiagnosticPattern.ps1 Tests.Should use hardcoded patterns if PatternDefinitionPath is not provided" time="0.1205" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="Should use hardcoded patterns if PatternDefinitionPath is invalid (Test-Path returns $false)" name="Find-DiagnosticPattern.ps1 Tests.Should use hardcoded patterns if PatternDefinitionPath is invalid (Test-Path returns $false)" time="0.0479" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="Should load and use patterns from JSON file if PatternDefinitionPath is valid" name="Find-DiagnosticPattern.ps1 Tests.Should load and use patterns from JSON file if PatternDefinitionPath is valid" time="0.0973" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="Should handle malformed JSON file by falling back to hardcoded patterns" name="Find-DiagnosticPattern.ps1 Tests.Should handle malformed JSON file by falling back to hardcoded patterns" time="0.0567" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="Should limit returned patterns with -MaxPatternsToReturn" name="Find-DiagnosticPattern.ps1 Tests.Should limit returned patterns with -MaxPatternsToReturn" time="0.041" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="Should include example matched items in output (up to 5)" name="Find-DiagnosticPattern.ps1 Tests.Should include example matched items in output (up to 5)" time="0.0456" asserts="0" success="True" result="Success" executed="True" />
+            </results>
+          </test-suite>
+          <test-suite type="TestFixture" name="Add-ExceptionToLearningData.ps1 Tests" executed="True" result="Success" success="True" time="1.1581" asserts="0" description="Add-ExceptionToLearningData.ps1 Tests">
+            <results>
+              <test-case description="Should return $false if ExceptionObject is null" name="Add-ExceptionToLearningData.ps1 Tests.Should return $false if ExceptionObject is null" time="0.0422" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="Should return $false if ExceptionObject is not an Exception or ErrorRecord" name="Add-ExceptionToLearningData.ps1 Tests.Should return $false if ExceptionObject is not an Exception or ErrorRecord" time="0.0322" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="Should extract features correctly from a System.Exception object" name="Add-ExceptionToLearningData.ps1 Tests.Should extract features correctly from a System.Exception object" time="0.0785" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="Should extract features from an Exception with an InnerException" name="Add-ExceptionToLearningData.ps1 Tests.Should extract features from an Exception with an InnerException" time="0.0521" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="Should extract features correctly from a mocked ErrorRecord object" name="Add-ExceptionToLearningData.ps1 Tests.Should extract features correctly from a mocked ErrorRecord object" time="0.123" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="Should prefix AssociatedData keys with &quot;Assoc_&quot;" name="Add-ExceptionToLearningData.ps1 Tests.Should prefix AssociatedData keys with &quot;Assoc_&quot;" time="0.0621" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="Should call Export-Csv without -Append when data file does not exist (and create directory)" name="Add-ExceptionToLearningData.ps1 Tests.Should call Export-Csv without -Append when data file does not exist (and create directory)" time="0.0545" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="Should call Export-Csv with -Append when data file exists" name="Add-ExceptionToLearningData.ps1 Tests.Should call Export-Csv with -Append when data file exists" time="0.0358" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="Should return $true on success and $false if Export-Csv fails" name="Add-ExceptionToLearningData.ps1 Tests.Should return $true on success and $false if Export-Csv fails" time="0.0671" asserts="0" success="True" result="Success" executed="True" />
+            </results>
+          </test-suite>
+        </results>
+      </test-suite>
+      <test-suite type="TestFixture" name="C:\Users\topazhu\Github\azure-arc-deployment-framework\tests\Powershell\unit\CertificatesAndBackup.Tests.ps1" executed="True" result="Success" success="True" time="3.0898" asserts="0" description="C:\Users\topazhu\Github\azure-arc-deployment-framework\tests\Powershell\unit\CertificatesAndBackup.Tests.ps1">
+        <results>
+          <test-suite type="TestFixture" name="Install-RootCertificates.ps1" executed="True" result="Success" success="True" time="0.5194" asserts="0" description="Install-RootCertificates.ps1">
+            <results>
+              <test-case description="skips import when thumbprint already exists (SkipIfExists)" name="Install-RootCertificates.ps1.skips import when thumbprint already exists (SkipIfExists)" time="0.2823" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="forces import when requested" name="Install-RootCertificates.ps1.forces import when requested" time="0.2187" asserts="0" success="True" result="Success" executed="True" />
+            </results>
+          </test-suite>
+          <test-suite type="TestFixture" name="Backup-OperationState.ps1" executed="True" result="Success" success="True" time="3.0365" asserts="0" description="Backup-OperationState.ps1">
+            <results>
+              <test-case description="produces an archive when Compress is used" name="Backup-OperationState.ps1.produces an archive when Compress is used" time="1.4302" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="retains directory when KeepUncompressed is set" name="Backup-OperationState.ps1.retains directory when KeepUncompressed is set" time="1.0593" asserts="0" success="True" result="Success" executed="True" />
+            </results>
+          </test-suite>
+        </results>
+      </test-suite>
+      <test-suite type="TestFixture" name="C:\Users\topazhu\Github\azure-arc-deployment-framework\tests\Powershell\unit\Core.Functions.Tests.ps1" executed="True" result="Success" success="True" time="1.362" asserts="0" description="C:\Users\topazhu\Github\azure-arc-deployment-framework\tests\Powershell\unit\Core.Functions.Tests.ps1">
+        <results>
+          <test-suite type="TestFixture" name="Core Deployment Functions" executed="True" result="Success" success="True" time="1.1984" asserts="0" description="Core Deployment Functions">
+            <results>
+              <test-suite type="TestFixture" name="Core Deployment Functions.Initialize-ArcDeployment" executed="True" result="Success" success="True" time="0.7792" asserts="0" description="Core Deployment Functions.Initialize-ArcDeployment">
+                <results>
+                  <test-case description="should THROW if Az.Accounts module is missing" name="Core Deployment Functions.Initialize-ArcDeployment.should THROW if Az.Accounts module is missing" time="0.1372" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="should THROW if Az.Resources module is missing" name="Core Deployment Functions.Initialize-ArcDeployment.should THROW if Az.Resources module is missing" time="0.074" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="should THROW if not logged into Azure (Get-AzContext returns null)" name="Core Deployment Functions.Initialize-ArcDeployment.should THROW if not logged into Azure (Get-AzContext returns null)" time="0.075" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="should use current context if subscription matches" name="Core Deployment Functions.Initialize-ArcDeployment.should use current context if subscription matches" time="0.064" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="should call Set-AzContext if subscription ID differs and succeed" name="Core Deployment Functions.Initialize-ArcDeployment.should call Set-AzContext if subscription ID differs and succeed" time="0.054" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="should THROW if Set-AzContext fails" name="Core Deployment Functions.Initialize-ArcDeployment.should THROW if Set-AzContext fails" time="0.0574" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="should CREATE resource group if it does not exist (with -WhatIf)" name="Core Deployment Functions.Initialize-ArcDeployment.should CREATE resource group if it does not exist (with -WhatIf)" time="0.0383" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="should CREATE resource group if it does not exist" name="Core Deployment Functions.Initialize-ArcDeployment.should CREATE resource group if it does not exist" time="0.0467" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="should UPDATE tags if resource group exists and tags are provided (with -WhatIf)" name="Core Deployment Functions.Initialize-ArcDeployment.should UPDATE tags if resource group exists and tags are provided (with -WhatIf)" time="0.0353" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="should UPDATE tags if resource group exists and tags are provided" name="Core Deployment Functions.Initialize-ArcDeployment.should UPDATE tags if resource group exists and tags are provided" time="0.037" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="should WARN if resource group exists in a different location" name="Core Deployment Functions.Initialize-ArcDeployment.should WARN if resource group exists in a different location" time="0.0326" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="should THROW if resource group creation fails" name="Core Deployment Functions.Initialize-ArcDeployment.should THROW if resource group creation fails" time="0.0618" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="should WARN if tag update fails on existing RG" name="Core Deployment Functions.Initialize-ArcDeployment.should WARN if tag update fails on existing RG" time="0.0615" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+              <test-suite type="TestFixture" name="Core Deployment Functions.New-ArcDeployment" executed="True" result="Success" success="True" time="1.1767" asserts="0" description="Core Deployment Functions.New-ArcDeployment">
+                <results>
+                  <test-case description="should generate basic command with mandatory parameters" name="Core Deployment Functions.New-ArcDeployment.should generate basic command with mandatory parameters" time="0.062" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="should include all optional parameters in the command" name="Core Deployment Functions.New-ArcDeployment.should include all optional parameters in the command" time="0.0678" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="should attempt agent installation script if path is provided and script exists (with -WhatIf)" name="Core Deployment Functions.New-ArcDeployment.should attempt agent installation script if path is provided and script exists (with -WhatIf)" time="0.0479" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="should WARN if AgentInstallationScriptPath provided but script does not exist" name="Core Deployment Functions.New-ArcDeployment.should WARN if AgentInstallationScriptPath provided but script does not exist" time="0.0605" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="should THROW if ServicePrincipalAppId provided without ServicePrincipalSecret" name="Core Deployment Functions.New-ArcDeployment.should THROW if ServicePrincipalAppId provided without ServicePrincipalSecret" time="0.0501" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="should correctly format tags in the command" name="Core Deployment Functions.New-ArcDeployment.should correctly format tags in the command" time="0.0516" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="should respect -WhatIf for the azcmagent connect command" name="Core Deployment Functions.New-ArcDeployment.should respect -WhatIf for the azcmagent connect command" time="0.049" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+            </results>
+          </test-suite>
+        </results>
+      </test-suite>
+      <test-suite type="TestFixture" name="C:\Users\topazhu\Github\azure-arc-deployment-framework\tests\Powershell\unit\Core.Tests.ps1" executed="True" result="Success" success="True" time="3.9687" asserts="0" description="C:\Users\topazhu\Github\azure-arc-deployment-framework\tests\Powershell\unit\Core.Tests.ps1">
+        <results>
+          <test-suite type="TestFixture" name="Test-ArcPrerequisites" executed="True" result="Success" success="True" time="1.9438" asserts="0" description="Test-ArcPrerequisites">
+            <results>
+              <test-case description="Should pass when all prerequisites are met" name="Test-ArcPrerequisites.Should pass when all prerequisites are met" time="0.071" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="Should fail when OS version is not supported" name="Test-ArcPrerequisites.Should fail when OS version is not supported" time="0.0218" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="Should fail when network connectivity check fails" name="Test-ArcPrerequisites.Should fail when network connectivity check fails" time="0.0124" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="Should include workspace validation when WorkspaceId is provided" name="Test-ArcPrerequisites.Should include workspace validation when WorkspaceId is provided" time="0.0201" asserts="0" success="True" result="Success" executed="True" />
+            </results>
+          </test-suite>
+          <test-suite type="TestFixture" name="Deploy-ArcAgent" executed="True" result="Success" success="True" time="2.3004" asserts="0" description="Deploy-ArcAgent">
+            <results>
+              <test-case description="Should successfully deploy Arc agent" name="Deploy-ArcAgent.Should successfully deploy Arc agent" time="0.1497" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="Should handle deployment failure gracefully" name="Deploy-ArcAgent.Should handle deployment failure gracefully" time="0.1171" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="Should deploy AMA when specified" name="Deploy-ArcAgent.Should deploy AMA when specified" time="0.0845" asserts="0" success="True" result="Success" executed="True" />
+            </results>
+          </test-suite>
+          <test-suite type="TestFixture" name="Start-ArcDiagnostics" executed="True" result="Success" success="True" time="2.6606" asserts="0" description="Start-ArcDiagnostics">
+            <results>
+              <test-case description="Should collect all diagnostic information" name="Start-ArcDiagnostics.Should collect all diagnostic information" time="0.1314" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="Should include AMA diagnostics when specified" name="Start-ArcDiagnostics.Should include AMA diagnostics when specified" time="0.0902" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="Should handle diagnostic collection failures" name="Start-ArcDiagnostics.Should handle diagnostic collection failures" time="0.0732" asserts="0" success="True" result="Success" executed="True" />
+            </results>
+          </test-suite>
+          <test-suite type="TestFixture" name="Invoke-ArcAnalysis" executed="True" result="Success" success="True" time="2.7343" asserts="0" description="Invoke-ArcAnalysis">
+            <results>
+              <test-case description="Should analyze diagnostic data and provide insights" name="Invoke-ArcAnalysis.Should analyze diagnostic data and provide insights" time="0.0339" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="Should include AMA analysis when specified" name="Invoke-ArcAnalysis.Should include AMA analysis when specified" time="0.0061" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="Should calculate risk score correctly" name="Invoke-ArcAnalysis.Should calculate risk score correctly" time="0.0288" asserts="0" success="True" result="Success" executed="True" />
+            </results>
+          </test-suite>
+        </results>
+      </test-suite>
+      <test-suite type="TestFixture" name="C:\Users\topazhu\Github\azure-arc-deployment-framework\tests\Powershell\unit\GetAIPredictions.Tests.ps1" executed="True" result="Success" success="True" time="0.5021" asserts="0" description="C:\Users\topazhu\Github\azure-arc-deployment-framework\tests\Powershell\unit\GetAIPredictions.Tests.ps1">
+        <results>
+          <test-suite type="TestFixture" name="Get-AIPredictions.ps1" executed="True" result="Success" success="True" time="0.4454" asserts="0" description="Get-AIPredictions.ps1">
+            <results>
+              <test-case description="maps ordered features, defaults missing, and applies class labels for ONNX" name="Get-AIPredictions.ps1.maps ordered features, defaults missing, and applies class labels for ONNX" time="0.2983" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="uses Predict() on CustomPSObject model when available" name="Get-AIPredictions.ps1.uses Predict() on CustomPSObject model when available" time="0.1272" asserts="0" success="True" result="Success" executed="True" />
+            </results>
+          </test-suite>
+        </results>
+      </test-suite>
+      <test-suite type="TestFixture" name="C:\Users\topazhu\Github\azure-arc-deployment-framework\tests\Powershell\unit\GetAIRecommendations.Tests.ps1" executed="True" result="Success" success="True" time="0.518" asserts="0" description="C:\Users\topazhu\Github\azure-arc-deployment-framework\tests\Powershell\unit\GetAIRecommendations.Tests.ps1">
+        <results>
+          <test-suite type="TestFixture" name="Get-AIRecommendations.ps1" executed="True" result="Success" success="True" time="0.4655" asserts="0" description="Get-AIRecommendations.ps1">
+            <results>
+              <test-case description="applies GreaterThan rule and emits recommendation" name="Get-AIRecommendations.ps1.applies GreaterThan rule and emits recommendation" time="0.1668" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="enforces MaxRecommendationsPerInput and matches regex" name="Get-AIRecommendations.ps1.enforces MaxRecommendationsPerInput and matches regex" time="0.1553" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="returns no recommendations when conditions do not match" name="Get-AIRecommendations.ps1.returns no recommendations when conditions do not match" time="0.1187" asserts="0" success="True" result="Success" executed="True" />
+            </results>
+          </test-suite>
+        </results>
+      </test-suite>
+      <test-suite type="TestFixture" name="C:\Users\topazhu\Github\azure-arc-deployment-framework\tests\Powershell\unit\InvokeAIPatternAnalysis.Tests.ps1" executed="True" result="Success" success="True" time="0.1548" asserts="0" description="C:\Users\topazhu\Github\azure-arc-deployment-framework\tests\Powershell\unit\InvokeAIPatternAnalysis.Tests.ps1">
+        <results>
+          <test-suite type="TestFixture" name="Invoke-AIPatternAnalysis.ps1" executed="True" result="Success" success="True" time="0.102" asserts="0" description="Invoke-AIPatternAnalysis.ps1">
+            <results>
+              <test-case description="groups patterns, scores severity, and returns recommendations" name="Invoke-AIPatternAnalysis.ps1.groups patterns, scores severity, and returns recommendations" time="0.069" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="respects DaysToAnalyze cutoff" name="Invoke-AIPatternAnalysis.ps1.respects DaysToAnalyze cutoff" time="0.0196" asserts="0" success="True" result="Success" executed="True" />
+            </results>
+          </test-suite>
+        </results>
+      </test-suite>
+      <test-suite type="TestFixture" name="C:\Users\topazhu\Github\azure-arc-deployment-framework\tests\Powershell\unit\Monitoring.Tests.ps1" executed="True" result="Success" success="True" time="2.7118" asserts="0" description="C:\Users\topazhu\Github\azure-arc-deployment-framework\tests\Powershell\unit\Monitoring.Tests.ps1">
+        <results>
+          <test-suite type="TestFixture" name="Get-EventLogErrors.ps1 Tests" executed="True" result="Success" success="True" time="0.7355" asserts="0" description="Get-EventLogErrors.ps1 Tests">
+            <results>
+              <test-case description="Should query default logs with Level 2 (Error) and StartTime within last 24 hours by default" name="Get-EventLogErrors.ps1 Tests.Should query default logs with Level 2 (Error) and StartTime within last 24 hours by default" time="0.1499" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="Should use provided -LogName (single string) parameter" name="Get-EventLogErrors.ps1 Tests.Should use provided -LogName (single string) parameter" time="0.043" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="Should use provided -LogName (array) parameter, calling Get-WinEvent for each" name="Get-EventLogErrors.ps1 Tests.Should use provided -LogName (array) parameter, calling Get-WinEvent for each" time="0.054" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="Should use provided -MaxEvents parameter" name="Get-EventLogErrors.ps1 Tests.Should use provided -MaxEvents parameter" time="0.0623" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="Should use provided -StartTime parameter" name="Get-EventLogErrors.ps1 Tests.Should use provided -StartTime parameter" time="0.0601" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="Should pass -ComputerName to Get-WinEvent if -ServerName is provided and not local" name="Get-EventLogErrors.ps1 Tests.Should pass -ComputerName to Get-WinEvent if -ServerName is provided and not local" time="0.057" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="Should NOT pass -ComputerName to Get-WinEvent if -ServerName is local machine or empty" name="Get-EventLogErrors.ps1 Tests.Should NOT pass -ComputerName to Get-WinEvent if -ServerName is local machine or empty" time="0.1079" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="Should format output PSCustomObject correctly" name="Get-EventLogErrors.ps1 Tests.Should format output PSCustomObject correctly" time="0.0465" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="Should handle Get-WinEvent errors gracefully for one log and continue with others" name="Get-EventLogErrors.ps1 Tests.Should handle Get-WinEvent errors gracefully for one log and continue with others" time="0.0557" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="Should log the number of events found per log and total" name="Get-EventLogErrors.ps1 Tests.Should log the number of events found per log and total" time="0.0482" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="Should return an empty array if no error events are found" name="Get-EventLogErrors.ps1 Tests.Should return an empty array if no error events are found" time="0.0335" asserts="0" success="True" result="Success" executed="True" />
+            </results>
+          </test-suite>
+          <test-suite type="TestFixture" name="Get-EventLogWarnings.ps1 Tests" executed="True" result="Success" success="True" time="1.1044" asserts="0" description="Get-EventLogWarnings.ps1 Tests">
+            <results>
+              <test-case description="Should query default logs with Level 3 (Warning) and StartTime within last 24 hours by default" name="Get-EventLogWarnings.ps1 Tests.Should query default logs with Level 3 (Warning) and StartTime within last 24 hours by default" time="0.135" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="Should use provided -LogName (single string) parameter for warnings" name="Get-EventLogWarnings.ps1 Tests.Should use provided -LogName (single string) parameter for warnings" time="0.0632" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="Should use provided -MaxEvents parameter for warnings" name="Get-EventLogWarnings.ps1 Tests.Should use provided -MaxEvents parameter for warnings" time="0.0587" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="Should correctly format warning output" name="Get-EventLogWarnings.ps1 Tests.Should correctly format warning output" time="0.0447" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="Should handle Get-WinEvent errors gracefully for one log and continue (warnings)" name="Get-EventLogWarnings.ps1 Tests.Should handle Get-WinEvent errors gracefully for one log and continue (warnings)" time="0.0548" asserts="0" success="True" result="Success" executed="True" />
+            </results>
+          </test-suite>
+          <test-suite type="TestFixture" name="Get-ServiceFailureHistory.ps1 Tests" executed="True" result="Success" success="True" time="1.4461" asserts="0" description="Get-ServiceFailureHistory.ps1 Tests">
+            <results>
+              <test-case description="Should query System log for default failure Event IDs and StartTime within last 7 days by default" name="Get-ServiceFailureHistory.ps1 Tests.Should query System log for default failure Event IDs and StartTime within last 7 days by default" time="0.0594" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="Should correctly extract ServiceName from Event ID 7034 (Properties[0])" name="Get-ServiceFailureHistory.ps1 Tests.Should correctly extract ServiceName from Event ID 7034 (Properties[0])" time="0.0419" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="Should correctly extract ErrorCode from Event ID 7023 (Properties[1])" name="Get-ServiceFailureHistory.ps1 Tests.Should correctly extract ErrorCode from Event ID 7023 (Properties[1])" time="0.038" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="Should correctly extract ServiceSpecificErrorCode from Event ID 7024 (Properties[1])" name="Get-ServiceFailureHistory.ps1 Tests.Should correctly extract ServiceSpecificErrorCode from Event ID 7024 (Properties[1])" time="0.0358" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="Should filter results by -ServiceName if provided (single service)" name="Get-ServiceFailureHistory.ps1 Tests.Should filter results by -ServiceName if provided (single service)" time="0.0339" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="Should filter results by -ServiceName if provided (multiple services)" name="Get-ServiceFailureHistory.ps1 Tests.Should filter results by -ServiceName if provided (multiple services)" time="0.0436" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="Should return ServiceName &quot;Unknown&quot; if extraction from Properties fails (e.g. Properties is null or empty)" name="Get-ServiceFailureHistory.ps1 Tests.Should return ServiceName &quot;Unknown&quot; if extraction from Properties fails (e.g. Properties is null or empty)" time="0.0359" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="Should use provided -MaxEvents parameter for Get-WinEvent" name="Get-ServiceFailureHistory.ps1 Tests.Should use provided -MaxEvents parameter for Get-WinEvent" time="0.0383" asserts="0" success="True" result="Success" executed="True" />
+            </results>
+          </test-suite>
+          <test-suite type="TestFixture" name="Get-ConnectionDropHistory.ps1 Tests" executed="True" result="Success" success="True" time="1.7155" asserts="0" description="Get-ConnectionDropHistory.ps1 Tests">
+            <results>
+              <test-case description="Should query defined internal sources with default parameters" name="Get-ConnectionDropHistory.ps1 Tests.Should query defined internal sources with default parameters" time="0.1189" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="Should extract InterfaceAlias for NetworkProfile Event ID 10001" name="Get-ConnectionDropHistory.ps1 Tests.Should extract InterfaceAlias for NetworkProfile Event ID 10001" time="0.069" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="Should aggregate and sort results by Timestamp descending" name="Get-ConnectionDropHistory.ps1 Tests.Should aggregate and sort results by Timestamp descending" time="0.0702" asserts="0" success="True" result="Success" executed="True" />
+            </results>
+          </test-suite>
+          <test-suite type="TestFixture" name="Get-HighCPUEvents.ps1 Tests" executed="True" result="Success" success="True" time="1.954" asserts="0" description="Get-HighCPUEvents.ps1 Tests">
+            <results>
+              <test-case description="Should query defined internal sources with default parameters for High CPU" name="Get-HighCPUEvents.ps1 Tests.Should query defined internal sources with default parameters for High CPU" time="0.0647" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="Should filter Resource-Exhaustion-Detector (ID 2004) messages for &quot;CPU&quot; or &quot;processor&quot; keywords" name="Get-HighCPUEvents.ps1 Tests.Should filter Resource-Exhaustion-Detector (ID 2004) messages for &quot;CPU&quot; or &quot;processor&quot; keywords" time="0.0486" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="Should filter Resource-Exhaustion-Resolver messages for &quot;CPU&quot; keyword" name="Get-HighCPUEvents.ps1 Tests.Should filter Resource-Exhaustion-Resolver messages for &quot;CPU&quot; keyword" time="0.0484" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="Should aggregate and sort results by Timestamp descending for High CPU" name="Get-HighCPUEvents.ps1 Tests.Should aggregate and sort results by Timestamp descending for High CPU" time="0.0642" asserts="0" success="True" result="Success" executed="True" />
+            </results>
+          </test-suite>
+          <test-suite type="TestFixture" name="Get-MemoryPressureEvents.ps1 Tests" executed="True" result="Success" success="True" time="2.1747" asserts="0" description="Get-MemoryPressureEvents.ps1 Tests">
+            <results>
+              <test-case description="Should query defined internal sources for Memory Pressure with default parameters" name="Get-MemoryPressureEvents.ps1 Tests.Should query defined internal sources for Memory Pressure with default parameters" time="0.0866" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="Should filter Resource-Exhaustion-Detector (ID 2004) messages for &quot;memory&quot; keywords" name="Get-MemoryPressureEvents.ps1 Tests.Should filter Resource-Exhaustion-Detector (ID 2004) messages for &quot;memory&quot; keywords" time="0.0535" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="Should correctly identify direct Memory Pressure Event ID 1106 from ResourcePolicy" name="Get-MemoryPressureEvents.ps1 Tests.Should correctly identify direct Memory Pressure Event ID 1106 from ResourcePolicy" time="0.0688" asserts="0" success="True" result="Success" executed="True" />
+            </results>
+          </test-suite>
+          <test-suite type="TestFixture" name="Get-DiskPressureEvents.ps1 Tests" executed="True" result="Success" success="True" time="2.434" asserts="0" description="Get-DiskPressureEvents.ps1 Tests">
+            <results>
+              <test-case description="Should query defined internal sources for Disk Pressure with default parameters" name="Get-DiskPressureEvents.ps1 Tests.Should query defined internal sources for Disk Pressure with default parameters" time="0.0762" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="Should extract DriveLetter from srv Event ID 2013 message" name="Get-DiskPressureEvents.ps1 Tests.Should extract DriveLetter from srv Event ID 2013 message" time="0.0587" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="Should filter Resource-Exhaustion-Detector (ID 2004) messages for &quot;disk space&quot; or &quot;storage&quot; keywords" name="Get-DiskPressureEvents.ps1 Tests.Should filter Resource-Exhaustion-Detector (ID 2004) messages for &quot;disk space&quot; or &quot;storage&quot; keywords" time="0.0567" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="Should query for NTFS Error Events (9000, 9001)" name="Get-DiskPressureEvents.ps1 Tests.Should query for NTFS Error Events (9000, 9001)" time="0.0533" asserts="0" success="True" result="Success" executed="True" />
+            </results>
+          </test-suite>
+        </results>
+      </test-suite>
+      <test-suite type="TestFixture" name="C:\Users\topazhu\Github\azure-arc-deployment-framework\tests\Powershell\unit\Remediation.Tests.ps1" executed="True" result="Success" success="True" time="5.9541" asserts="0" description="C:\Users\topazhu\Github\azure-arc-deployment-framework\tests\Powershell\unit\Remediation.Tests.ps1">
+        <results>
+          <test-suite type="TestFixture" name="Start-RemediationAction.ps1" executed="True" result="Success" success="True" time="1.6973" asserts="0" description="Start-RemediationAction.ps1">
+            <results>
+              <test-case description="skips execution when -WhatIf is used" name="Start-RemediationAction.ps1.skips execution when -WhatIf is used" time="0.0208" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="executes a function action and captures output" name="Start-RemediationAction.ps1.executes a function action and captures output" time="0.1294" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="runs backup script when backup is enabled" name="Start-RemediationAction.ps1.runs backup script when backup is enabled" time="0.1318" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="passes compress flags to backup script when available" name="Start-RemediationAction.ps1.passes compress flags to backup script when available" time="0.1204" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="captures exit code when executable fails" name="Start-RemediationAction.ps1.captures exit code when executable fails" time="1.2564" asserts="0" success="True" result="Success" executed="True" />
+            </results>
+          </test-suite>
+          <test-suite type="TestFixture" name="Test-RemediationResult.ps1" executed="True" result="Success" success="True" time="2.2955" asserts="0" description="Test-RemediationResult.ps1">
+            <results>
+              <test-case description="returns success when function validation matches expected result" name="Test-RemediationResult.ps1.returns success when function validation matches expected result" time="0.1699" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="flags failure when validation target is missing" name="Test-RemediationResult.ps1.flags failure when validation target is missing" time="0.0992" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="marks manual checks as requiring confirmation" name="Test-RemediationResult.ps1.marks manual checks as requiring confirmation" time="0.0503" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="marks unknown validation types as not implemented" name="Test-RemediationResult.ps1.marks unknown validation types as not implemented" time="0.0604" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="flags function exceptions as execution errors" name="Test-RemediationResult.ps1.flags function exceptions as execution errors" time="0.1265" asserts="0" success="True" result="Success" executed="True" />
+            </results>
+          </test-suite>
+          <test-suite type="TestFixture" name="Start-AIRemediationWorkflow.ps1" executed="True" result="Success" success="True" time="3.9875" asserts="0" description="Start-AIRemediationWorkflow.ps1">
+            <results>
+              <test-case description="runs automatic remediation flow with mocks and returns summary" name="Start-AIRemediationWorkflow.ps1.runs automatic remediation flow with mocks and returns summary" time="0.75" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="surfaces remediation failures in overall status" name="Start-AIRemediationWorkflow.ps1.surfaces remediation failures in overall status" time="0.4508" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="runs validation when rules are provided" name="Start-AIRemediationWorkflow.ps1.runs validation when rules are provided" time="0.4653" asserts="0" success="True" result="Success" executed="True" />
+            </results>
+          </test-suite>
+          <test-suite type="TestFixture" name="Find-IssuePatterns.ps1" executed="True" result="Success" success="True" time="5.4762" asserts="0" description="Find-IssuePatterns.ps1">
+            <results>
+              <test-case description="loads patterns from JSON and matches items" name="Find-IssuePatterns.ps1.loads patterns from JSON and matches items" time="0.3773" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="evaluates diagnostics sample and hits builtin patterns" name="Find-IssuePatterns.ps1.evaluates diagnostics sample and hits builtin patterns" time="1.0911" asserts="0" success="True" result="Success" executed="True" />
+            </results>
+          </test-suite>
+          <test-suite type="TestFixture" name="Get-RemediationAction.ps1" executed="True" result="Success" success="True" time="5.8805" asserts="0" description="Get-RemediationAction.ps1">
+            <results>
+              <test-case description="loads remediation rules from JSON and resolves parameters" name="Get-RemediationAction.ps1.loads remediation rules from JSON and resolves parameters" time="0.3698" asserts="0" success="True" result="Success" executed="True" />
+            </results>
+          </test-suite>
+        </results>
+      </test-suite>
+      <test-suite type="TestFixture" name="C:\Users\topazhu\Github\azure-arc-deployment-framework\tests\Powershell\unit\Security.Tests.ps1" executed="True" result="Ignored" success="True" time="8.2785" asserts="0" description="C:\Users\topazhu\Github\azure-arc-deployment-framework\tests\Powershell\unit\Security.Tests.ps1">
+        <results>
+          <test-suite type="TestFixture" name="Set-TLSConfiguration.ps1 Tests" executed="True" result="Success" success="True" time="4.0254" asserts="0" description="Set-TLSConfiguration.ps1 Tests">
+            <results>
+              <test-suite type="TestFixture" name="Set-TLSConfiguration.ps1 Tests.Script Loading and Basic Parameter Handling" executed="True" result="Success" success="True" time="1.1306" asserts="0" description="Set-TLSConfiguration.ps1 Tests.Script Loading and Basic Parameter Handling">
+                <results>
+                  <test-case description="Should load and run with default parameters (Enforce=$true, Backup=$true)" name="Set-TLSConfiguration.ps1 Tests.Script Loading and Basic Parameter Handling.Should load and run with default parameters (Enforce=$true, Backup=$true)" time="0.4648" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should NOT enforce settings if -EnforceSettings $false" name="Set-TLSConfiguration.ps1 Tests.Script Loading and Basic Parameter Handling.Should NOT enforce settings if -EnforceSettings $false" time="0.0695" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should NOT attempt backup if -BackupRegistry $false" name="Set-TLSConfiguration.ps1 Tests.Script Loading and Basic Parameter Handling.Should NOT attempt backup if -BackupRegistry $false" time="0.2804" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should use the correct config file path from script's relative location" name="Set-TLSConfiguration.ps1 Tests.Script Loading and Basic Parameter Handling.Should use the correct config file path from script's relative location" time="0.313" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+              <test-suite type="TestFixture" name="Set-TLSConfiguration.ps1 Tests.TLS Protocol Configuration" executed="True" result="Success" success="True" time="2.1533" asserts="0" description="Set-TLSConfiguration.ps1 Tests.TLS Protocol Configuration">
+                <results>
+                  <test-case description="Should ENABLE TLS 1.2 Client and Server according to JSON" name="Set-TLSConfiguration.ps1 Tests.TLS Protocol Configuration.Should ENABLE TLS 1.2 Client and Server according to JSON" time="0.3364" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should DISABLE TLS 1.0 Client and Server according to JSON" name="Set-TLSConfiguration.ps1 Tests.TLS Protocol Configuration.Should DISABLE TLS 1.0 Client and Server according to JSON" time="0.3423" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should create protocol keys if Test-Path returns false for them" name="Set-TLSConfiguration.ps1 Tests.TLS Protocol Configuration.Should create protocol keys if Test-Path returns false for them" time="0.3419" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+              <test-suite type="TestFixture" name="Set-TLSConfiguration.ps1 Tests..NET Framework Configuration" executed="True" result="Success" success="True" time="2.7778" asserts="0" description="Set-TLSConfiguration.ps1 Tests..NET Framework Configuration">
+                <results>
+                  <test-case description="Should set SchUseStrongCrypto and SystemDefaultTlsVersions for .NET v4.0.30319" name="Set-TLSConfiguration.ps1 Tests..NET Framework Configuration.Should set SchUseStrongCrypto and SystemDefaultTlsVersions for .NET v4.0.30319" time="0.323" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should set SchUseStrongCrypto and SystemDefaultTlsVersions for .NET v4.0.30319 (Wow6432Node)" name="Set-TLSConfiguration.ps1 Tests..NET Framework Configuration.Should set SchUseStrongCrypto and SystemDefaultTlsVersions for .NET v4.0.30319 (Wow6432Node)" time="0.2996" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+              <test-suite type="TestFixture" name="Set-TLSConfiguration.ps1 Tests.Cipher Suite Configuration" executed="True" result="Success" success="True" time="3.709" asserts="0" description="Set-TLSConfiguration.ps1 Tests.Cipher Suite Configuration">
+                <results>
+                  <test-case description="Should set the cipher suite order" name="Set-TLSConfiguration.ps1 Tests.Cipher Suite Configuration.Should set the cipher suite order" time="0.3057" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should attempt to disable a disallowed cipher suite if it exists" name="Set-TLSConfiguration.ps1 Tests.Cipher Suite Configuration.Should attempt to disable a disallowed cipher suite if it exists" time="0.3291" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should NOT attempt to disable a disallowed cipher suite if its key does not exist" name="Set-TLSConfiguration.ps1 Tests.Cipher Suite Configuration.Should NOT attempt to disable a disallowed cipher suite if its key does not exist" time="0.2934" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+              <test-suite type="TestFixture" name="Set-TLSConfiguration.ps1 Tests.Logging Output" executed="True" result="Success" success="True" time="4.0042" asserts="0" description="Set-TLSConfiguration.ps1 Tests.Logging Output">
+                <results>
+                  <test-case description="Should log key actions using the internal Write-Log function" name="Set-TLSConfiguration.ps1 Tests.Logging Output.Should log key actions using the internal Write-Log function" time="0.2902" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+            </results>
+          </test-suite>
+          <test-suite type="TestFixture" name="Update-CertificateStore.ps1 Tests" executed="True" result="Success" success="True" time="5.4134" asserts="0" description="Update-CertificateStore.ps1 Tests">
+            <results>
+              <test-suite type="TestFixture" name="Update-CertificateStore.ps1 Tests.Parameter Handling (Update-CertificateStore)" executed="True" result="Success" success="True" time="0.5102" asserts="0" description="Update-CertificateStore.ps1 Tests.Parameter Handling (Update-CertificateStore)">
+                <results>
+                  <test-case description="Should use JSON values for MinimumKeySize, Allowed/Disallowed Algorithms by default" name="Update-CertificateStore.ps1 Tests.Parameter Handling (Update-CertificateStore).Should use JSON values for MinimumKeySize, Allowed/Disallowed Algorithms by default" time="0.1762" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should override MinimumKeySize with parameter" name="Update-CertificateStore.ps1 Tests.Parameter Handling (Update-CertificateStore).Should override MinimumKeySize with parameter" time="0.0883" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should override AllowedSignatureAlgorithms with parameter" name="Update-CertificateStore.ps1 Tests.Parameter Handling (Update-CertificateStore).Should override AllowedSignatureAlgorithms with parameter" time="0.0968" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should not update root certificates if -UpdateRootCertificates $false" name="Update-CertificateStore.ps1 Tests.Parameter Handling (Update-CertificateStore).Should not update root certificates if -UpdateRootCertificates $false" time="0.0676" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should not validate existing certificates if -ValidateChain $false" name="Update-CertificateStore.ps1 Tests.Parameter Handling (Update-CertificateStore).Should not validate existing certificates if -ValidateChain $false" time="0.0776" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+              <test-suite type="TestFixture" name="Update-CertificateStore.ps1 Tests.Root Certificate Updates (Update-CertificateStore)" executed="True" result="Success" success="True" time="0.7974" asserts="0" description="Update-CertificateStore.ps1 Tests.Root Certificate Updates (Update-CertificateStore)">
+                <results>
+                  <test-case description="Should attempt to import a required cert if not found in store and sourcePath exists" name="Update-CertificateStore.ps1 Tests.Root Certificate Updates (Update-CertificateStore).Should attempt to import a required cert if not found in store and sourcePath exists" time="0.1015" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should NOT import a required cert if already found in store" name="Update-CertificateStore.ps1 Tests.Root Certificate Updates (Update-CertificateStore).Should NOT import a required cert if already found in store" time="0.0782" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should log ERROR if required cert sourcePath does NOT exist" name="Update-CertificateStore.ps1 Tests.Root Certificate Updates (Update-CertificateStore).Should log ERROR if required cert sourcePath does NOT exist" time="0.1046" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+              <test-suite type="TestFixture" name="Update-CertificateStore.ps1 Tests.Existing Certificate Validation (Update-CertificateStore)" executed="True" result="Success" success="True" time="1.3662" asserts="0" description="Update-CertificateStore.ps1 Tests.Existing Certificate Validation (Update-CertificateStore)">
+                <results>
+                  <test-case description="Should PASS a compliant certificate" name="Update-CertificateStore.ps1 Tests.Existing Certificate Validation (Update-CertificateStore).Should PASS a compliant certificate" time="0.1197" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should WARN for certificate with key size smaller than MinimumKeySize" name="Update-CertificateStore.ps1 Tests.Existing Certificate Validation (Update-CertificateStore).Should WARN for certificate with key size smaller than MinimumKeySize" time="0.1021" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should WARN for certificate with a disallowed signature algorithm" name="Update-CertificateStore.ps1 Tests.Existing Certificate Validation (Update-CertificateStore).Should WARN for certificate with a disallowed signature algorithm" time="0.1183" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should WARN for certificate not in allowed signature algorithm list (if list is restrictive)" name="Update-CertificateStore.ps1 Tests.Existing Certificate Validation (Update-CertificateStore).Should WARN for certificate not in allowed signature algorithm list (if list is restrictive)" time="0.1223" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should WARN for certificate that fails Test-Certificate chain validation" name="Update-CertificateStore.ps1 Tests.Existing Certificate Validation (Update-CertificateStore).Should WARN for certificate that fails Test-Certificate chain validation" time="0.1024" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+            </results>
+          </test-suite>
+          <test-suite type="TestFixture" name="Set-FirewallRules.ps1 Tests" executed="True" result="Ignored" success="True" time="6.5898" asserts="0" description="Set-FirewallRules.ps1 Tests">
+            <results>
+              <test-suite type="TestFixture" name="Set-FirewallRules.ps1 Tests.Administrator Check (Set-FirewallRules)" executed="True" result="Ignored" success="True" time="0.0039" asserts="0" description="Set-FirewallRules.ps1 Tests.Administrator Check (Set-FirewallRules)">
+                <results>
+                  <test-case description="SKIPPED: Should log an error and throw if not run as Administrator (non-admin scenario is hard to simulate reliably under current Pester setup)" name="Set-FirewallRules.ps1 Tests.Administrator Check (Set-FirewallRules).SKIPPED: Should log an error and throw if not run as Administrator (non-admin scenario is hard to simulate reliably under current Pester setup)" time="0.0016" asserts="0" success="False" result="Ignored" executed="False" />
+                </results>
+              </test-suite>
+              <test-suite type="TestFixture" name="Set-FirewallRules.ps1 Tests.Parameter Handling (Set-FirewallRules)" executed="True" result="Success" success="True" time="0.3033" asserts="0" description="Set-FirewallRules.ps1 Tests.Parameter Handling (Set-FirewallRules)">
+                <results>
+                  <test-case description="Should run with default parameters (EnforceRules=$true, BackupRules=$true)" name="Set-FirewallRules.ps1 Tests.Parameter Handling (Set-FirewallRules).Should run with default parameters (EnforceRules=$true, BackupRules=$true)" time="0.1525" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should NOT enforce rules if -EnforceRules $false" name="Set-FirewallRules.ps1 Tests.Parameter Handling (Set-FirewallRules).Should NOT enforce rules if -EnforceRules $false" time="0.0544" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should NOT attempt backup if -BackupRules $false (but still enforce)" name="Set-FirewallRules.ps1 Tests.Parameter Handling (Set-FirewallRules).Should NOT attempt backup if -BackupRules $false (but still enforce)" time="0.0892" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+              <test-suite type="TestFixture" name="Set-FirewallRules.ps1 Tests.Firewall Rule Processing (Set-FirewallRules)" executed="True" result="Success" success="True" time="0.8206" asserts="0" description="Set-FirewallRules.ps1 Tests.Firewall Rule Processing (Set-FirewallRules)">
+                <results>
+                  <test-case description="Should CREATE a new OUTBOUND rule &quot;Allow Azure Arc Management&quot; if it does not exist" name="Set-FirewallRules.ps1 Tests.Firewall Rule Processing (Set-FirewallRules).Should CREATE a new OUTBOUND rule &quot;Allow Azure Arc Management&quot; if it does not exist" time="0.104" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should CREATE a new OUTBOUND rule &quot;Block Old App&quot; with Action Block" name="Set-FirewallRules.ps1 Tests.Firewall Rule Processing (Set-FirewallRules).Should CREATE a new OUTBOUND rule &quot;Block Old App&quot; with Action Block" time="0.0943" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should CREATE a new INBOUND rule &quot;Allow WinRM&quot; and set Enabled based on &quot;required=false&quot;" name="Set-FirewallRules.ps1 Tests.Firewall Rule Processing (Set-FirewallRules).Should CREATE a new INBOUND rule &quot;Allow WinRM&quot; and set Enabled based on &quot;required=false&quot;" time="0.0908" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should UPDATE an existing rule if Get-NetFirewallRule returns a different rule" name="Set-FirewallRules.ps1 Tests.Firewall Rule Processing (Set-FirewallRules).Should UPDATE an existing rule if Get-NetFirewallRule returns a different rule" time="0.1166" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should use specified Profile if provided in JSON for a new rule" name="Set-FirewallRules.ps1 Tests.Firewall Rule Processing (Set-FirewallRules).Should use specified Profile if provided in JSON for a new rule" time="0.1078" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+              <test-suite type="TestFixture" name="Set-FirewallRules.ps1 Tests.Backup Logic (Set-FirewallRules)" executed="True" result="Success" success="True" time="1.0641" asserts="0" description="Set-FirewallRules.ps1 Tests.Backup Logic (Set-FirewallRules)">
+                <results>
+                  <test-case description="Should call &quot;netsh advfirewall export&quot; when BackupRules is $true (default) and EnforceRules is $true (default)" name="Set-FirewallRules.ps1 Tests.Backup Logic (Set-FirewallRules).Should call &quot;netsh advfirewall export&quot; when BackupRules is $true (default) and EnforceRules is $true (default)" time="0.0926" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should NOT call &quot;netsh advfirewall export&quot; when BackupRules is $false" name="Set-FirewallRules.ps1 Tests.Backup Logic (Set-FirewallRules).Should NOT call &quot;netsh advfirewall export&quot; when BackupRules is $false" time="0.098" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should NOT call &quot;netsh advfirewall export&quot; when EnforceRules is $false" name="Set-FirewallRules.ps1 Tests.Backup Logic (Set-FirewallRules).Should NOT call &quot;netsh advfirewall export&quot; when EnforceRules is $false" time="0.0496" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+              <test-suite type="TestFixture" name="Set-FirewallRules.ps1 Tests.Logging Output (Set-FirewallRules)" executed="True" result="Success" success="True" time="1.167" asserts="0" description="Set-FirewallRules.ps1 Tests.Logging Output (Set-FirewallRules)">
+                <results>
+                  <test-case description="Should log key actions" name="Set-FirewallRules.ps1 Tests.Logging Output (Set-FirewallRules).Should log key actions" time="0.1007" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+            </results>
+          </test-suite>
+          <test-suite type="TestFixture" name="Set-AuditPolicies.ps1 Tests" executed="True" result="Ignored" success="True" time="7.4947" asserts="0" description="Set-AuditPolicies.ps1 Tests">
+            <results>
+              <test-suite type="TestFixture" name="Set-AuditPolicies.ps1 Tests.Administrator Check (Set-AuditPolicies)" executed="True" result="Ignored" success="True" time="0.0025" asserts="0" description="Set-AuditPolicies.ps1 Tests.Administrator Check (Set-AuditPolicies)">
+                <results>
+                  <test-case description="SKIPPED: Should log an error and throw if not run as Administrator (non-admin scenario is hard to simulate reliably under current Pester setup)" name="Set-AuditPolicies.ps1 Tests.Administrator Check (Set-AuditPolicies).SKIPPED: Should log an error and throw if not run as Administrator (non-admin scenario is hard to simulate reliably under current Pester setup)" time="0.0005" asserts="0" success="False" result="Ignored" executed="False" />
+                </results>
+              </test-suite>
+              <test-suite type="TestFixture" name="Set-AuditPolicies.ps1 Tests.Parameter Handling (Set-AuditPolicies)" executed="True" result="Success" success="True" time="0.2422" asserts="0" description="Set-AuditPolicies.ps1 Tests.Parameter Handling (Set-AuditPolicies)">
+                <results>
+                  <test-case description="Should run with default parameters (EnforceSettings=$true, BackupSettings=$true)" name="Set-AuditPolicies.ps1 Tests.Parameter Handling (Set-AuditPolicies).Should run with default parameters (EnforceSettings=$true, BackupSettings=$true)" time="0.1211" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should NOT enforce settings if -EnforceSettings $false" name="Set-AuditPolicies.ps1 Tests.Parameter Handling (Set-AuditPolicies).Should NOT enforce settings if -EnforceSettings $false" time="0.0404" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should NOT attempt backup if -BackupSettings $false (but still enforce)" name="Set-AuditPolicies.ps1 Tests.Parameter Handling (Set-AuditPolicies).Should NOT attempt backup if -BackupSettings $false (but still enforce)" time="0.0759" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+              <test-suite type="TestFixture" name="Set-AuditPolicies.ps1 Tests.Audit Policy Processing (Set-AuditPolicies)" executed="True" result="Success" success="True" time="0.6087" asserts="0" description="Set-AuditPolicies.ps1 Tests.Audit Policy Processing (Set-AuditPolicies)">
+                <results>
+                  <test-case description="Should set &quot;Credential Validation&quot; to Success and Failure" name="Set-AuditPolicies.ps1 Tests.Audit Policy Processing (Set-AuditPolicies).Should set &quot;Credential Validation&quot; to Success and Failure" time="0.0911" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should set &quot;Process Creation&quot; to Success only" name="Set-AuditPolicies.ps1 Tests.Audit Policy Processing (Set-AuditPolicies).Should set &quot;Process Creation&quot; to Success only" time="0.0946" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should set &quot;Logon&quot; to Failure only" name="Set-AuditPolicies.ps1 Tests.Audit Policy Processing (Set-AuditPolicies).Should set &quot;Logon&quot; to Failure only" time="0.0835" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should set &quot;File System&quot; to No Auditing (both disabled)" name="Set-AuditPolicies.ps1 Tests.Audit Policy Processing (Set-AuditPolicies).Should set &quot;File System&quot; to No Auditing (both disabled)" time="0.0952" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+              <test-suite type="TestFixture" name="Set-AuditPolicies.ps1 Tests.Backup Logic (Set-AuditPolicies)" executed="True" result="Success" success="True" time="0.8137" asserts="0" description="Set-AuditPolicies.ps1 Tests.Backup Logic (Set-AuditPolicies)">
+                <results>
+                  <test-case description="Should call &quot;auditpol /backup /file:&quot; when BackupSettings and EnforceSettings are $true (default)" name="Set-AuditPolicies.ps1 Tests.Backup Logic (Set-AuditPolicies).Should call &quot;auditpol /backup /file:&quot; when BackupSettings and EnforceSettings are $true (default)" time="0.0844" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should NOT call &quot;auditpol /backup&quot; when BackupSettings is $false" name="Set-AuditPolicies.ps1 Tests.Backup Logic (Set-AuditPolicies).Should NOT call &quot;auditpol /backup&quot; when BackupSettings is $false" time="0.0785" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should NOT call &quot;auditpol /backup&quot; when EnforceSettings is $false (but BackupSettings is true - script logic)" name="Set-AuditPolicies.ps1 Tests.Backup Logic (Set-AuditPolicies).Should NOT call &quot;auditpol /backup&quot; when EnforceSettings is $false (but BackupSettings is true - script logic)" time="0.0399" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+              <test-suite type="TestFixture" name="Set-AuditPolicies.ps1 Tests.Logging Output (Set-AuditPolicies)" executed="True" result="Success" success="True" time="0.8962" asserts="0" description="Set-AuditPolicies.ps1 Tests.Logging Output (Set-AuditPolicies)">
+                <results>
+                  <test-case description="Should log key actions" name="Set-AuditPolicies.ps1 Tests.Logging Output (Set-AuditPolicies).Should log key actions" time="0.0804" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+            </results>
+          </test-suite>
+        </results>
+      </test-suite>
+      <test-suite type="TestFixture" name="C:\Users\topazhu\Github\azure-arc-deployment-framework\tests\Powershell\unit\Test-Diagnostics.Tests.ps1" executed="True" result="Success" success="True" time="1.2619" asserts="0" description="C:\Users\topazhu\Github\azure-arc-deployment-framework\tests\Powershell\unit\Test-Diagnostics.Tests.ps1">
+        <results>
+          <test-suite type="TestFixture" name="Start-ArcDiagnostics" executed="True" result="Success" success="True" time="0.1933" asserts="0" description="Start-ArcDiagnostics">
+            <results>
+              <test-suite type="TestFixture" name="Start-ArcDiagnostics.System State Collection" executed="True" result="Success" success="True" time="0.0359" asserts="0" description="Start-ArcDiagnostics.System State Collection">
+                <results>
+                  <test-case description="Should collect system state information" name="Start-ArcDiagnostics.System State Collection.Should collect system state information" time="0.0141" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should handle system state collection failures" name="Start-ArcDiagnostics.System State Collection.Should handle system state collection failures" time="0.0179" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+              <test-suite type="TestFixture" name="Start-ArcDiagnostics.Arc Agent Status" executed="True" result="Success" success="True" time="0.0592" asserts="0" description="Start-ArcDiagnostics.Arc Agent Status">
+                <results>
+                  <test-case description="Should check Arc agent service status" name="Start-ArcDiagnostics.Arc Agent Status.Should check Arc agent service status" time="0.0077" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should collect Arc agent configuration" name="Start-ArcDiagnostics.Arc Agent Status.Should collect Arc agent configuration" time="0.0135" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+              <test-suite type="TestFixture" name="Start-ArcDiagnostics.AMA Status" executed="True" result="Success" success="True" time="0.0956" asserts="0" description="Start-ArcDiagnostics.AMA Status">
+                <results>
+                  <test-case description="Should check AMA service status when workspace provided" name="Start-ArcDiagnostics.AMA Status.Should check AMA service status when workspace provided" time="0.0106" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should collect AMA configuration" name="Start-ArcDiagnostics.AMA Status.Should collect AMA configuration" time="0.0135" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should check data collection status" name="Start-ArcDiagnostics.AMA Status.Should check data collection status" time="0.01" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+              <test-suite type="TestFixture" name="Start-ArcDiagnostics.Connectivity Tests" executed="True" result="Success" success="True" time="0.1126" asserts="0" description="Start-ArcDiagnostics.Connectivity Tests">
+                <results>
+                  <test-case description="Should test all required endpoints" name="Start-ArcDiagnostics.Connectivity Tests.Should test all required endpoints" time="0.009" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should include proxy configuration" name="Start-ArcDiagnostics.Connectivity Tests.Should include proxy configuration" time="0.0055" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+              <test-suite type="TestFixture" name="Start-ArcDiagnostics.Log Collection" executed="True" result="Success" success="True" time="0.1317" asserts="0" description="Start-ArcDiagnostics.Log Collection">
+                <results>
+                  <test-case description="Should collect relevant logs" name="Start-ArcDiagnostics.Log Collection.Should collect relevant logs" time="0.0105" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should collect AMA logs when applicable" name="Start-ArcDiagnostics.Log Collection.Should collect AMA logs when applicable" time="0.006" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+              <test-suite type="TestFixture" name="Start-ArcDiagnostics.Detailed Analysis" executed="True" result="Success" success="True" time="0.1561" asserts="0" description="Start-ArcDiagnostics.Detailed Analysis">
+                <results>
+                  <test-case description="Should perform detailed analysis when requested" name="Start-ArcDiagnostics.Detailed Analysis.Should perform detailed analysis when requested" time="0.0217" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+              <test-suite type="TestFixture" name="Start-ArcDiagnostics.Error Handling and Logging" executed="True" result="Success" success="True" time="0.1914" asserts="0" description="Start-ArcDiagnostics.Error Handling and Logging">
+                <results>
+                  <test-case description="Should log diagnostic activities" name="Start-ArcDiagnostics.Error Handling and Logging.Should log diagnostic activities" time="0.0117" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should handle and log errors appropriately" name="Start-ArcDiagnostics.Error Handling and Logging.Should handle and log errors appropriately" time="0.0215" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+            </results>
+          </test-suite>
+        </results>
+      </test-suite>
+      <test-suite type="TestFixture" name="C:\Users\topazhu\Github\azure-arc-deployment-framework\tests\Powershell\unit\Test-Prerequisites.Tests.ps1" executed="True" result="Success" success="True" time="0.9246" asserts="0" description="C:\Users\topazhu\Github\azure-arc-deployment-framework\tests\Powershell\unit\Test-Prerequisites.Tests.ps1">
+        <results>
+          <test-suite type="TestFixture" name="Test-ArcPrerequisites" executed="True" result="Success" success="True" time="0.2073" asserts="0" description="Test-ArcPrerequisites">
+            <results>
+              <test-suite type="TestFixture" name="Test-ArcPrerequisites.System Requirements Validation" executed="True" result="Success" success="True" time="0.0516" asserts="0" description="Test-ArcPrerequisites.System Requirements Validation">
+                <results>
+                  <test-case description="Should validate OS version compatibility" name="Test-ArcPrerequisites.System Requirements Validation.Should validate OS version compatibility" time="0.0277" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should validate PowerShell version" name="Test-ArcPrerequisites.System Requirements Validation.Should validate PowerShell version" time="0.008" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should validate disk space requirements" name="Test-ArcPrerequisites.System Requirements Validation.Should validate disk space requirements" time="0.0138" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+              <test-suite type="TestFixture" name="Test-ArcPrerequisites.Network Connectivity Validation" executed="True" result="Success" success="True" time="0.0896" asserts="0" description="Test-ArcPrerequisites.Network Connectivity Validation">
+                <results>
+                  <test-case description="Should validate Arc endpoint connectivity" name="Test-ArcPrerequisites.Network Connectivity Validation.Should validate Arc endpoint connectivity" time="0.0094" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should validate AMA endpoint connectivity when workspace provided" name="Test-ArcPrerequisites.Network Connectivity Validation.Should validate AMA endpoint connectivity when workspace provided" time="0.0182" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should handle network connectivity failures" name="Test-ArcPrerequisites.Network Connectivity Validation.Should handle network connectivity failures" time="0.0082" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+              <test-suite type="TestFixture" name="Test-ArcPrerequisites.Workspace Validation" executed="True" result="Success" success="True" time="0.1148" asserts="0" description="Test-ArcPrerequisites.Workspace Validation">
+                <results>
+                  <test-case description="Should validate Log Analytics workspace when provided" name="Test-ArcPrerequisites.Workspace Validation.Should validate Log Analytics workspace when provided" time="0.0116" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should handle workspace validation failures" name="Test-ArcPrerequisites.Workspace Validation.Should handle workspace validation failures" time="0.0082" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+              <test-suite type="TestFixture" name="Test-ArcPrerequisites.TLS Configuration" executed="True" result="Success" success="True" time="0.1297" asserts="0" description="Test-ArcPrerequisites.TLS Configuration">
+                <results>
+                  <test-case description="Should validate TLS 1.2 configuration" name="Test-ArcPrerequisites.TLS Configuration.Should validate TLS 1.2 configuration" time="0.0101" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+              <test-suite type="TestFixture" name="Test-ArcPrerequisites.Error Handling" executed="True" result="Success" success="True" time="0.2054" asserts="0" description="Test-ArcPrerequisites.Error Handling">
+                <results>
+                  <test-case description="Should handle WMI query failures gracefully" name="Test-ArcPrerequisites.Error Handling.Should handle WMI query failures gracefully" time="0.0523" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should log errors appropriately" name="Test-ArcPrerequisites.Error Handling.Should log errors appropriately" time="0.0211" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+            </results>
+          </test-suite>
+        </results>
+      </test-suite>
+      <test-suite type="TestFixture" name="C:\Users\topazhu\Github\azure-arc-deployment-framework\tests\Powershell\unit\Validation.Tests.ps1" executed="True" result="Success" success="True" time="1.1133" asserts="0" description="C:\Users\topazhu\Github\azure-arc-deployment-framework\tests\Powershell\unit\Validation.Tests.ps1">
+        <results>
+          <test-suite type="TestFixture" name="Get-ValidationStep.ps1 Tests" executed="True" result="Success" success="True" time="0.577" asserts="0" description="Get-ValidationStep.ps1 Tests">
+            <results>
+              <test-case description="uses rule replacement when MergeBehavior is Replace" name="Get-ValidationStep.ps1 Tests.uses rule replacement when MergeBehavior is Replace" time="0.1273" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="appends derived step when MergeBehavior is AppendDerived" name="Get-ValidationStep.ps1 Tests.appends derived step when MergeBehavior is AppendDerived" time="0.2" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="defaults to ManualCheck when SuccessCriteria is empty and no rules apply" name="Get-ValidationStep.ps1 Tests.defaults to ManualCheck when SuccessCriteria is empty and no rules apply" time="0.0945" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="warns and falls back when validation rules file is missing" name="Get-ValidationStep.ps1 Tests.warns and falls back when validation rules file is missing" time="0.1381" asserts="0" success="True" result="Success" executed="True" />
+            </results>
+          </test-suite>
+          <test-suite type="TestFixture" name="Test-ConfigurationDrift.ps1 Tests" executed="True" result="Success" success="True" time="0.8508" asserts="0" description="Test-ConfigurationDrift.ps1 Tests">
+            <results>
+              <test-suite type="TestFixture" name="Test-ConfigurationDrift.ps1 Tests.Registry Drift Detection" executed="True" result="Success" success="True" time="0.09" asserts="0" description="Test-ConfigurationDrift.ps1 Tests.Registry Drift Detection">
+                <results>
+                  <test-case description="Should detect drift if a registry key value is non-compliant" name="Test-ConfigurationDrift.ps1 Tests.Registry Drift Detection.Should detect drift if a registry key value is non-compliant" time="0.0206" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should detect drift if a registry key is NOT_FOUND_OR_ERROR" name="Test-ConfigurationDrift.ps1 Tests.Registry Drift Detection.Should detect drift if a registry key is NOT_FOUND_OR_ERROR" time="0.016" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+              <test-suite type="TestFixture" name="Test-ConfigurationDrift.ps1 Tests.Service Drift Detection" executed="True" result="Success" success="True" time="0.1281" asserts="0" description="Test-ConfigurationDrift.ps1 Tests.Service Drift Detection">
+                <results>
+                  <test-case description="Should detect drift if a service StartupType is non-compliant" name="Test-ConfigurationDrift.ps1 Tests.Service Drift Detection.Should detect drift if a service StartupType is non-compliant" time="0.0197" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should detect drift if a service State is non-compliant (e.g., Stopped)" name="Test-ConfigurationDrift.ps1 Tests.Service Drift Detection.Should detect drift if a service State is non-compliant (e.g., Stopped)" time="0.0157" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+              <test-suite type="TestFixture" name="Test-ConfigurationDrift.ps1 Tests.Firewall Rule Drift Detection" executed="True" result="Success" success="True" time="0.1694" asserts="0" description="Test-ConfigurationDrift.ps1 Tests.Firewall Rule Drift Detection">
+                <results>
+                  <test-case description="Should detect drift if a firewall rule is NOT_FOUND_OR_ERROR" name="Test-ConfigurationDrift.ps1 Tests.Firewall Rule Drift Detection.Should detect drift if a firewall rule is NOT_FOUND_OR_ERROR" time="0.0234" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should detect drift if a firewall rule Action is non-compliant" name="Test-ConfigurationDrift.ps1 Tests.Firewall Rule Drift Detection.Should detect drift if a firewall rule Action is non-compliant" time="0.0159" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+              <test-suite type="TestFixture" name="Test-ConfigurationDrift.ps1 Tests.Audit Policy Drift Detection" executed="True" result="Success" success="True" time="0.1963" asserts="0" description="Test-ConfigurationDrift.ps1 Tests.Audit Policy Drift Detection">
+                <results>
+                  <test-case description="Should detect drift if an audit policy setting is non-compliant" name="Test-ConfigurationDrift.ps1 Tests.Audit Policy Drift Detection.Should detect drift if an audit policy setting is non-compliant" time="0.011" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should detect drift if auditpol output is missing an expected subcategory" name="Test-ConfigurationDrift.ps1 Tests.Audit Policy Drift Detection.Should detect drift if auditpol output is missing an expected subcategory" time="0.0123" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+              <test-suite type="TestFixture" name="Test-ConfigurationDrift.ps1 Tests.Output Structure and Logging" executed="True" result="Success" success="True" time="0.2689" asserts="0" description="Test-ConfigurationDrift.ps1 Tests.Output Structure and Logging">
+                <results>
+                  <test-case description="Should return an object with correct top-level properties" name="Test-ConfigurationDrift.ps1 Tests.Output Structure and Logging.Should return an object with correct top-level properties" time="0.0131" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should log a warning if not run as administrator (simulated by script logic)" name="Test-ConfigurationDrift.ps1 Tests.Output Structure and Logging.Should log a warning if not run as administrator (simulated by script logic)" time="0.0098" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should log the start and end of the script" name="Test-ConfigurationDrift.ps1 Tests.Output Structure and Logging.Should log the start and end of the script" time="0.0144" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should honor BaselinePath when provided" name="Test-ConfigurationDrift.ps1 Tests.Output Structure and Logging.Should honor BaselinePath when provided" time="0.0189" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should skip selected categories when flags are set" name="Test-ConfigurationDrift.ps1 Tests.Output Structure and Logging.Should skip selected categories when flags are set" time="0.0112" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+              <test-case description="Should return DriftDetected=$false when all checks are compliant" name="Test-ConfigurationDrift.ps1 Tests.Should return DriftDetected=$false when all checks are compliant" time="0.0513" asserts="0" success="True" result="Success" executed="True" />
+            </results>
+          </test-suite>
+          <test-suite type="TestFixture" name="Test-ResourceProviderStatus.ps1 Tests" executed="True" result="Success" success="True" time="0.9761" asserts="0" description="Test-ResourceProviderStatus.ps1 Tests">
+            <results>
+              <test-case description="Should return OverallStatus=Success if all default providers are registered" name="Test-ResourceProviderStatus.ps1 Tests.Should return OverallStatus=Success if all default providers are registered" time="0.0313" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="Should return OverallStatus=Failed if a provider is NotRegistered" name="Test-ResourceProviderStatus.ps1 Tests.Should return OverallStatus=Failed if a provider is NotRegistered" time="0.0151" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="Should use discovered SubscriptionId from registry if not provided" name="Test-ResourceProviderStatus.ps1 Tests.Should use discovered SubscriptionId from registry if not provided" time="0.0119" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="Should return Failed result if Az.Resources module is not available" name="Test-ResourceProviderStatus.ps1 Tests.Should return Failed result if Az.Resources module is not available" time="0.0145" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="Should return Failed result if no Azure context is active" name="Test-ResourceProviderStatus.ps1 Tests.Should return Failed result if no Azure context is active" time="0.0131" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="Should return Failed result if SubscriptionId is not provided and cannot be discovered from registry" name="Test-ResourceProviderStatus.ps1 Tests.Should return Failed result if SubscriptionId is not provided and cannot be discovered from registry" time="0.0109" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="Should check custom list of providers if -RequiredResourceProviders is specified" name="Test-ResourceProviderStatus.ps1 Tests.Should check custom list of providers if -RequiredResourceProviders is specified" time="0.0115" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="Should return OverallStatus=Failed if Get-AzResourceProvider throws for a provider" name="Test-ResourceProviderStatus.ps1 Tests.Should return OverallStatus=Failed if Get-AzResourceProvider throws for a provider" time="0.0124" asserts="0" success="True" result="Success" executed="True" />
+            </results>
+          </test-suite>
+        </results>
+      </test-suite>
+    </results>
+  </test-suite>
+</test-results>
