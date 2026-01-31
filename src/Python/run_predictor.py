@@ -9,12 +9,13 @@ import traceback  # For detailed error reporting
 # modules (predictive). Assuming this script (run_predictor.py) is in
 # project_root/src/Python/
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-# Path to project_root/src/
+# Path to project_root/src/ (same pattern as invoke_ai_engine.py)
 SRC_PATH = os.path.abspath(os.path.join(SCRIPT_DIR, os.pardir))
 if SRC_PATH not in sys.path:
     sys.path.insert(0, SRC_PATH)
 
-from predictive.predictor import ArcPredictor  # noqa: E402
+# Use full path from src/ to maintain package context for relative imports
+from Python.predictive.predictor import ArcPredictor  # noqa: E402
 
 # If script is in src/Python/ and models in data/models/latest at
 # project root:

@@ -1,0 +1,365 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/topazyo/azure-arc-deployment-framework/schemas/cli_contracts.schema.json",
+  "title": "Azure Arc AI CLI Contracts",
+  "description": "JSON Schema definitions for PowerShell ↔ Python CLI communication contracts",
+  
+  "$defs": {
+    "serverDataInput": {
+      "$id": "#serverDataInput",
+      "title": "Server Data Input (--serverdatajson)",
+      "description": "Telemetry data payload sent to invoke_ai_engine.py via --serverdatajson",
+      "type": "object",
+      "required": ["server_name_id"],
+      "properties": {
+        "server_name_id": {
+          "type": "string",
+          "description": "Unique identifier for the server"
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 timestamp of the telemetry snapshot"
+        },
+        "cpu_usage": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "CPU usage as a fraction (0.0 to 1.0)"
+        },
+        "memory_usage": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Memory usage as a fraction (0.0 to 1.0)"
+        },
+        "disk_usage": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Disk usage as a fraction (0.0 to 1.0)"
+        },
+        "network_latency": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Network latency in milliseconds"
+        },
+        "error_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of errors in the telemetry window"
+        },
+        "warning_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of warnings in the telemetry window"
+        },
+        "service_restarts": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of service restarts"
+        },
+        "cpu_spikes": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of CPU spike events"
+        },
+        "memory_spikes": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of memory spike events"
+        },
+        "connection_drops": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of connection drop events"
+        },
+        "request_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total request count"
+        },
+        "response_time": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Average response time in milliseconds"
+        }
+      },
+      "additionalProperties": true
+    },
+    
+    "telemetryDataInput": {
+      "$id": "#telemetryDataInput",
+      "title": "Telemetry Data Input (--telemetrydatajson)",
+      "description": "Telemetry data payload sent to run_predictor.py via --telemetrydatajson",
+      "type": "object",
+      "properties": {
+        "cpu_usage": { "type": "number" },
+        "memory_usage": { "type": "number" },
+        "disk_usage": { "type": "number" },
+        "network_latency": { "type": "number" },
+        "error_count": { "type": "integer" },
+        "warning_count": { "type": "integer" },
+        "service_restarts": { "type": "integer" },
+        "cpu_spikes": { "type": "integer" },
+        "memory_spikes": { "type": "integer" },
+        "connection_drops": { "type": "integer" },
+        "request_count": { "type": "integer" },
+        "response_time": { "type": "number" }
+      },
+      "additionalProperties": true
+    },
+
+    "remediationOutcomeInput": {
+      "$id": "#remediationOutcomeInput",
+      "title": "Remediation Outcome Input (--remediationoutcomejson)",
+      "description": "Remediation outcome payload for learning feedback",
+      "type": "object",
+      "required": ["error_type", "action", "success"],
+      "properties": {
+        "error_type": {
+          "type": "string",
+          "description": "Type/category of the error that was remediated"
+        },
+        "action": {
+          "type": "string",
+          "description": "Remediation action that was taken"
+        },
+        "success": {
+          "type": "boolean",
+          "description": "Whether the remediation was successful"
+        },
+        "context": {
+          "type": "object",
+          "description": "Additional context about the remediation",
+          "additionalProperties": true
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+
+    "successResponse": {
+      "$id": "#successResponse",
+      "title": "AI Engine Success Response",
+      "description": "Successful response from invoke_ai_engine.py",
+      "type": "object",
+      "required": ["input_servername", "input_analysistype"],
+      "properties": {
+        "input_servername": {
+          "type": "string",
+          "description": "Echo of the input server name"
+        },
+        "input_analysistype": {
+          "type": "string",
+          "enum": ["Full", "Health", "Failure", "Anomaly"],
+          "description": "Echo of the analysis type requested"
+        },
+        "risk_score": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Overall risk score (0.0 = low risk, 1.0 = high risk)"
+        },
+        "risk_level": {
+          "type": "string",
+          "enum": ["Low", "Medium", "High", "Critical"],
+          "description": "Categorical risk level"
+        },
+        "health_prediction": {
+          "$ref": "#/$defs/predictionResult"
+        },
+        "anomaly_detection": {
+          "$ref": "#/$defs/anomalyResult"
+        },
+        "failure_prediction": {
+          "$ref": "#/$defs/predictionResult"
+        },
+        "pattern_analysis": {
+          "$ref": "#/$defs/patternAnalysisResult"
+        },
+        "recommendations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "action": { "type": "string" },
+              "priority": { "type": "string" },
+              "reason": { "type": "string" }
+            }
+          }
+        },
+        "remediation_outcome": {
+          "type": "object",
+          "description": "Result of recording remediation outcome (if --remediationoutcomejson provided)"
+        },
+        "retrain_export": {
+          "type": "object",
+          "description": "Result of exporting retrain requests (if --exportretrainpath provided)"
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "additionalProperties": true
+    },
+
+    "errorResponse": {
+      "$id": "#errorResponse",
+      "title": "AI Engine Error Response",
+      "description": "Error response from invoke_ai_engine.py (written to stderr)",
+      "type": "object",
+      "required": ["error", "message"],
+      "properties": {
+        "error": {
+          "type": "string",
+          "description": "Error type/class name (e.g., 'JSONDecodeError', 'FileNotFoundError', 'ValueError')"
+        },
+        "message": {
+          "type": "string",
+          "description": "Human-readable error message"
+        },
+        "details": {
+          "type": "string",
+          "description": "Additional error details or context"
+        },
+        "input_servername": {
+          "type": "string",
+          "description": "Echo of the input server name (if available)"
+        },
+        "input_analysistype": {
+          "type": "string",
+          "description": "Echo of the analysis type (if available)"
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 timestamp when error occurred"
+        }
+      }
+    },
+
+    "predictionResult": {
+      "type": "object",
+      "properties": {
+        "prediction": {
+          "oneOf": [
+            { "type": "boolean" },
+            { "type": "integer" },
+            { "type": "string" }
+          ],
+          "description": "Model prediction (class label or boolean)"
+        },
+        "probability": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Prediction probability/confidence"
+        },
+        "probabilities": {
+          "type": "object",
+          "description": "Per-class probabilities",
+          "additionalProperties": { "type": "number" }
+        },
+        "model_used": {
+          "type": "string",
+          "description": "Name of the model that produced this prediction"
+        },
+        "features_used": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Features used for this prediction"
+        }
+      }
+    },
+
+    "anomalyResult": {
+      "type": "object",
+      "properties": {
+        "is_anomaly": {
+          "type": "boolean",
+          "description": "Whether the data point is anomalous"
+        },
+        "anomaly_score": {
+          "type": "number",
+          "description": "Anomaly score (model-specific)"
+        },
+        "anomalous_features": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Features contributing to anomaly detection"
+        }
+      }
+    },
+
+    "patternAnalysisResult": {
+      "type": "object",
+      "properties": {
+        "temporal": {
+          "type": "object",
+          "description": "Temporal pattern analysis results"
+        },
+        "behavioral": {
+          "type": "object",
+          "description": "Behavioral pattern analysis results"
+        },
+        "failure": {
+          "type": "object",
+          "description": "Failure pattern analysis results"
+        },
+        "performance": {
+          "type": "object",
+          "description": "Performance pattern analysis results"
+        }
+      }
+    },
+
+    "predictorSuccessResponse": {
+      "$id": "#predictorSuccessResponse",
+      "title": "Predictor Success Response",
+      "description": "Successful response from run_predictor.py",
+      "type": "object",
+      "properties": {
+        "server_name": {
+          "type": "string"
+        },
+        "analysis_type": {
+          "type": "string"
+        },
+        "predictions": {
+          "type": "object",
+          "properties": {
+            "health": { "$ref": "#/$defs/predictionResult" },
+            "anomaly": { "$ref": "#/$defs/anomalyResult" },
+            "failure": { "$ref": "#/$defs/predictionResult" }
+          }
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+
+    "predictorErrorResponse": {
+      "$id": "#predictorErrorResponse",
+      "title": "Predictor Error Response",
+      "description": "Error response from run_predictor.py",
+      "type": "object",
+      "required": ["error"],
+      "properties": {
+        "error": {
+          "type": "string",
+          "description": "Error message describing what went wrong"
+        },
+        "message": {
+          "type": "string",
+          "description": "Additional error details"
+        }
+      }
+    }
+  }
+}
