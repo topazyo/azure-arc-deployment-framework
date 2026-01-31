@@ -21,6 +21,12 @@ from Python.common.resilience import (  # noqa: E402
     create_error_response,
     retry_with_backoff
 )
+from Python.common.security import (  # noqa: E402
+    validate_server_name,
+    validate_analysis_type,
+    parse_json_safely,
+    InputValidationError
+)
 
 # If script is in src/Python/ and models in data/models/latest at
 # project root:
@@ -83,6 +89,25 @@ def main():
         )
         print(json.dumps(response, indent=debug_indent), flush=True)
 
+    # SEC-002: Validate CLI inputs before processing
+    is_valid, error_msg = validate_server_name(args.server_name)
+    if not is_valid:
+        emit_structured_error(
+            error_type=ErrorCategory.VALIDATION,
+            message=error_msg,
+            details={"param_name": "--server-name", "value_length": len(args.server_name) if args.server_name else 0}
+        )
+        return
+
+    is_valid, error_msg = validate_analysis_type(args.analysis_type)
+    if not is_valid:
+        emit_structured_error(
+            error_type=ErrorCategory.VALIDATION,
+            message=error_msg,
+            details={"param_name": "--analysis-type", "value": args.analysis_type}
+        )
+        return
+
     try:
         # Validate model directory
         model_exists = os.path.exists(args.model_dir)
@@ -111,9 +136,20 @@ def main():
             )
             return
 
-        # Parse telemetry data
+        # Parse telemetry data with security validation
+        # SEC-002: Use secure JSON parsing with size/depth limits
         try:
-            telemetry_data = json.loads(args.telemetrydatajson)
+            telemetry_data = parse_json_safely(
+                args.telemetrydatajson,
+                param_name="--telemetrydatajson"
+            )
+        except InputValidationError as e:
+            emit_structured_error(
+                error_type=ErrorCategory.VALIDATION,
+                message=e.message,
+                details=e.details
+            )
+            return
         except json.JSONDecodeError as e:
             emit_structured_error(
                 error_type=ErrorCategory.JSON_PARSE,

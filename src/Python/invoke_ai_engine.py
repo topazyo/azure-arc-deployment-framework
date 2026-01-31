@@ -21,6 +21,12 @@ from Python.common.resilience import (  # noqa: E402
     validate_model_directory,
     retry_with_backoff
 )
+from Python.common.security import (  # noqa: E402
+    validate_server_name,
+    validate_analysis_type,
+    parse_json_safely,
+    InputValidationError
+)
 
 
 def main():
@@ -112,6 +118,29 @@ def main():
 
     args = parser.parse_args()
 
+    # SEC-002: Validate CLI inputs before processing
+    is_valid, error_msg = validate_server_name(args.servername)
+    if not is_valid:
+        emit_error(
+            error_type=ErrorCategory.VALIDATION,
+            message=error_msg,
+            exit_code=ExitCode.VALIDATION_ERROR,
+            details={"param_name": "--servername", "value_length": len(args.servername)},
+            server_name=args.servername,
+            analysis_type=args.analysistype
+        )
+
+    is_valid, error_msg = validate_analysis_type(args.analysistype)
+    if not is_valid:
+        emit_error(
+            error_type=ErrorCategory.VALIDATION,
+            message=error_msg,
+            exit_code=ExitCode.VALIDATION_ERROR,
+            details={"param_name": "--analysistype", "value": args.analysistype},
+            server_name=args.servername,
+            analysis_type=args.analysistype
+        )
+
     # Use resilience utilities for config loading with retry
     @retry_with_backoff(max_retries=2, initial_delay=0.5)
     def load_config_with_retry(path: str) -> dict:
@@ -151,8 +180,21 @@ def main():
                 "timestamp": datetime.now().isoformat(),
             }
         else:
+            # SEC-002: Use secure JSON parsing with size/depth limits
             try:
-                server_data_input = json.loads(args.serverdatajson)
+                server_data_input = parse_json_safely(
+                    args.serverdatajson,
+                    param_name="--serverdatajson"
+                )
+            except InputValidationError as e:
+                emit_error(
+                    error_type=ErrorCategory.VALIDATION,
+                    message=e.message,
+                    exit_code=ExitCode.VALIDATION_ERROR,
+                    details=e.details,
+                    server_name=args.servername,
+                    analysis_type=args.analysistype
+                )
             except json.JSONDecodeError as e:
                 emit_error(
                     error_type=ErrorCategory.JSON_PARSE,
