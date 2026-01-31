@@ -1,12 +1,11 @@
 from typing import Dict, List, Any
 import numpy as np
 import pandas as pd
-import logging
-from datetime import datetime
 from .model_trainer import ArcModelTrainer
 from .predictor import ArcPredictor
 from .ArcRemediationLearner import ArcRemediationLearner
 from ..analysis.pattern_analyzer import PatternAnalyzer
+from ..common.logging_config import get_logger
 
 
 class PredictiveAnalyticsEngine:
@@ -20,17 +19,8 @@ class PredictiveAnalyticsEngine:
         self.predictor = None
         self.pattern_analyzer = None
         self.remediation_learner = None
-        self.setup_logging()
+        self.logger = get_logger('PredictiveAnalytics')
         self.initialize_components()
-
-    def setup_logging(self):
-        """Sets up logging for the engine."""
-        logging.basicConfig(
-            level=logging.INFO,
-            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-            filename=f'predictive_analytics_{
-                datetime.now().strftime("%Y%m%d")}.log')
-        self.logger = logging.getLogger('PredictiveAnalytics')
 
     def initialize_components(self):
         """Initialize all AI components"""

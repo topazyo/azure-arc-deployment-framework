@@ -6,8 +6,7 @@ from sklearn.preprocessing import StandardScaler, OneHotEncoder
 from sklearn.feature_selection import SelectKBest, f_classif, f_regression
 # Added for type checks
 from pandas.api.types import is_numeric_dtype
-import logging
-from datetime import datetime
+from ..common.logging_config import get_logger
 
 
 class FeatureEngineer:
@@ -38,15 +37,7 @@ class FeatureEngineer:
         self.feature_selection_score_func_name = self.config.get(
             'feature_selection_score_func', 'f_classif')
 
-        self.setup_logging()
-
-    def setup_logging(self):
-        logging.basicConfig(
-            level=logging.INFO,
-            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-            filename=f'feature_engineering_{
-                datetime.now().strftime("%Y%m%d")}.log')
-        self.logger = logging.getLogger('FeatureEngineer')
+        self.logger = get_logger('FeatureEngineer')
 
     def engineer_features(
         self,

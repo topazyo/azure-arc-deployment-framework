@@ -7,10 +7,10 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report, confusion_matrix
 import joblib
-import logging
 import os  # Added os import
 from datetime import datetime
 from typing import Dict, List, Tuple, Any, Optional  # Added Optional
+from ..common.logging_config import get_logger
 
 
 class ArcModelTrainer:
@@ -25,16 +25,7 @@ class ArcModelTrainer:
         self.feature_importance: Dict[str, Dict[str, Any]] = {}
         # Buffer for remediation samples awaiting a full retrain cycle
         self.remediation_buffer: Dict[str, List[Dict[str, Any]]] = {}
-        self.setup_logging()
-
-    def setup_logging(self):
-        """Sets up logging for the model trainer."""
-        logging.basicConfig(
-            level=logging.INFO,
-            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-            filename=f'model_training_{datetime.now().strftime("%Y%m%d")}.log'
-        )
-        self.logger = logging.getLogger('ArcModelTrainer')
+        self.logger = get_logger('ArcModelTrainer')
 
     def prepare_data(self,
                      data: pd.DataFrame,

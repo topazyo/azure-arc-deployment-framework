@@ -1,10 +1,10 @@
 import numpy as np
 import pandas as pd
 import joblib
-import logging
 from typing import Dict, List, Any, Optional  # Ensure List and Optional are here
 from datetime import datetime
 from sklearn.preprocessing import StandardScaler
+from ..common.logging_config import get_logger
 
 
 class ArcPredictor:
@@ -20,17 +20,8 @@ class ArcPredictor:
         # Renamed from model_metadata
         self.feature_info: Dict[str, Dict[str, Any]] = {}
         self.model_load_errors: Dict[str, str] = {}
-        self.setup_logging()
+        self.logger = get_logger('ArcPredictor')
         self.load_models()
-
-    def setup_logging(self):
-        """Sets up logging for the predictor."""  # Generic, as per similar updates
-        logging.basicConfig(
-            level=logging.INFO,
-            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-            filename=f'predictor_{datetime.now().strftime("%Y%m%d")}.log'
-        )
-        self.logger = logging.getLogger('ArcPredictor')
 
     def load_models(self):
         """Load all trained models and scalers."""

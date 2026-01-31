@@ -3,6 +3,7 @@ import json
 import os
 import logging
 from datetime import datetime
+from ..common.logging_config import get_logger
 
 # Assuming these are correctly imported from their respective files
 from . import model_trainer
@@ -38,16 +39,10 @@ class ArcRemediationLearner:
                 'cpu_usage', 'memory_usage', 'error_count'])
 
     def setup_logging(self):
-        logging.basicConfig(
-            level=self.config.get(
-                'log_level',
-                logging.INFO),
-            # Configurable log level
-            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-            filename=f'remediation_learner_{
-                datetime.now().strftime("%Y%m%d")}.log'
-        )
-        self.logger = logging.getLogger('ArcRemediationLearner')
+        """Set up logging using centralized configuration."""
+        log_level = self.config.get('log_level', logging.INFO)
+        self.logger = get_logger('ArcRemediationLearner')
+        self.logger.setLevel(log_level)
         self.logger.info("ArcRemediationLearner initialized.")
 
     # _initialize_model method removed as self.model is removed

@@ -5,8 +5,7 @@ from sklearn.preprocessing import StandardScaler
 from scipy.stats import linregress
 from pandas.api.types import is_numeric_dtype
 from typing import Dict, List, Any, Tuple
-import logging
-from datetime import datetime
+from ..common.logging_config import get_logger
 
 
 class PatternAnalyzer:
@@ -14,20 +13,11 @@ class PatternAnalyzer:
     def __init__(self, config: Dict[str, Any]):
         """Initializes the analyzer with configuration."""
         self.config = config
-        self.setup_logging()
+        self.logger = get_logger('PatternAnalyzer')
         # DBSCAN parameters from config, with defaults
         self.dbscan_eps = self.config.get('dbscan_eps', 0.5)
         self.dbscan_min_samples = self.config.get('dbscan_min_samples', 5)
         self.scaler = StandardScaler()  # Keep scaler for behavioral patterns
-
-    def setup_logging(self):
-        """Configures logging for the analyzer."""
-        logging.basicConfig(
-            level=logging.INFO,
-            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-            filename=f'pattern_analyzer_{datetime.now().strftime("%Y%m%d")}.log'
-        )
-        self.logger = logging.getLogger('PatternAnalyzer')
 
     def analyze_patterns(self, data: pd.DataFrame) -> Dict[str, Any]:
         """Main method to analyze all pattern types."""
