@@ -8,8 +8,10 @@ from .predictor import ArcPredictor
 from .ArcRemediationLearner import ArcRemediationLearner
 from ..analysis.pattern_analyzer import PatternAnalyzer
 
+
 class PredictiveAnalyticsEngine:
     """Orchestrates predictive analytics, including risk analysis."""
+
     def __init__(self, config: Dict[str, Any], model_dir: str):
         """Initializes PredictiveAnalyticsEngine with config and components."""
         self.config = config
@@ -26,8 +28,8 @@ class PredictiveAnalyticsEngine:
         logging.basicConfig(
             level=logging.INFO,
             format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-            filename=f'predictive_analytics_{datetime.now().strftime("%Y%m%d")}.log'
-        )
+            filename=f'predictive_analytics_{
+                datetime.now().strftime("%Y%m%d")}.log')
         self.logger = logging.getLogger('PredictiveAnalytics')
 
     def initialize_components(self):
@@ -44,26 +46,30 @@ class PredictiveAnalyticsEngine:
                 model_config = {}
 
             pa_config = self.config.get('pattern_analyzer_config', {})
-            remediation_learner_config = self.config.get('remediation_learner_config', {})
+            remediation_learner_config = self.config.get(
+                'remediation_learner_config', {})
 
             self.trainer = ArcModelTrainer(model_config)
-            self.predictor = ArcPredictor(model_dir=self.model_dir, config=self.config)
+            self.predictor = ArcPredictor(
+                model_dir=self.model_dir, config=self.config)
             self.pattern_analyzer = PatternAnalyzer(config=pa_config)
-            self.remediation_learner = ArcRemediationLearner(config=remediation_learner_config)
+            self.remediation_learner = ArcRemediationLearner(
+                config=remediation_learner_config)
             try:
-                self.remediation_learner.initialize_ai_components(self.config, self.model_dir)
+                self.remediation_learner.initialize_ai_components(
+                    self.config, self.model_dir)
             except Exception as remediation_exc:
                 self.logger.warning(
                     "Remediation learner initialization failed: %s. Continuing without learner.",
-                    remediation_exc,
-                )
+                    remediation_exc,)
 
             self.logger.info("All components initialized successfully")
         except Exception as e:
             self.logger.error(f"Component initialization failed: {str(e)}")
             raise
 
-    def analyze_deployment_risk(self, server_data: Dict[str, Any]) -> Dict[str, Any]:
+    def analyze_deployment_risk(
+            self, server_data: Dict[str, Any]) -> Dict[str, Any]:
         """Analyzes deployment risk based on server data and models."""
         try:
             # Get predictions from multiple models
@@ -72,7 +78,8 @@ class PredictiveAnalyticsEngine:
             anomaly_detection = self.predictor.detect_anomalies(server_data)
 
             # Analyze patterns
-            patterns = self.pattern_analyzer.analyze_patterns(pd.DataFrame([server_data]))
+            patterns = self.pattern_analyzer.analyze_patterns(
+                pd.DataFrame([server_data]))
 
             # Combine all insights
             risk_analysis = {
@@ -106,7 +113,9 @@ class PredictiveAnalyticsEngine:
     ) -> Dict[str, Any]:
         """Pass remediation outcomes to the learner and surface retrain signals."""
         if not self.remediation_learner:
-            return {"status": "disabled", "reason": "remediation_learner not initialized"}
+            return {
+                "status": "disabled",
+                "reason": "remediation_learner not initialized"}
 
         self.remediation_learner.learn_from_remediation(remediation_payload)
         pending = (
@@ -121,11 +130,15 @@ class PredictiveAnalyticsEngine:
             "pending_retrain_requests": pending,
         }
 
-    def export_retrain_requests(self, output_path: str, consume: bool = False) -> Dict[str, Any]:
+    def export_retrain_requests(
+            self, output_path: str, consume: bool = False) -> Dict[str, Any]:
         """Persist pending retrain requests to disk for orchestration workflows."""
         if not self.remediation_learner:
-            return {"status": "disabled", "reason": "remediation_learner not initialized"}
-        return self.remediation_learner.export_pending_retrain_requests(output_path, consume=consume)
+            return {
+                "status": "disabled",
+                "reason": "remediation_learner not initialized"}
+        return self.remediation_learner.export_pending_retrain_requests(
+            output_path, consume=consume)
 
     def _calculate_overall_risk(
         self,
@@ -142,17 +155,22 @@ class PredictiveAnalyticsEngine:
 
             # Calculate weighted risk score
             risk_score = (
-                (1 - health['prediction']['healthy_probability']) * health_weight +
-                failure['prediction']['failure_probability'] * failure_weight +
-                (1 if anomaly['is_anomaly'] else 0) * anomaly_weight
-            )
+                (1 - health['prediction']['healthy_probability']) *
+                health_weight + failure['prediction']['failure_probability'] *
+                failure_weight + (1 if anomaly['is_anomaly'] else 0) *
+                anomaly_weight)
 
             return {
                 'score': risk_score,
                 'level': self._get_risk_level(risk_score),
-                'confidence': self._calculate_confidence(health, failure, anomaly),
-                'contributing_factors': self._identify_risk_factors(health, failure, anomaly)
-            }
+                'confidence': self._calculate_confidence(
+                    health,
+                    failure,
+                    anomaly),
+                'contributing_factors': self._identify_risk_factors(
+                    health,
+                    failure,
+                    anomaly)}
 
         except Exception as e:
             self.logger.error(f"Overall risk calculation failed: {str(e)}")
@@ -234,7 +252,8 @@ class PredictiveAnalyticsEngine:
         recommendations = []
 
         healthy_prob = health.get('prediction', {}).get('healthy_probability')
-        unhealthy_prob = health.get('prediction', {}).get('unhealthy_probability')
+        unhealthy_prob = health.get(
+            'prediction', {}).get('unhealthy_probability')
         if unhealthy_prob is None and healthy_prob is not None:
             try:
                 unhealthy_prob = 1 - float(healthy_prob)
@@ -257,9 +276,13 @@ class PredictiveAnalyticsEngine:
         if patterns:
             recommendations.extend(self._get_pattern_recommendations(patterns))
 
-        return sorted(recommendations, key=lambda x: x['priority'], reverse=True)
+        return sorted(
+            recommendations,
+            key=lambda x: x['priority'],
+            reverse=True)
 
-    def _get_health_recommendations(self, health: Dict[str, Any]) -> List[Dict[str, Any]]:
+    def _get_health_recommendations(
+            self, health: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Generate health-specific recommendations"""
         recommendations = []
         for feature, impact in health['feature_impacts'].items():
@@ -272,7 +295,8 @@ class PredictiveAnalyticsEngine:
                 })
         return recommendations
 
-    def _get_failure_recommendations(self, failure: Dict[str, Any]) -> List[Dict[str, Any]]:
+    def _get_failure_recommendations(
+            self, failure: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Generate failure prevention recommendations"""
         recommendations = []
         for feature, impact in failure['feature_impacts'].items():
@@ -285,7 +309,8 @@ class PredictiveAnalyticsEngine:
                 })
         return recommendations
 
-    def _get_anomaly_recommendations(self, anomaly: Dict[str, Any]) -> List[Dict[str, Any]]:
+    def _get_anomaly_recommendations(
+            self, anomaly: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Generate anomaly-based recommendations"""
         return [{
             'category': 'Anomaly',
@@ -294,7 +319,8 @@ class PredictiveAnalyticsEngine:
             'details': 'Investigate and address detected anomalous behavior'
         }]
 
-    def _get_pattern_recommendations(self, patterns: Dict[str, Any]) -> List[Dict[str, Any]]:
+    def _get_pattern_recommendations(
+            self, patterns: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Generate pattern-based recommendations"""
         def iter_recs(obj: Any) -> List[Dict[str, Any]]:
             collected: List[Dict[str, Any]] = []

@@ -4,11 +4,10 @@ from sklearn.cluster import DBSCAN
 from sklearn.preprocessing import StandardScaler
 from scipy.stats import linregress
 from pandas.api.types import is_numeric_dtype
-from typing import Dict, List, Any, Optional, Tuple
+from typing import Dict, List, Any, Tuple
 import logging
 from datetime import datetime
-import pandas as pd # Ensure pandas is imported if not already
-import numpy as np # Ensure numpy is imported
+
 
 class PatternAnalyzer:
     """Provides methods for pattern analysis."""
@@ -19,7 +18,7 @@ class PatternAnalyzer:
         # DBSCAN parameters from config, with defaults
         self.dbscan_eps = self.config.get('dbscan_eps', 0.5)
         self.dbscan_min_samples = self.config.get('dbscan_min_samples', 5)
-        self.scaler = StandardScaler() # Keep scaler for behavioral patterns
+        self.scaler = StandardScaler()  # Keep scaler for behavioral patterns
 
     def setup_logging(self):
         """Configures logging for the analyzer."""
@@ -60,9 +59,11 @@ class PatternAnalyzer:
 
             numerical_cols = df.select_dtypes(include=np.number).columns
             for col in numerical_cols:
-                if col == 'hour': continue
+                if col == 'hour':
+                    continue
                 hourly_mean = df.groupby('hour')[col].mean()
-                if hourly_mean.empty: continue
+                if hourly_mean.empty:
+                    continue
 
                 # Peak hours (e.g., > 75th percentile)
                 peak_threshold = hourly_mean.quantile(self.config.get('daily_peak_percentile_threshold', 0.75))
@@ -71,7 +72,7 @@ class PatternAnalyzer:
                     results["peak_hours"][col] = current_peak_hours
 
                 # Seasonality strength (autocorrelation at lag 24 if enough data)
-                if len(df[col].dropna()) > 48: # Need at least 2 full cycles for lag 24
+                if len(df[col].dropna()) > 48:  # Need at least 2 full cycles for lag 24
                     try:
                         autocorr_24 = df[col].autocorr(lag=24)
                         results["seasonality_strength"][col] = round(autocorr_24, 2) if pd.notna(autocorr_24) else 0.0
@@ -79,19 +80,18 @@ class PatternAnalyzer:
                         self.logger.debug(f"Could not calculate daily seasonality for {col}: {e_autocorr}")
                         results["seasonality_strength"][col] = 0.0
                 else:
-                    results["seasonality_strength"][col] = 0.0 # Not enough data
+                    results["seasonality_strength"][col] = 0.0  # Not enough data
 
             if results["peak_hours"]:
-                 results["recommendations"].append({
+                results["recommendations"].append({
                     'action': "Optimize resource allocation during identified peak hours.",
-                    'priority': 0.6,
-                    'details': f"Peak hours observed for metrics: {list(results['peak_hours'].keys())}. Review specific hours in 'peak_hours' field."
-                })
+                   'priority': 0.6,
+                   'details': f"Peak hours observed for metrics: {list(results['peak_hours'].keys())}. Review specific hours in 'peak_hours' field."
+                    })
             return results
         except Exception as e:
             self.logger.error(f"Daily pattern analysis failed: {str(e)}", exc_info=True)
             return {"peak_hours": {}, "seasonality_strength": {}, "recommendations": []}
-
 
     def analyze_weekly_patterns(self, data: pd.DataFrame) -> Dict[str, Any]:
         """Analyze weekly patterns in numerical data."""
@@ -102,23 +102,25 @@ class PatternAnalyzer:
             return results
         try:
             df = data.copy()
-            df['day_of_week'] = pd.to_datetime(df['timestamp']).dt.dayofweek # Monday=0, Sunday=6
+            df['day_of_week'] = pd.to_datetime(df['timestamp']).dt.dayofweek  # Monday=0, Sunday=6
 
             numerical_cols = df.select_dtypes(include=np.number).columns
             for col in numerical_cols:
-                if col == 'day_of_week': continue
-                daily_agg = df.groupby(pd.to_datetime(df['timestamp']).dt.date)[col].mean() # Aggregate to daily first
-                if len(daily_agg) < 14: # Need at least 2 weeks of daily data for weekly seasonality
+                if col == 'day_of_week':
+                    continue
+                daily_agg = df.groupby(pd.to_datetime(df['timestamp']).dt.date)[col].mean()  # Aggregate to daily first
+                if len(daily_agg) < 14:  # Need at least 2 weeks of daily data for weekly seasonality
                     results["seasonality_strength"][col] = 0.0
                     continue
 
                 # Create day_of_week from the daily aggregated index
                 daily_agg_df = daily_agg.reset_index()
-                daily_agg_df.columns = ['date', col] # Rename columns
+                daily_agg_df.columns = ['date', col]  # Rename columns
                 daily_agg_df['day_of_week'] = pd.to_datetime(daily_agg_df['date']).dt.dayofweek
 
                 weekly_mean_by_day = daily_agg_df.groupby('day_of_week')[col].mean()
-                if weekly_mean_by_day.empty: continue
+                if weekly_mean_by_day.empty:
+                    continue
 
                 peak_threshold = weekly_mean_by_day.quantile(self.config.get('weekly_peak_percentile_threshold', 0.75))
                 current_peak_days = weekly_mean_by_day[weekly_mean_by_day > peak_threshold].index.tolist()
@@ -126,7 +128,7 @@ class PatternAnalyzer:
                     results["peak_days"][col] = current_peak_days
 
                 try:
-                    autocorr_7 = daily_agg.autocorr(lag=7) # Autocorrelation on daily data for weekly pattern
+                    autocorr_7 = daily_agg.autocorr(lag=7)  # Autocorrelation on daily data for weekly pattern
                     results["seasonality_strength"][col] = round(autocorr_7, 2) if pd.notna(autocorr_7) else 0.0
                 except Exception as e_autocorr:
                     self.logger.debug(f"Could not calculate weekly seasonality for {col}: {e_autocorr}")
@@ -158,12 +160,14 @@ class PatternAnalyzer:
 
             numerical_cols = df.select_dtypes(include=np.number).columns
             for col in numerical_cols:
-                if col in ['day_of_month', 'month']: continue
+                if col in ['day_of_month', 'month']:
+                    continue
 
                 # Peak Day of Month
                 monthly_mean_by_day = df.groupby('day_of_month')[col].mean()
                 if not monthly_mean_by_day.empty:
-                    peak_threshold_dom = monthly_mean_by_day.quantile(self.config.get('monthly_dom_peak_percentile_threshold', 0.75))
+                    peak_threshold_dom = monthly_mean_by_day.quantile(
+                        self.config.get('monthly_dom_peak_percentile_threshold', 0.75))
                     current_peak_dom = monthly_mean_by_day[monthly_mean_by_day > peak_threshold_dom].index.tolist()
                     if current_peak_dom:
                         results["peak_days_of_month"][col] = current_peak_dom
@@ -172,10 +176,12 @@ class PatternAnalyzer:
                 if df['month'].nunique() > 1:
                     monthly_mean_by_month = df.groupby('month')[col].mean()
                     if not monthly_mean_by_month.empty:
-                        peak_threshold_month = monthly_mean_by_month.quantile(self.config.get('monthly_month_peak_percentile_threshold', 0.75))
-                        current_peak_months = monthly_mean_by_month[monthly_mean_by_month > peak_threshold_month].index.tolist()
+                        peak_threshold_month = monthly_mean_by_month.quantile(
+                            self.config.get('monthly_month_peak_percentile_threshold', 0.75))
+                        current_peak_months = monthly_mean_by_month[monthly_mean_by_month >
+                            peak_threshold_month].index.tolist()
                         if current_peak_months:
-                           results["peak_months"][col] = current_peak_months
+                            results["peak_months"][col] = current_peak_months
 
             if results["peak_days_of_month"] or results["peak_months"]:
                 results["recommendations"].append({
@@ -188,11 +194,10 @@ class PatternAnalyzer:
             self.logger.error(f"Monthly pattern analysis failed: {str(e)}", exc_info=True)
             return {"peak_days_of_month": {}, "peak_months": {}, "recommendations": []}
 
-
     def analyze_temporal_patterns(self, data: pd.DataFrame) -> Dict[str, Any]:
         """Analyze temporal patterns in the data."""
         try:
-            daily_patterns = self.analyze_daily_patterns(data.copy()) # Pass copy to avoid side effects
+            daily_patterns = self.analyze_daily_patterns(data.copy())  # Pass copy to avoid side effects
             weekly_patterns = self.analyze_weekly_patterns(data.copy())
             monthly_patterns = self.analyze_monthly_patterns(data.copy())
 
@@ -232,8 +237,12 @@ class PatternAnalyzer:
         results = {"clusters": {}, "recommendations": []}
         try:
             features_array, used_feature_names = self.prepare_behavioral_features(data)
-            if features_array.size == 0 or features_array.shape[0] < self.dbscan_min_samples : # Ensure enough samples for DBSCAN
-                self.logger.warning(f"Not enough samples ({features_array.shape[0]}) or features for behavioral pattern analysis. Min samples: {self.dbscan_min_samples}")
+            # Ensure enough samples for DBSCAN
+            if features_array.size == 0 or features_array.shape[0] < self.dbscan_min_samples :
+                self.logger.warning(
+    f"Not enough samples ({
+        features_array.shape[0]}) or features for behavioral pattern analysis. Min samples: {
+            self.dbscan_min_samples}")
                 return results
 
             scaled_features = self.scaler.fit_transform(features_array)
@@ -252,11 +261,11 @@ class PatternAnalyzer:
             # This requires `analyze_clusters` to include such interpretations or return data for it.
             # For now, a generic recommendation:
             if results["clusters"] and len(results["clusters"]) > 0 :
-                 results["recommendations"].append({
+                results["recommendations"].append({
                     'action': "Review identified behavioral clusters for distinct operational states or anomalies.",
-                    'priority': 0.4,
-                    'details': f"Found {len(results['clusters'])} distinct behavioral clusters. Examine their characteristics."
-                })
+                   'priority': 0.4,
+                   'details': f"Found {len(results['clusters'])} distinct behavioral clusters. Examine their characteristics."
+                    })
             return results
         except Exception as e:
             self.logger.error(f"Behavioral pattern analysis failed: {str(e)}", exc_info=True)
@@ -278,16 +287,16 @@ class PatternAnalyzer:
             return results
         try:
             if data[error_col_name].isnull().all():
-                 self.logger.info(f"Column '{error_col_name}' contains all NaN values.")
-                 return results
+                self.logger.info(f"Column '{error_col_name}' contains all NaN values.")
+                return results
 
-            counts = data[error_col_name].value_counts(normalize=True) # Get percentages
-            total_errors = len(data[data[error_col_name].notna()]) # Count non-NaN errors
+            counts = data[error_col_name].value_counts(normalize=True)  # Get percentages
+            total_errors = len(data[data[error_col_name].notna()])  # Count non-NaN errors
 
             for error_val, percentage in counts.items():
                 frequency = int(percentage * total_errors)
                 results['common_causes'].append({
-                    'cause': str(error_val), # Ensure it's a string
+                    'cause': str(error_val),  # Ensure it's a string
                     'frequency': frequency,
                     'percentage': round(percentage * 100, 2)
                 })
@@ -304,7 +313,6 @@ class PatternAnalyzer:
             self.logger.error(f"Identifying common failure causes failed: {str(e)}", exc_info=True)
             return {'common_causes': [], 'recommendations': []}
 
-
     def identify_failure_precursors(self, data: pd.DataFrame) -> Dict[str, Any]:
         """Identify potential failure precursors by analyzing metric averages before failures."""
         self.logger.info("Identifying failure precursors...")
@@ -315,25 +323,27 @@ class PatternAnalyzer:
             return results
         try:
             df = data.sort_values(by='timestamp').copy()
-            df['failure_occurred'] = df['failure_occurred'].astype(int) # Ensure numeric
+            df['failure_occurred'] = df['failure_occurred'].astype(int)  # Ensure numeric
 
             failure_indices = df[df['failure_occurred'] == 1].index
             if not failure_indices.any():
                 self.logger.info("No failure events found in data.")
                 return results
 
-            precursor_window_str = self.config.get('precursor_window', '1H') # e.g., 1H, 30T
+            precursor_window_str = self.config.get('precursor_window', '1H')  # e.g., 1H, 30T
             precursor_window = pd.to_timedelta(precursor_window_str)
 
             numerical_cols = df.select_dtypes(include=np.number).columns.tolist()
             # Remove columns that shouldn't be treated as precursors
-            cols_to_exclude = ['failure_occurred', 'timestamp'] # timestamp if it was converted to numeric
-            metrics_to_analyze = [col for col in numerical_cols if col not in cols_to_exclude and is_numeric_dtype(df[col])]
-
+            cols_to_exclude = ['failure_occurred', 'timestamp']  # timestamp if it was converted to numeric
+            metrics_to_analyze = [
+    col for col in numerical_cols if col not in cols_to_exclude and is_numeric_dtype(
+        df[col])]
 
             for metric in metrics_to_analyze:
                 overall_avg_metric = df[metric].mean()
-                if pd.isna(overall_avg_metric): continue
+                if pd.isna(overall_avg_metric):
+                    continue
 
                 pre_failure_values = []
                 for idx in failure_indices:
@@ -346,9 +356,10 @@ class PatternAnalyzer:
 
                 if pre_failure_values:
                     avg_pre_failure_metric = np.mean(pre_failure_values)
-                    if overall_avg_metric != 0: # Avoid division by zero
+                    if overall_avg_metric != 0:  # Avoid division by zero
                         change_pct = ((avg_pre_failure_metric - overall_avg_metric) / overall_avg_metric) * 100
-                        if abs(change_pct) > self.config.get('precursor_significance_threshold_pct', 10): # e.g. 10% change
+                        if abs(change_pct) > self.config.get(
+                            'precursor_significance_threshold_pct', 10):  # e.g. 10% change
                             results['precursors'].append({
                                 'metric': metric,
                                 'average_before_failure': round(avg_pre_failure_metric, 2),
@@ -368,7 +379,6 @@ class PatternAnalyzer:
             self.logger.error(f"Identifying failure precursors failed: {str(e)}", exc_info=True)
             return {'precursors': [], 'recommendations': []}
 
-
     def analyze_failure_impact(self, data: pd.DataFrame) -> Dict[str, Any]:
         """Analyze failure impact if relevant columns (downtime_minutes, affected_services_count) exist."""
         self.logger.info("Analyzing failure impact...")
@@ -381,28 +391,30 @@ class PatternAnalyzer:
             # Check for relevant columns and filter for rows that might represent failure events
             # This might require 'failure_id' or specific event markers if not all rows are failures
             failure_data = data
-            if 'failure_id' in data.columns: # Assuming data might contain non-failure rows too
+            if 'failure_id' in data.columns:  # Assuming data might contain non-failure rows too
                 failure_data = data[data['failure_id'].notna()]
             elif 'failure_occurred' in data.columns and 1 in data['failure_occurred'].unique():
-                 failure_data = data[data['failure_occurred'] == 1]
-
+                failure_data = data[data['failure_occurred'] == 1]
 
             if failure_data.empty:
                 self.logger.info("No specific failure events found to analyze impact from.")
                 return results
 
             if 'downtime_minutes' in failure_data.columns and failure_data['downtime_minutes'].notna().any():
-                results['average_downtime'] = round(failure_data['downtime_minutes'].mean(),1)
+                results['average_downtime'] = round(failure_data['downtime_minutes'].mean(), 1)
                 results['max_downtime'] = int(failure_data['downtime_minutes'].max())
 
-            if 'affected_services_count' in failure_data.columns and failure_data['affected_services_count'].notna().any():
-                results['average_affected_services'] = round(failure_data['affected_services_count'].mean(),1)
+            if 'affected_services_count' in failure_data.columns and failure_data['affected_services_count'].notna(
+            ).any():
+                results['average_affected_services'] = round(failure_data['affected_services_count'].mean(), 1)
                 results['max_affected_services'] = int(failure_data['affected_services_count'].max())
 
             if results['average_downtime'] > 0 or results['average_affected_services'] > 0:
                 rec_detail = []
-                if results['average_downtime'] > 0: rec_detail.append(f"Average downtime is {results['average_downtime']} mins.")
-                if results['average_affected_services'] > 0: rec_detail.append(f"Average services affected is {results['average_affected_services']}.")
+                if results['average_downtime'] > 0:
+                    rec_detail.append(f"Average downtime is {results['average_downtime']} mins.")
+                if results['average_affected_services'] > 0:
+                    rec_detail.append(f"Average services affected is {results['average_affected_services']}.")
                 results['recommendations'].append({
                     'action': "Review failure impact metrics to prioritize critical failure types.",
                     'priority': 0.7,
@@ -411,8 +423,8 @@ class PatternAnalyzer:
             return results
         except Exception as e:
             self.logger.error(f"Analyzing failure impact failed: {str(e)}", exc_info=True)
-            return {'average_downtime': 0, 'max_downtime': 0, 'average_affected_services': 0, 'max_affected_services': 0, 'recommendations': []}
-
+            return {'average_downtime': 0, 'max_downtime': 0, 'average_affected_services': 0,
+                'max_affected_services': 0, 'recommendations': []}
 
     def analyze_failure_patterns(self, data: pd.DataFrame) -> Dict[str, Any]:
         """Analyze failure patterns in the data."""
@@ -428,40 +440,43 @@ class PatternAnalyzer:
 
             # Basic placeholder recommendation if no specific ones generated
             if not all_recommendations:
-                 all_recommendations.append({
+                all_recommendations.append({
                     'action': "Review failure logs and metrics for deeper insights.",
-                    'priority': 0.5,
-                    'details': "No specific high-level failure patterns automatically generated from provided data subsets."
-                })
+                   'priority': 0.5,
+                   'details': "No specific high-level failure patterns automatically generated from provided data subsets."
+                    })
 
             return {
                 'common_causes': common_causes_res.get('common_causes', []),
                 'precursors': precursors_res.get('precursors', []),
-                'impact_analysis': impact_res, # impact_res is a dict itself
+                'impact_analysis': impact_res,  # impact_res is a dict itself
                 'recommendations': all_recommendations
             }
         except Exception as e:
             self.logger.error(f"Failure pattern analysis failed: {str(e)}", exc_info=True)
             return {"common_causes": [], "precursors": [], "impact_analysis": {}, "recommendations": []}
 
-
     def analyze_resource_usage_patterns(self, data: pd.DataFrame) -> Dict[str, Any]:
         """Analyze resource usage patterns for key metrics."""
         self.logger.info("Analyzing resource usage patterns...")
         results = {'metric_stats': {}, 'sustained_high_usage': [], 'recommendations': []}
 
-        performance_metrics = self.config.get('performance_metrics', ['cpu_usage', 'memory_usage']) # Default if not in config
+        performance_metrics = self.config.get(
+    'performance_metrics', [
+        'cpu_usage', 'memory_usage'])  # Default if not in config
         if not performance_metrics:
             self.logger.info("No performance metrics configured for resource usage analysis.")
             return results
         try:
             for metric in performance_metrics:
                 if metric not in data.columns or not is_numeric_dtype(data[metric]):
-                    self.logger.warning(f"Metric '{metric}' not found or not numeric. Skipping resource usage analysis for it.")
+                    self.logger.warning(
+    f"Metric '{metric}' not found or not numeric. Skipping resource usage analysis for it.")
                     continue
 
                 series = data[metric].dropna()
-                if series.empty: continue
+                if series.empty:
+                    continue
 
                 results['metric_stats'][metric] = {
                     'mean': round(series.mean(), 2),
@@ -474,7 +489,8 @@ class PatternAnalyzer:
                 high_usage_threshold = series.quantile(self.config.get('sustained_high_usage_percentile', 0.90))
                 min_consecutive_points = self.config.get('sustained_high_usage_min_points', 5)
 
-                high_periods = (series > high_usage_threshold).astype(int).groupby(series.lt(high_usage_threshold).astype(int).cumsum()).cumsum()
+                high_periods = (series > high_usage_threshold).astype(int).groupby(
+                    series.lt(high_usage_threshold).astype(int).cumsum()).cumsum()
                 sustained_periods = high_periods[high_periods >= min_consecutive_points]
 
                 if not sustained_periods.empty:
@@ -483,8 +499,9 @@ class PatternAnalyzer:
                     # For now, just noting that sustained high usage was found.
                     results['sustained_high_usage'].append({
                         'metric': metric,
-                        'threshold_used': round(high_usage_threshold,2),
-                        'periods_detected_count': len(sustained_periods[sustained_periods == min_consecutive_points]) # count starts of such periods
+                        'threshold_used': round(high_usage_threshold, 2),
+                        # count starts of such periods
+                        'periods_detected_count': len(sustained_periods[sustained_periods == min_consecutive_points])
                     })
 
             if results['metric_stats']:
@@ -497,7 +514,6 @@ class PatternAnalyzer:
         except Exception as e:
             self.logger.error(f"Analyzing resource usage patterns failed: {str(e)}", exc_info=True)
             return {'metric_stats': {}, 'sustained_high_usage': [], 'recommendations': []}
-
 
     def identify_bottlenecks(self, data: pd.DataFrame) -> Dict[str, Any]:
         """Identify performance bottlenecks based on configured rules."""
@@ -515,19 +531,23 @@ class PatternAnalyzer:
             for rule in bottleneck_rules:
                 rule_name = rule.get('name', 'UnnamedBottleneckRule')
                 conditions = rule.get('conditions', [])
-                if not conditions: continue
+                if not conditions:
+                    continue
 
                 combined_condition = pd.Series([True] * len(data), index=data.index)
                 for cond in conditions:
                     metric, operator, threshold = cond.get('metric'), cond.get('operator'), cond.get('threshold')
                     if not all([metric, operator, threshold is not None]) or metric not in data.columns:
-                        self.logger.warning(f"Invalid or incomplete condition for bottleneck rule '{rule_name}': {cond}")
-                        combined_condition = pd.Series([False] * len(data), index=data.index) # Rule cannot be met
+                        self.logger.warning(
+    f"Invalid or incomplete condition for bottleneck rule '{rule_name}': {cond}")
+                        combined_condition = pd.Series([False] * len(data), index=data.index)  # Rule cannot be met
                         break
 
                     series_metric = data[metric]
-                    if operator == '>': condition_met = series_metric > threshold
-                    elif operator == '<': condition_met = series_metric < threshold
+                    if operator == '>':
+                        condition_met = series_metric > threshold
+                    elif operator == '<':
+                        condition_met = series_metric < threshold
                     # Add other operators as needed (>=, <=, ==)
                     else:
                         self.logger.warning(f"Unsupported operator '{operator}' in bottleneck rule '{rule_name}'.")
@@ -554,7 +574,6 @@ class PatternAnalyzer:
             self.logger.error(f"Identifying bottlenecks failed: {str(e)}", exc_info=True)
             return {'detected_bottlenecks': [], 'recommendations': []}
 
-
     def analyze_performance_trends(self, data: pd.DataFrame) -> Dict[str, Any]:
         """Analyze performance trends for key metrics using linear regression."""
         self.logger.info("Analyzing performance trends...")
@@ -563,16 +582,17 @@ class PatternAnalyzer:
             self.logger.warning("Timestamp column required for performance trend analysis.")
             return results
         if data.empty:
-             self.logger.warning("DataFrame is empty for performance trend analysis.")
-             return results
+            self.logger.warning("DataFrame is empty for performance trend analysis.")
+            return results
         try:
             df = data.sort_values(by='timestamp').copy()
             time_numeric = (df['timestamp'] - df['timestamp'].min()).dt.total_seconds()
 
             performance_metrics = self.config.get('performance_metrics', ['cpu_usage', 'memory_usage', 'response_time'])
             p_value_threshold = self.config.get('trend_p_value_threshold', 0.05)
-            slope_significance_threshold = self.config.get('trend_slope_magnitude_threshold', 0.01) # Min abs slope to be "interesting"
-
+            slope_significance_threshold = self.config.get(
+    'trend_slope_magnitude_threshold',
+     0.01)  # Min abs slope to be "interesting"
 
             for metric in performance_metrics:
                 if metric not in df.columns or not is_numeric_dtype(df[metric]):
@@ -582,7 +602,7 @@ class PatternAnalyzer:
                 series_data = df[metric]
                 valid_indices = time_numeric.notna() & series_data.notna()
 
-                if valid_indices.sum() < 3: # linregress needs at least 3 points
+                if valid_indices.sum() < 3:  # linregress needs at least 3 points
                     continue
 
                 current_time_numeric = time_numeric[valid_indices]
@@ -591,8 +611,10 @@ class PatternAnalyzer:
                 try:
                     slope, intercept, r_value, p_value, stderr = linregress(current_time_numeric, current_metric_data)
                     direction = 'stable'
-                    if slope > slope_significance_threshold: direction = 'increasing'
-                    elif slope < -slope_significance_threshold: direction = 'decreasing'
+                    if slope > slope_significance_threshold:
+                        direction = 'increasing'
+                    elif slope < -slope_significance_threshold:
+                        direction = 'decreasing'
 
                     if p_value < p_value_threshold and direction != 'stable':
                         results['trends'].append({
@@ -604,8 +626,7 @@ class PatternAnalyzer:
                             'stderr': round(stderr, 4)
                         })
                 except Exception as e_lin:
-                     self.logger.debug(f"Linregress failed for metric '{metric}': {e_lin}")
-
+                    self.logger.debug(f"Linregress failed for metric '{metric}': {e_lin}")
 
             if results['trends']:
                 results['recommendations'].append({
@@ -617,7 +638,6 @@ class PatternAnalyzer:
         except Exception as e:
             self.logger.error(f"Analyzing performance trends failed: {str(e)}", exc_info=True)
             return {'trends': [], 'recommendations': []}
-
 
     def analyze_performance_patterns(self, data: pd.DataFrame) -> Dict[str, Any]:
         """Analyze performance patterns in the data."""
@@ -647,7 +667,7 @@ class PatternAnalyzer:
         feature_list_config = self.config.get('behavioral_features', [])
         if not feature_list_config:
             self.logger.warning("No features configured in 'behavioral_features'. Returning empty array.")
-            return np.array([]).reshape(0,0), []
+            return np.array([]).reshape(0, 0), []
 
         valid_features = []
         used_feature_names = []
@@ -661,12 +681,12 @@ class PatternAnalyzer:
 
         if not valid_features:
             self.logger.warning("No valid behavioral features could be extracted. Returning empty array.")
-            return np.array([]).reshape(0,0), []
+            return np.array([]).reshape(0, 0), []
 
         return np.column_stack(valid_features), used_feature_names
 
-
-    def analyze_clusters(self, features_array: np.ndarray, labels: np.ndarray, feature_names: List[str]) -> Dict[str, Any]:
+    def analyze_clusters(self, features_array: np.ndarray, labels: np.ndarray,
+                         feature_names: List[str]) -> Dict[str, Any]:
         """Analyze identified clusters, using feature names for context."""
         self.logger.info("Analyzing clusters...")
         n_clusters_ = len(set(labels)) - (1 if -1 in labels else 0)
@@ -677,7 +697,8 @@ class PatternAnalyzer:
         clusters_summary = {}
         for i in range(n_clusters_):
             cluster_points = features_array[labels == i]
-            if cluster_points.shape[0] == 0: continue # Should not happen if labels are from fit
+            if cluster_points.shape[0] == 0:
+                continue  # Should not happen if labels are from fit
 
             # Calculate center (mean for each feature)
             center_values = np.mean(cluster_points, axis=0)
@@ -711,34 +732,39 @@ class PatternAnalyzer:
         """Analyze characteristics of a cluster."""
         # This method might be too generic. If features_array has named columns, this could be more specific.
         # For now, it calculates generic stats.
-        if cluster_points.ndim == 1: cluster_points = cluster_points.reshape(-1,1) # Ensure 2D for ptp
-        if cluster_points.shape[0] == 0: return {}
+        if cluster_points.ndim == 1:
+            cluster_points = cluster_points.reshape(-1, 1)  # Ensure 2D for ptp
+        if cluster_points.shape[0] == 0:
+            return {}
 
         return {
-            'stability_std_mean': self.calculate_cluster_stability(cluster_points), # Mean of std devs of features
-            'density_crude': self.calculate_cluster_density(cluster_points), # Crude density
-            'isolation_mean_dist_center': self.calculate_cluster_isolation(cluster_points) # Mean distance from center
+            'stability_std_mean': self.calculate_cluster_stability(cluster_points),  # Mean of std devs of features
+            'density_crude': self.calculate_cluster_density(cluster_points),  # Crude density
+            'isolation_mean_dist_center': self.calculate_cluster_isolation(cluster_points)  # Mean distance from center
         }
 
     def calculate_cluster_stability(self, cluster_points: np.ndarray) -> float:
         """Calculate stability metric for a cluster (mean of standard deviations of its features)."""
-        if cluster_points.shape[0] < 2: return 0.0 # Std dev not meaningful for single point
+        if cluster_points.shape[0] < 2:
+            return 0.0  # Std dev not meaningful for single point
         return float(np.std(cluster_points, axis=0).mean())
 
     def calculate_cluster_density(self, cluster_points: np.ndarray) -> float:
         """Calculate density metric for a cluster. Crude measure."""
-        if cluster_points.shape[0] == 0: return 0.0
-        if cluster_points.ndim == 1: cluster_points = cluster_points.reshape(-1,1)
+        if cluster_points.shape[0] == 0:
+            return 0.0
+        if cluster_points.ndim == 1:
+            cluster_points = cluster_points.reshape(-1, 1)
 
         volume = np.prod(np.ptp(cluster_points, axis=0)) if cluster_points.shape[0] > 1 else 1.0
-        if volume == 0: # Avoid division by zero if all points are same or in lower dimension
+        if volume == 0:  # Avoid division by zero if all points are same or in lower dimension
             return float('inf') if len(cluster_points) > 0 else 0.0
         return float(len(cluster_points) / volume)
 
     def calculate_cluster_isolation(self, cluster_points: np.ndarray) -> float:
         """Calculate isolation metric for a cluster (mean distance from its center)."""
-        if cluster_points.shape[0] == 0: return 0.0
+        if cluster_points.shape[0] == 0:
+            return 0.0
         center = np.mean(cluster_points, axis=0)
         distances = np.linalg.norm(cluster_points - center, axis=1)
         return float(np.mean(distances))
-

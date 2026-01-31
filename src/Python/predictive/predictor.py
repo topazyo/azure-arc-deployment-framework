@@ -2,25 +2,29 @@ import numpy as np
 import pandas as pd
 import joblib
 import logging
-from typing import Dict, List, Any, Optional # Ensure List and Optional are here
+from typing import Dict, List, Any, Optional  # Ensure List and Optional are here
 from datetime import datetime
 from sklearn.preprocessing import StandardScaler
 
+
 class ArcPredictor:
     """Loads trained models and makes predictions."""
-    def __init__(self, model_dir: str, config: Dict[str, Any] = None): # Added config
+
+    # Added config
+    def __init__(self, model_dir: str, config: Dict[str, Any] = None):
         """Initializes ArcPredictor, loading models from model_dir."""
         self.model_dir = model_dir
-        self.config = config if config else {} # Store config
+        self.config = config if config else {}  # Store config
         self.models: Dict[str, Any] = {}
-        self.scalers: Dict[str, StandardScaler] = {} # Type hint for clarity
-        self.feature_info: Dict[str, Dict[str, Any]] = {} # Renamed from model_metadata
+        self.scalers: Dict[str, StandardScaler] = {}  # Type hint for clarity
+        # Renamed from model_metadata
+        self.feature_info: Dict[str, Dict[str, Any]] = {}
         self.model_load_errors: Dict[str, str] = {}
         self.setup_logging()
         self.load_models()
 
     def setup_logging(self):
-        """Sets up logging for the predictor.""" # Generic, as per similar updates
+        """Sets up logging for the predictor."""  # Generic, as per similar updates
         logging.basicConfig(
             level=logging.INFO,
             format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -30,28 +34,34 @@ class ArcPredictor:
 
     def load_models(self):
         """Load all trained models and scalers."""
-        model_types = ['health_prediction', 'anomaly_detection', 'failure_prediction']
+        model_types = [
+            'health_prediction',
+            'anomaly_detection',
+            'failure_prediction']
 
         for model_type in model_types:
             model_path = f"{self.model_dir}/{model_type}_model.pkl"
             scaler_path = f"{self.model_dir}/{model_type}_scaler.pkl"
-                # Path for feature info (assuming ArcModelTrainer saves it this way)
-                # Step 7 (ArcModelTrainer) saved 'feature_importance' which was a dict: {'names': [...], 'importances': [...]}
-                # This is more aligned with 'feature_info.pkl' than 'metadata.pkl' or 'feature_importance.pkl' alone.
-                # Let's assume the file is named more generically like 'feature_info.pkl' or use the existing 'feature_importance.pkl'
-                # and derive ordered_features and importances from it.
-                # Based on prompt: "ArcModelTrainer saves feature_importance as a dictionary where model.feature_importances_ were zipped with an ordered list of feature names."
-                # So, list(loaded_feature_importance.keys()) would give the ordered feature names.
+            # Path for feature info (assuming ArcModelTrainer saves it this way)
+            # Step 7 (ArcModelTrainer) saved 'feature_importance' which was a dict: {'names': [...], 'importances': [...]}
+            # This is more aligned with 'feature_info.pkl' than 'metadata.pkl' or 'feature_importance.pkl' alone.
+            # Let's assume the file is named more generically like 'feature_info.pkl' or use the existing 'feature_importance.pkl'
+            # and derive ordered_features and importances from it.
+            # Based on prompt: "ArcModelTrainer saves feature_importance as a dictionary where model.feature_importances_ were zipped with an ordered list of feature names."
+            # So, list(loaded_feature_importance.keys()) would give the ordered
+            # feature names.
 
-                # Let's assume ArcModelTrainer saves a dict like:
-                # {'names': ['feat1', 'feat2'], 'importances': [0.5, 0.5]}
-                # OR, if it saved dict(zip(ordered_names, importances)), then keys() gives names.
-                # The prompt for Step 7 (ArcModelTrainer) saved:
-                # self.feature_importance[model_type] = {'names': feature_names, 'importances': model.feature_importances_.tolist()}
-                # So we load this dict.
-            feature_info_path = f"{self.model_dir}/{model_type}_feature_importance.pkl"
+            # Let's assume ArcModelTrainer saves a dict like:
+            # {'names': ['feat1', 'feat2'], 'importances': [0.5, 0.5]}
+            # OR, if it saved dict(zip(ordered_names, importances)), then keys() gives names.
+            # The prompt for Step 7 (ArcModelTrainer) saved:
+            # self.feature_importance[model_type] = {'names': feature_names, 'importances': model.feature_importances_.tolist()}
+            # So we load this dict.
+            feature_info_path = f"{
+                self.model_dir}/{model_type}_feature_importance.pkl"
 
-            # Always initialize feature_info for the type so downstream code can be defensive.
+            # Always initialize feature_info for the type so downstream code
+            # can be defensive.
             self.feature_info[model_type] = {}
 
             try:
@@ -64,7 +74,8 @@ class ArcPredictor:
                     f"Expected: {model_path} and {scaler_path}. "
                     "Predictions for this model_type will return an error until models are trained."
                 )
-                # Skip feature info loading too; it doesn't help without a model.
+                # Skip feature info loading too; it doesn't help without a
+                # model.
                 self.feature_info[model_type]['ordered_features'] = []
                 self.feature_info[model_type]['importances_map'] = None
                 self.feature_info[model_type]['algorithm'] = 'Unknown'
@@ -73,12 +84,16 @@ class ArcPredictor:
             try:
                 loaded_feature_info = joblib.load(feature_info_path)
                 if isinstance(loaded_feature_info, dict):
-                    self.feature_info[model_type]['ordered_features'] = loaded_feature_info.get('names', [])
+                    self.feature_info[model_type]['ordered_features'] = loaded_feature_info.get(
+                        'names', [])
                     raw_importances = loaded_feature_info.get('importances')
-                    self.feature_info[model_type]['algorithm'] = loaded_feature_info.get('algorithm', 'RandomForestClassifier')
+                    self.feature_info[model_type]['algorithm'] = loaded_feature_info.get(
+                        'algorithm', 'RandomForestClassifier')
 
                     if raw_importances is not None and self.feature_info[model_type]['ordered_features']:
-                        if len(self.feature_info[model_type]['ordered_features']) == len(raw_importances):
+                        if len(
+                                self.feature_info[model_type]
+                                ['ordered_features']) == len(raw_importances):
                             self.feature_info[model_type]['importances_map'] = dict(
                                 zip(self.feature_info[model_type]['ordered_features'], raw_importances)
                             )
@@ -92,13 +107,13 @@ class ArcPredictor:
                         self.feature_info[model_type]['importances_map'] = None
 
                     self.logger.info(
-                        f"Loaded feature info for {model_type}. Algorithm: {self.feature_info[model_type]['algorithm']}. "
-                        f"Features: {len(self.feature_info[model_type]['ordered_features'])}."
-                    )
+                        f"Loaded feature info for {model_type}. Algorithm: {
+                            self.feature_info[model_type]['algorithm']}. " f"Features: {
+                            len(
+                                self.feature_info[model_type]['ordered_features'])}.")
                 else:
                     self.logger.warning(
-                        f"Feature info file at {feature_info_path} for {model_type} is not a dictionary. Cannot parse."
-                    )
+                        f"Feature info file at {feature_info_path} for {model_type} is not a dictionary. Cannot parse.")
                     self.feature_info[model_type]['ordered_features'] = []
                     self.feature_info[model_type]['importances_map'] = None
                     self.feature_info[model_type]['algorithm'] = 'Unknown'
@@ -121,7 +136,8 @@ class ArcPredictor:
 
         self.logger.info("Model load completed.")
 
-    def _ensure_model_loaded(self, model_type: str) -> Optional[Dict[str, Any]]:
+    def _ensure_model_loaded(
+            self, model_type: str) -> Optional[Dict[str, Any]]:
         if model_type not in self.models or model_type not in self.scalers:
             return {
                 "error": "ModelNotLoaded",
@@ -140,28 +156,35 @@ class ArcPredictor:
             if not_loaded is not None:
                 return not_loaded
 
-            raw_features_array = self.prepare_features(telemetry_data, model_type)
+            raw_features_array = self.prepare_features(
+                telemetry_data, model_type)
             if raw_features_array is None or raw_features_array.size == 0:
-                self.logger.error(f"Feature preparation failed or resulted in empty array for {model_type}.")
-                return {"error": f"Feature preparation failed or resulted in empty data for {model_type}."}
+                self.logger.error(
+                    f"Feature preparation failed or resulted in empty array for {model_type}.")
+                return {
+                    "error": f"Feature preparation failed or resulted in empty data for {model_type}."}
 
-            scaled_features_array = self.scalers[model_type].transform(raw_features_array)
-            prediction = self.models[model_type].predict_proba(scaled_features_array)[0]
+            scaled_features_array = self.scalers[model_type].transform(
+                raw_features_array)
+            prediction = self.models[model_type].predict_proba(
+                scaled_features_array)[0]
             # Use feature_info for impacts
             current_feature_info = self.feature_info.get(model_type, {})
             importances_map = current_feature_info.get('importances_map')
-            ordered_feature_names = current_feature_info.get('ordered_features', [])
+            ordered_feature_names = current_feature_info.get(
+                'ordered_features', [])
 
             feature_impacts = {}
             if importances_map and ordered_feature_names:
                 # calculate_feature_impacts expects the 1D scaled feature array
                 feature_impacts = self.calculate_feature_impacts(
                     scaled_features_array[0],
-                    importances_map, # This is the dict of name:importance
-                    ordered_feature_names # This is the ordered list of names
+                    importances_map,  # This is the dict of name:importance
+                    ordered_feature_names  # This is the ordered list of names
                 )
             else:
-                self.logger.warning(f"Feature importance map or ordered names not available for {model_type}. Skipping impact calculation.")
+                self.logger.warning(
+                    f"Feature importance map or ordered names not available for {model_type}. Skipping impact calculation.")
 
             return {
                 'prediction': {
@@ -176,7 +199,8 @@ class ArcPredictor:
             self.logger.error(f"Health prediction failed: {str(e)}")
             raise
 
-    def detect_anomalies(self, telemetry_data: Dict[str, Any]) -> Dict[str, Any]:
+    def detect_anomalies(
+            self, telemetry_data: Dict[str, Any]) -> Dict[str, Any]:
         """Detect anomalies in telemetry data."""
         model_type = 'anomaly_detection'
         try:
@@ -184,24 +208,33 @@ class ArcPredictor:
             if not_loaded is not None:
                 return not_loaded
 
-            raw_features_array = self.prepare_features(telemetry_data, model_type)
+            raw_features_array = self.prepare_features(
+                telemetry_data, model_type)
             if raw_features_array is None or raw_features_array.size == 0:
-                self.logger.error(f"Feature preparation failed or resulted in empty array for {model_type}.")
-                return {"error": f"Feature preparation failed or resulted in empty data for {model_type}."}
+                self.logger.error(
+                    f"Feature preparation failed or resulted in empty array for {model_type}.")
+                return {
+                    "error": f"Feature preparation failed or resulted in empty data for {model_type}."}
 
-            scaled_features_array = self.scalers[model_type].transform(raw_features_array)
-            anomaly_scores = self.models[model_type].score_samples(scaled_features_array)
-            is_anomaly_prediction = self.models[model_type].predict(scaled_features_array)[0]
+            scaled_features_array = self.scalers[model_type].transform(
+                raw_features_array)
+            anomaly_scores = self.models[model_type].score_samples(
+                scaled_features_array)
+            is_anomaly_prediction = self.models[model_type].predict(scaled_features_array)[
+                0]
 
-            # No feature impacts typically for IsolationForest from .feature_importances_
+            # No feature impacts typically for IsolationForest from
+            # .feature_importances_
 
             return {
                 'is_anomaly': is_anomaly_prediction == -1,
-                'anomaly_score': float(anomaly_scores[0]), # score_samples returns the negative of the anomaly score. Higher is more normal.
-                                                          # For consistency, one might invert this or use decision_function.
-                                                          # Let's assume this score is directly usable/interpretable as is for now.
+                # score_samples returns the negative of the anomaly score.
+                # Higher is more normal.
+                'anomaly_score': float(anomaly_scores[0]),
+                # For consistency, one might invert this or use decision_function.
+                # Let's assume this score is directly usable/interpretable as is for now.
                 # 'threshold': self.models[model_type].threshold_, # threshold_ is for contamination if using it to predict.
-                                                                # The score itself is more of a relative measure.
+                # The score itself is more of a relative measure.
                 'timestamp': datetime.now().isoformat()
             }
 
@@ -209,7 +242,8 @@ class ArcPredictor:
             self.logger.error(f"Anomaly detection failed: {str(e)}")
             raise
 
-    def predict_failures(self, telemetry_data: Dict[str, Any]) -> Dict[str, Any]:
+    def predict_failures(
+            self, telemetry_data: Dict[str, Any]) -> Dict[str, Any]:
         """Predict potential failures based on telemetry data."""
         model_type = 'failure_prediction'
         try:
@@ -217,17 +251,23 @@ class ArcPredictor:
             if not_loaded is not None:
                 return not_loaded
 
-            raw_features_array = self.prepare_features(telemetry_data, model_type)
+            raw_features_array = self.prepare_features(
+                telemetry_data, model_type)
             if raw_features_array is None or raw_features_array.size == 0:
-                self.logger.error(f"Feature preparation failed or resulted in empty array for {model_type}.")
-                return {"error": f"Feature preparation failed or resulted in empty data for {model_type}."}
+                self.logger.error(
+                    f"Feature preparation failed or resulted in empty array for {model_type}.")
+                return {
+                    "error": f"Feature preparation failed or resulted in empty data for {model_type}."}
 
-            scaled_features_array = self.scalers[model_type].transform(raw_features_array)
-            prediction = self.models[model_type].predict_proba(scaled_features_array)[0]
+            scaled_features_array = self.scalers[model_type].transform(
+                raw_features_array)
+            prediction = self.models[model_type].predict_proba(
+                scaled_features_array)[0]
 
             current_feature_info = self.feature_info.get(model_type, {})
             importances_map = current_feature_info.get('importances_map')
-            ordered_feature_names = current_feature_info.get('ordered_features', [])
+            ordered_feature_names = current_feature_info.get(
+                'ordered_features', [])
 
             feature_impacts = {}
             if importances_map and ordered_feature_names:
@@ -237,7 +277,8 @@ class ArcPredictor:
                     ordered_feature_names
                 )
             else:
-                self.logger.warning(f"Feature importance map or ordered names not available for {model_type}. Skipping impact calculation.")
+                self.logger.warning(
+                    f"Feature importance map or ordered names not available for {model_type}. Skipping impact calculation.")
 
             return {
                 'prediction': {
@@ -253,33 +294,44 @@ class ArcPredictor:
             self.logger.error(f"Failure prediction failed: {str(e)}")
             raise
 
-    def prepare_features(self, telemetry_data: Dict[str, Any], model_type: str) -> Optional[np.ndarray]:
+    def prepare_features(self,
+                         telemetry_data: Dict[str,
+                                              Any],
+                         model_type: str) -> Optional[np.ndarray]:
         """Prepare features for prediction based on the loaded model's required feature order."""
         try:
-            if model_type not in self.feature_info or not self.feature_info[model_type].get('ordered_features'):
-                self.logger.error(f"Ordered feature list not loaded for model_type: '{model_type}'. Cannot prepare features.")
+            if model_type not in self.feature_info or not self.feature_info[model_type].get(
+                    'ordered_features'):
+                self.logger.error(
+                    f"Ordered feature list not loaded for model_type: '{model_type}'. Cannot prepare features.")
                 return None
 
-            ordered_feature_names = self.feature_info[model_type]['ordered_features']
-            if not ordered_feature_names: # Should be caught by above, but defensive check
-                 self.logger.error(f"Feature list for model_type: '{model_type}' is empty. Cannot prepare features.")
-                 return None
+            ordered_feature_names = self.feature_info[model_type][
+                'ordered_features']
+            if not ordered_feature_names:  # Should be caught by above, but defensive check
+                self.logger.error(
+                    f"Feature list for model_type: '{model_type}' is empty. Cannot prepare features.")
+                return None
 
             feature_values = []
             for feature_name in ordered_feature_names:
                 if feature_name not in telemetry_data:
-                    self.logger.warning(f"Feature '{feature_name}' (required by model '{model_type}') not found in telemetry_data. Using 0.0 as default.")
+                    self.logger.warning(
+                        f"Feature '{feature_name}' (required by model '{model_type}') not found in telemetry_data. Using 0.0 as default.")
                     feature_values.append(0.0)
                 else:
                     value = telemetry_data[feature_name]
-                    if pd.isna(value): # Handle if data source itself has NaN for a feature
-                        self.logger.warning(f"Feature '{feature_name}' has NaN value in telemetry_data for '{model_type}'. Using 0.0 as default.")
+                    if pd.isna(
+                            value):  # Handle if data source itself has NaN for a feature
+                        self.logger.warning(
+                            f"Feature '{feature_name}' has NaN value in telemetry_data for '{model_type}'. Using 0.0 as default.")
                         feature_values.append(0.0)
                     else:
                         try:
                             feature_values.append(float(value))
                         except ValueError:
-                            self.logger.warning(f"Could not convert feature '{feature_name}' value '{value}' to float. Using 0.0.")
+                            self.logger.warning(
+                                f"Could not convert feature '{feature_name}' value '{value}' to float. Using 0.0.")
                             feature_values.append(0.0)
 
             # Convert to numpy array and reshape for a single sample
@@ -287,40 +339,50 @@ class ArcPredictor:
             return features_array
 
         except Exception as e:
-            self.logger.error(f"Feature preparation failed for {model_type}: {str(e)}", exc_info=True)
+            self.logger.error(
+                f"Feature preparation failed for {model_type}: {
+                    str(e)}", exc_info=True)
             return None
 
-
     def calculate_feature_impacts(self,
-                                 scaled_features_array_1d: np.ndarray,
-                                 feature_importance_dict: Dict[str, float], # This is the map of name:importance
-                                 ordered_feature_names: List[str]
-                                 ) -> Dict[str, float]:
+                                  scaled_features_array_1d: np.ndarray,
+                                  # This is the map of name:importance
+                                  feature_importance_dict: Dict[str, float],
+                                  ordered_feature_names: List[str]
+                                  ) -> Dict[str, float]:
         """Calculate the impact of each feature on the prediction using a definitive feature order."""
         impacts = {}
-        if not feature_importance_dict: # Check if the map itself is None or empty
-            self.logger.info("Feature importance map is empty or None. Skipping impact calculation.")
+        if not feature_importance_dict:  # Check if the map itself is None or empty
+            self.logger.info(
+                "Feature importance map is empty or None. Skipping impact calculation.")
             return impacts
         if not ordered_feature_names:
-            self.logger.info("Ordered feature names list is empty. Skipping impact calculation.")
+            self.logger.info(
+                "Ordered feature names list is empty. Skipping impact calculation.")
             return impacts
 
-        # Ensure consistency between the length of the feature vector and the ordered names list
+        # Ensure consistency between the length of the feature vector and the
+        # ordered names list
         if len(scaled_features_array_1d) != len(ordered_feature_names):
-            self.logger.error(f"Mismatch in length between scaled_features_array_1d ({len(scaled_features_array_1d)}) and ordered_feature_names ({len(ordered_feature_names)}). Cannot calculate impacts.")
+            self.logger.error(
+                f"Mismatch in length between scaled_features_array_1d ({
+                    len(scaled_features_array_1d)}) and ordered_feature_names ({
+                    len(ordered_feature_names)}). Cannot calculate impacts.")
             return impacts
 
         for i, feature_name in enumerate(ordered_feature_names):
             if feature_name not in feature_importance_dict:
-                self.logger.warning(f"Feature '{feature_name}' from ordered list not found in importance map. Skipping its impact.")
-                continue # Skip if importance for this specific feature is not available
+                self.logger.warning(
+                    f"Feature '{feature_name}' from ordered list not found in importance map. Skipping its impact.")
+                continue  # Skip if importance for this specific feature is not available
 
             importance = feature_importance_dict[feature_name]
             feature_value = scaled_features_array_1d[i]
             impacts[feature_name] = float(feature_value * importance)
 
-        if len(ordered_feature_names) != scaled_features_array_1d.shape[0]: # Check against the numpy array shape
-             self.logger.warning(
+        # Check against the numpy array shape
+        if len(ordered_feature_names) != scaled_features_array_1d.shape[0]:
+            self.logger.warning(
                 f"Mismatch in length between ordered feature names ({len(ordered_feature_names)}) "
                 f"and prepared scaled features array ({scaled_features_array_1d.shape[0]}). "
                 "Impact calculation might be incomplete or incorrect."
@@ -328,7 +390,7 @@ class ArcPredictor:
         return impacts
 
     def calculate_risk_level(self, failure_probability: float) -> str:
-        """Calculates risk level string from failure probability.""" # Generic
+        """Calculates risk level string from failure probability."""  # Generic
         if failure_probability >= 0.75:
             return 'Critical'
         elif failure_probability >= 0.5:

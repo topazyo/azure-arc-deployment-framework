@@ -1,56 +1,63 @@
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 import json
 import os
-import numpy as np
-import pandas as pd
-# Removed RandomForestClassifier and joblib as direct model is removed
-import numpy as np
-import pandas as pd # Keep for potential context processing
 import logging
 from datetime import datetime
-from typing import Dict, List, Any, Optional # Added Optional
 
 # Assuming these are correctly imported from their respective files
 from . import model_trainer
 from . import predictor
 
+
 class ArcRemediationLearner:
     """Learns from remediation actions and outcomes."""
-    def __init__(self, config: Dict[str, Any] = None): # Added config to __init__
+
+    # Added config to __init__
+    def __init__(self, config: Dict[str, Any] = None):
         """Initializes ArcRemediationLearner with config and components."""
         self.config = config if config else {}
-        self.success_patterns: Dict[tuple, Dict[str, Any]] = {} # Key: (error_type, action)
+        # Key: (error_type, action)
+        self.success_patterns: Dict[tuple, Dict[str, Any]] = {}
         self.predictor: Optional[Any] = None
         self.trainer: Optional[Any] = None
-        self.model: Optional[Any] = None # Placeholder for tests expecting this attribute
+        # Placeholder for tests expecting this attribute
+        self.model: Optional[Any] = None
         self.trainer_last_response: Optional[Dict[str, Any]] = None
         self.pending_retrain_requests: List[Dict[str, Any]] = []
 
         # Attributes for retraining trigger
         self.new_data_counter: Dict[str, int] = {}
-        self.retraining_threshold = self.config.get('retraining_data_threshold', 50) # Default to 50
+        self.retraining_threshold = self.config.get(
+            'retraining_data_threshold', 50)  # Default to 50
 
-        self.setup_logging() # Call after all attributes potentially used in setup_logging are set
+        self.setup_logging()  # Call after all attributes potentially used in setup_logging are set
 
         # Feature list for context summarization, configurable
-        self.context_features_to_log = self.config.get('remediation_learner_context_features',
-                                                      ['cpu_usage', 'memory_usage', 'error_count'])
+        self.context_features_to_log = self.config.get(
+            'remediation_learner_context_features', [
+                'cpu_usage', 'memory_usage', 'error_count'])
 
     def setup_logging(self):
         logging.basicConfig(
-            level=self.config.get('log_level', logging.INFO), # Configurable log level
+            level=self.config.get(
+                'log_level',
+                logging.INFO),
+            # Configurable log level
             format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-            filename=f'remediation_learner_{datetime.now().strftime("%Y%m%d")}.log'
+            filename=f'remediation_learner_{
+                datetime.now().strftime("%Y%m%d")}.log'
         )
         self.logger = logging.getLogger('ArcRemediationLearner')
         self.logger.info("ArcRemediationLearner initialized.")
 
     # _initialize_model method removed as self.model is removed
 
-    def initialize_ai_components(self, global_ai_config: Dict[str, Any], model_dir: str):
+    def initialize_ai_components(
+            self, global_ai_config: Dict[str, Any], model_dir: str):
         """Initialize AI components (Trainer and Predictor)."""
         try:
-            # Accept either a full config (with an aiComponents key) or the aiComponents subtree.
+            # Accept either a full config (with an aiComponents key) or the
+            # aiComponents subtree.
             ai_config = global_ai_config.get('aiComponents', global_ai_config)
 
             model_config = ai_config.get('model_config')
@@ -60,108 +67,146 @@ class ArcRemediationLearner:
                 model_config = {}
 
             self.trainer = model_trainer.ArcModelTrainer(model_config)
-            self.predictor = predictor.ArcPredictor(model_dir=model_dir) # Predictor needs model_dir
-            self.logger.info("AI components (Trainer, Predictor) initialized successfully for RemediationLearner.")
+            self.predictor = predictor.ArcPredictor(
+                model_dir=model_dir)  # Predictor needs model_dir
+            self.logger.info(
+                "AI components (Trainer, Predictor) initialized successfully for RemediationLearner.")
         except Exception as e:
-            self.logger.error(f"Failed to initialize AI components: {str(e)}", exc_info=True)
-            # Decide if to raise or handle (e.g., operate without AI components if possible)
+            self.logger.error(
+                f"Failed to initialize AI components: {
+                    str(e)}", exc_info=True)
+            # Decide if to raise or handle (e.g., operate without AI components
+            # if possible)
             raise
 
     def learn_from_remediation(self, remediation_data: Dict[str, Any]):
         """Process remediation actions to update success patterns and inform model trainer."""
         try:
             if not isinstance(remediation_data, dict):
-                self.logger.warning("Remediation payload must be a dict; skipping.")
+                self.logger.warning(
+                    "Remediation payload must be a dict; skipping.")
                 return
 
             error_type = remediation_data.get('error_type', 'UnknownError')
             action_taken = remediation_data.get('action', 'UnknownAction')
             outcome_raw = remediation_data.get('outcome')
-            outcome_success = outcome_raw is True or str(outcome_raw).lower() == 'success'
-            context = remediation_data.get('context', {}) if isinstance(remediation_data.get('context', {}), dict) else {}
+            outcome_success = outcome_raw is True or str(
+                outcome_raw).lower() == 'success'
+            context = remediation_data.get(
+                'context', {}) if isinstance(
+                remediation_data.get(
+                    'context', {}), dict) else {}
 
             if not error_type or not action_taken:
-                self.logger.warning("Remediation data missing 'error_type' or 'action'. Cannot learn effectively.")
+                self.logger.warning(
+                    "Remediation data missing 'error_type' or 'action'. Cannot learn effectively.")
                 return
 
             pattern_key = (error_type, action_taken)
-            
+
             # Create a summary of the context based on configured features
-            context_summary = {feat: context.get(feat) for feat in self.context_features_to_log if feat in context}
+            context_summary = {feat: context.get(feat)
+                               for feat in self.context_features_to_log
+                               if feat in context}
 
             if pattern_key not in self.success_patterns:
                 self.success_patterns[pattern_key] = {
                     'success_count': 0,
                     'total_attempts': 0,
-                    'contexts': [] # Store list of context summaries for this pattern
+                    'contexts': []  # Store list of context summaries for this pattern
                 }
 
             current_pattern = self.success_patterns[pattern_key]
             current_pattern['total_attempts'] += 1
             if outcome_success:
                 current_pattern['success_count'] += 1
-            
-            current_pattern['success_rate'] = current_pattern['success_count'] / current_pattern['total_attempts']
-            
+
+            current_pattern['success_rate'] = current_pattern['success_count'] / \
+                current_pattern['total_attempts']
+
             # Add current context summary, maybe limit the size of this list
-            max_contexts_to_store = self.config.get('max_contexts_per_pattern', 10)
+            max_contexts_to_store = self.config.get(
+                'max_contexts_per_pattern', 10)
             current_pattern['contexts'].append(context_summary)
             if len(current_pattern['contexts']) > max_contexts_to_store:
-                current_pattern['contexts'] = current_pattern['contexts'][-max_contexts_to_store:]
+                current_pattern['contexts'] = current_pattern['contexts'][
+                    -max_contexts_to_store:]
 
-
-            self.logger.info(f"Updated success pattern for ({error_type}, {action_taken}): "
-                             f"{current_pattern['success_count']}/{current_pattern['total_attempts']} successes. "
-                             f"Context: {context_summary}")
+            self.logger.info(
+                f"Updated success pattern for ({error_type}, {action_taken}): " f"{
+                    current_pattern['success_count']}/{
+                    current_pattern['total_attempts']} successes. " f"Context: {context_summary}")
 
             # Call trainer to potentially update models (trainer decides if/how). Pass through the
             # original payload to keep contract aligned with existing tests and trainer's flexible parsing
             # (`features` or `context`, optional `target`).
             if self.trainer:
-                trainer_response = self.trainer.update_models_with_remediation(remediation_data)
-                self._handle_trainer_response(trainer_response, remediation_data)
+                trainer_response = self.trainer.update_models_with_remediation(
+                    remediation_data)
+                self._handle_trainer_response(
+                    trainer_response, remediation_data)
             else:
-                self.logger.warning("Trainer not initialized. Cannot pass remediation data for model updates.")
+                self.logger.warning(
+                    "Trainer not initialized. Cannot pass remediation data for model updates.")
 
             # Retraining trigger logic
-            # For simplicity, categorize any successful remediation for a known error as data for failure_prediction improvement
+            # For simplicity, categorize any successful remediation for a known
+            # error as data for failure_prediction improvement
             if outcome_success and error_type != 'UnknownError':
-                data_category_key = "failure_prediction_data" # Example category
-                self.new_data_counter[data_category_key] = self.new_data_counter.get(data_category_key, 0) + 1
-                self.logger.debug(f"New data point for '{data_category_key}', count: {self.new_data_counter[data_category_key]}")
+                data_category_key = "failure_prediction_data"  # Example category
+                self.new_data_counter[data_category_key] = self.new_data_counter.get(
+                    data_category_key, 0) + 1
+                self.logger.debug(
+                    f"New data point for '{data_category_key}', count: {
+                        self.new_data_counter[data_category_key]}")
 
                 if self.new_data_counter[data_category_key] >= self.retraining_threshold:
                     self.logger.info(
-                        f"Sufficient new data ({self.new_data_counter[data_category_key]} points) gathered for '{data_category_key}'. "
+                        f"Sufficient new data ({
+    self.new_data_counter[data_category_key]} points) gathered for '{data_category_key}'. "
                         f"Consider retraining the relevant predictive models."
                     )
-                    self.new_data_counter[data_category_key] = 0 # Reset counter
+                    # Reset counter
+                    self.new_data_counter[data_category_key] = 0
 
         except Exception as e:
-            self.logger.error(f"Failed to learn from remediation: {str(e)}", exc_info=True)
+            self.logger.error(
+                f"Failed to learn from remediation: {
+                    str(e)}", exc_info=True)
             # Do not re-raise, allow learner to continue if one entry fails
 
-    def get_recommendation(self, error_context: Dict[str, Any]) -> Dict[str, Any]:
+    def get_recommendation(
+            self, error_context: Dict[str, Any]) -> Dict[str, Any]:
         """Generate remediation recommendations based on learned success patterns and AI predictions."""
-        self.logger.info(f"Getting recommendation for error_context: {error_context.get('error_type', 'Unknown')}")
+        self.logger.info(
+            f"Getting recommendation for error_context: {
+                error_context.get(
+                    'error_type', 'Unknown')}")
         recommendations = []
 
         error_type = error_context.get('error_type')
 
         # Step 1: Check highly successful patterns
         if error_type:
-            for (err_type_pattern, action_pattern), stats in self.success_patterns.items():
+            for (err_type_pattern,
+                 action_pattern), stats in self.success_patterns.items():
                 if err_type_pattern == error_type:
-                    success_rate_threshold = self.config.get('success_pattern_threshold', 0.8)
-                    min_attempts_threshold = self.config.get('success_pattern_min_attempts', 5)
+                    success_rate_threshold = self.config.get(
+                        'success_pattern_threshold', 0.8)
+                    min_attempts_threshold = self.config.get(
+                        'success_pattern_min_attempts', 5)
                     if stats['success_rate'] >= success_rate_threshold and stats['total_attempts'] >= min_attempts_threshold:
-                        recommendations.append({
-                            'recommended_action': action_pattern,
-                            'confidence_score': stats['success_rate'],
-                            'source': 'SuccessPattern',
-                            'details': f"Action '{action_pattern}' has a {stats['success_rate']:.2%} success rate over {stats['total_attempts']} attempts for error '{error_type}'.",
-                            'supporting_evidence': {'error_type': error_type, **stats}
-                        })
+                        recommendations.append(
+                            {
+                                'recommended_action': action_pattern,
+                                'confidence_score': stats['success_rate'],
+                                'source': 'SuccessPattern',
+                                'details': f"Action '{action_pattern}' has a {
+                                    stats['success_rate']:.2%} success rate over {
+                                    stats['total_attempts']} attempts for error '{error_type}'.",
+                                'supporting_evidence': {
+                                    'error_type': error_type,
+                                    **stats}})
 
         # Step 2: Use ArcPredictor if available
         ai_recommendations = []
@@ -172,22 +217,48 @@ class ArcRemediationLearner:
                 # The structure of ai_prediction needs to be known to extract recommendations.
                 # Let's assume predict_failures returns a dict that might contain 'recommended_action'
                 # or data from which one can be derived.
-                ai_prediction_output = self.predictor.predict_failures(error_context) # error_context might need feature engineering first for predictor
+                # error_context might need feature engineering first for
+                # predictor
+                ai_prediction_output = self.predictor.predict_failures(
+                    error_context)
 
-                # Example: If predictor output contains a direct recommendation or interpretable risk
-                if ai_prediction_output and ai_prediction_output.get('prediction', {}).get('failure_probability', 0) > self.config.get('ai_predictor_failure_threshold', 0.5):
+                # Example: If predictor output contains a direct recommendation
+                # or interpretable risk
+                if ai_prediction_output and ai_prediction_output.get(
+                    'prediction',
+                    {}).get(
+                    'failure_probability',
+                    0) > self.config.get(
+                    'ai_predictor_failure_threshold',
+                        0.5):
                     # This is a simplified interpretation. A real system might have more complex mapping
                     # from prediction output to specific remediation actions.
-                    predicted_action = ai_prediction_output.get('recommended_action', "Investigate AI Predicted High Failure Risk") # Placeholder if not direct
-                    ai_recommendations.append({
-                        'recommended_action': predicted_action,
-                        'confidence_score': ai_prediction_output.get('prediction', {}).get('failure_probability'),
-                        'source': 'AIPredictor',
-                        'details': f"AI Predictor suggests high failure probability ({ai_prediction_output.get('prediction', {}).get('failure_probability', 0):.2%}). Risk Level: {ai_prediction_output.get('risk_level', 'N/A')}",
-                        'supporting_evidence': ai_prediction_output.get('feature_impacts', {})
-                    })
+                    predicted_action = ai_prediction_output.get(
+                        'recommended_action',
+                        "Investigate AI Predicted High Failure Risk")  # Placeholder if not direct
+                    ai_recommendations.append(
+                        {
+                            'recommended_action': predicted_action,
+                            'confidence_score': ai_prediction_output.get(
+                                'prediction',
+                                {}).get('failure_probability'),
+                            'source': 'AIPredictor',
+                            'details': f"AI Predictor suggests high failure probability ({
+                                ai_prediction_output.get(
+                                    'prediction',
+                                    {}).get(
+                                    'failure_probability',
+                                    0):.2%}). Risk Level: {
+                                ai_prediction_output.get(
+                                    'risk_level',
+                                    'N/A')}",
+                            'supporting_evidence': ai_prediction_output.get(
+                                'feature_impacts',
+                                {})})
             except Exception as e_predictor:
-                self.logger.error(f"Error calling ArcPredictor: {str(e_predictor)}", exc_info=True)
+                self.logger.error(
+                    f"Error calling ArcPredictor: {
+                        str(e_predictor)}", exc_info=True)
 
         recommendations.extend(ai_recommendations)
 
@@ -195,31 +266,37 @@ class ArcRemediationLearner:
         recommendations.sort(key=lambda x: x['confidence_score'], reverse=True)
 
         if not recommendations:
-            self.logger.info("No specific recommendations generated. Providing default.")
+            self.logger.info(
+                "No specific recommendations generated. Providing default.")
             return {
                 'recommended_action': 'ManualInvestigationRequired',
                 'confidence_score': 0.1,
                 'source': 'Default',
                 'alternative_actions': [],
-                'supporting_evidence': {'reason': 'No specific patterns or AI predictions met thresholds.'}
-            }
+                'supporting_evidence': {
+                    'reason': 'No specific patterns or AI predictions met thresholds.'}}
 
         # Return the top recommendation and others as alternatives
         top_rec = recommendations[0]
-        alternatives = [rec['recommended_action'] for rec in recommendations[1:] if rec['recommended_action'] != top_rec['recommended_action']]
+        alternatives = [rec['recommended_action']
+                        for rec in recommendations[1:]
+                        if rec['recommended_action'] !=
+                        top_rec['recommended_action']]
 
         return {
             'recommended_action': top_rec['recommended_action'],
             'confidence_score': top_rec['confidence_score'],
             'source': top_rec['source'],
-            'alternative_actions': list(set(alternatives))[:2], # Max 2 unique alternatives
+            # Max 2 unique alternatives
+            'alternative_actions': list(set(alternatives))[:2],
             'supporting_evidence': top_rec.get('supporting_evidence', {})
         }
 
-
-    def _extract_features(self, remediation_entry_context: Dict[str, Any]) -> Dict[str, Any]:
+    def _extract_features(
+            self, remediation_entry_context: Dict[str, Any]) -> Dict[str, Any]:
         """Extracts a summary of features from context for logging in success_patterns."""
-        # This is not for ML model input directly anymore, but for summarizing context.
+        # This is not for ML model input directly anymore, but for summarizing
+        # context.
         context_summary = {}
         try:
             for feature_name in self.context_features_to_log:
@@ -227,13 +304,16 @@ class ArcRemediationLearner:
                     context_summary[feature_name] = remediation_entry_context[feature_name]
             return context_summary
         except Exception as e:
-            self.logger.error(f"Feature extraction for context summary failed: {str(e)}", exc_info=True)
+            self.logger.error(
+                f"Feature extraction for context summary failed: {
+                    str(e)}", exc_info=True)
             return {"error": "context summarization failed"}
 
     # _calculate_success_rate is now integrated into learn_from_remediation's success_patterns update.
     # Removed _combine_predictions, _get_legacy_recommendation, _calculate_combined_confidence,
     # _get_best_action, _get_legacy_action as they are replaced by the new get_recommendation logic.
-    # _get_alternative_actions is also implicitly handled by the new get_recommendation logic.
+    # _get_alternative_actions is also implicitly handled by the new
+    # get_recommendation logic.
 
     def get_all_success_patterns(self) -> Dict[tuple, Dict[str, Any]]:
         """Returns all learned success patterns."""
@@ -252,9 +332,11 @@ class ArcRemediationLearner:
         self.pending_retrain_requests.clear()
         return requests
 
-    def export_pending_retrain_requests(self, output_path: str, consume: bool = False) -> Dict[str, Any]:
+    def export_pending_retrain_requests(
+            self, output_path: str, consume: bool = False) -> Dict[str, Any]:
         """Persist queued retrain requests for orchestration pipelines or operators."""
-        queue_snapshot = self.consume_pending_retrain_requests() if consume else self.peek_pending_retrain_requests()
+        queue_snapshot = self.consume_pending_retrain_requests(
+        ) if consume else self.peek_pending_retrain_requests()
 
         if not output_path or not isinstance(output_path, str):
             return {
@@ -281,20 +363,34 @@ class ArcRemediationLearner:
                 output_path,
                 consume,
             )
-            return {"status": "exported", "path": output_path, "count": len(queue_snapshot)}
+            return {
+                "status": "exported",
+                "path": output_path,
+                "count": len(queue_snapshot)}
         except Exception as exc:
-            self.logger.error("Failed to export retrain queue to %s: %s", output_path, str(exc), exc_info=True)
+            self.logger.error(
+                "Failed to export retrain queue to %s: %s",
+                output_path,
+                str(exc),
+                exc_info=True)
             return {
                 "status": "error",
                 "reason": str(exc),
                 "pending_retrain_requests": queue_snapshot,
             }
 
-    def _handle_trainer_response(self, trainer_response: Dict[str, Any], remediation_data: Dict[str, Any]) -> None:
+    def _handle_trainer_response(
+            self, trainer_response: Dict[str, Any],
+            remediation_data: Dict[str, Any]) -> None:
         """Normalize trainer responses and track pending retrain signals without raising."""
         self.trainer_last_response = trainer_response
         status = (trainer_response or {}).get('status')
-        model_type = (trainer_response or {}).get('model_type', remediation_data.get('model_type', 'failure_prediction'))
+        model_type = (
+            trainer_response or {}).get(
+            'model_type',
+            remediation_data.get(
+                'model_type',
+                'failure_prediction'))
 
         if status in {'rejected', 'error', None}:
             self.logger.warning(
@@ -311,17 +407,18 @@ class ArcRemediationLearner:
                 'received_at': datetime.now().isoformat(),
             })
             self.logger.info(
-                f"Trainer signaled retrain_required for {model_type} "
-                f"(queued={trainer_response.get('queued_count')}, threshold={trainer_response.get('threshold')})."
-            )
+                f"Trainer signaled retrain_required for {model_type} " f"(queued={
+                    trainer_response.get('queued_count')}, threshold={
+                    trainer_response.get('threshold')}).")
             return
 
         if status == 'queued':
             self.logger.info(
-                f"Trainer buffered remediation sample for {model_type} "
-                f"(queued={trainer_response.get('queued_count')}, threshold={trainer_response.get('threshold')})."
-            )
+                f"Trainer buffered remediation sample for {model_type} " f"(queued={
+                    trainer_response.get('queued_count')}, threshold={
+                    trainer_response.get('threshold')}).")
             return
 
         # Unknown but non-error statuses: log and ignore
-        self.logger.info(f"Trainer returned unrecognized status '{status}' for {model_type}; ignoring.")
+        self.logger.info(
+            f"Trainer returned unrecognized status '{status}' for {model_type}; ignoring.")

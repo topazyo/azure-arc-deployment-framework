@@ -4,43 +4,72 @@ import sys
 import os
 from datetime import datetime
 
-# Add src to path to allow direct import of modules if this script is called from elsewhere
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../')))
+# Add src to path to allow direct import if called from elsewhere
+sys.path.insert(
+    0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../'))
+)
 
-# Placeholder for actual AI engine import and usage
-from Python.predictive.predictive_analytics_engine import PredictiveAnalyticsEngine
-# from Python.common.ai_config_loader import AIConfig # Assuming a config loader for future
-# Ensure json is imported if not already by other imports
-# import json # Already imported by the script
+from Python.predictive.predictive_analytics_engine import (  # noqa: E402
+    PredictiveAnalyticsEngine
+)
 
-# PlaceholderPredictiveAnalyticsEngine class removed
 
 def main():
     """
     Main entry point for the Azure Arc AI Engine script.
     Parses command-line arguments, loads configuration, initializes the
-    PredictiveAnalyticsEngine, processes the input, and prints results as JSON.
+    PredictiveAnalyticsEngine, processes input, and prints results.
     """
     # Expected --serverdatajson structure:
     # {
-    #   "server_name_id": "actual_server_name", // Should match --servername for consistency
-    #   "timestamp": "YYYY-MM-DDTHH:MM:SS.ffffff", // ISO format timestamp for the snapshot
+    #   "server_name_id": "actual_server_name",
+    #   "timestamp": "YYYY-MM-DDTHH:MM:SS.ffffff",
     #   "cpu_usage": 0.75,
     #   "memory_usage": 0.60,
-    #   // ... other features as defined in ai_config.json model_config features ...
+    #   // ... other features as defined in ai_config.json ...
     # }
-    parser = argparse.ArgumentParser(description="Azure Arc AI Engine Interface")
-    parser.add_argument("--servername", required=True, help="Name of the server to analyze")
-    parser.add_argument("--analysistype", default="Full", help="Type of analysis (Full, Health, Failure, Anomaly)")
-    parser.add_argument("--modeldir", default=os.path.join(os.path.dirname(__file__), 'models_placeholder'), help="Directory containing trained models. Defaults to a 'models_placeholder' folder relative to this script.")
-    parser.add_argument("--configpath", default=os.path.join(os.path.dirname(__file__), '../config/ai_config.json'), help="Path to AI configuration file. Defaults to 'src/config/ai_config.json'.")
+    parser = argparse.ArgumentParser(
+        description="Azure Arc AI Engine Interface"
+    )
+    parser.add_argument(
+        "--servername",
+        required=True,
+        help="Name of the server to analyze"
+    )
+    parser.add_argument(
+        "--analysistype",
+        default="Full",
+        help="Type of analysis (Full, Health, Failure, Anomaly)"
+    )
+    parser.add_argument(
+        "--modeldir",
+        default=os.path.join(
+            os.path.dirname(__file__), 'models_placeholder'
+        ),
+        help=(
+            "Directory containing trained models. Defaults to a "
+            "'models_placeholder' folder relative to this script."
+        )
+    )
+    parser.add_argument(
+        "--configpath",
+        default=os.path.join(
+            os.path.dirname(__file__), '../config/ai_config.json'
+        ),
+        help=(
+            "Path to AI configuration file. Defaults to "
+            "'src/config/ai_config.json'."
+        )
+    )
     parser.add_argument(
         "--serverdatajson",
         required=False,
         default=None,
         help=(
-            "JSON string containing the server telemetry data for analysis. "
-            "If omitted, a minimal snapshot (server_name_id, timestamp) is synthesized and missing features default to 0.0 during inference."
+            "JSON string containing the server telemetry data for "
+            "analysis. If omitted, a minimal snapshot "
+            "(server_name_id, timestamp) is synthesized and missing "
+            "features default to 0.0 during inference."
         ),
     )
     parser.add_argument(
@@ -48,8 +77,9 @@ def main():
         required=False,
         default=None,
         help=(
-            "Optional remediation outcome payload to record with the remediation learner. "
-            "When provided, the engine will queue or signal retrain requests and surface them in the output."
+            "Optional remediation outcome payload to record with the "
+            "remediation learner. When provided, the engine will queue "
+            "or signal retrain requests and surface them in the output."
         ),
     )
     parser.add_argument(
@@ -58,32 +88,44 @@ def main():
         default=None,
         help=(
             "Optional path to write pending retrain requests as JSON. "
-            "If specified, pending requests will be exported (and consumed when --consumeexportqueue is set)."
+            "If specified, pending requests will be exported (and "
+            "consumed when --consumeexportqueue is set)."
         ),
     )
     parser.add_argument(
         "--consumeexportqueue",
         action="store_true",
-        help="When exporting retrain requests, consume/clear the queue after export instead of peeking."
+        help=(
+            "When exporting retrain requests, consume/clear the queue "
+            "after export instead of peeking."
+        )
     )
 
     args = parser.parse_args()
-    ai_components_config = {} # Initialize
+    ai_components_config = {}  # Initialize
 
     try:
         # Load configuration from JSON file
         config_path = os.path.abspath(args.configpath)
         if not os.path.exists(config_path):
-            raise FileNotFoundError(f"Configuration file not found at: {config_path}")
+            raise FileNotFoundError(
+                f"Configuration file not found at: {config_path}"
+            )
 
         with open(config_path, 'r') as f:
             config_data = json.load(f)
         ai_components_config = config_data.get('aiComponents', {})
         if not ai_components_config:
-             raise ValueError(f"Invalid configuration format in {config_path}. Missing 'aiComponents' key.")
+            raise ValueError(
+                f"Invalid configuration format in {config_path}. "
+                f"Missing 'aiComponents' key."
+            )
 
-        # Parse (or synthesize) the JSON input for server data.
-        if args.serverdatajson is None or str(args.serverdatajson).strip() == "":
+        # Parse (or synthesize) JSON input for server data.
+        if (
+            args.serverdatajson is None or
+            str(args.serverdatajson).strip() == ""
+        ):
             server_data_input = {
                 "server_name_id": args.servername,
                 "timestamp": datetime.now().isoformat(),
@@ -94,7 +136,10 @@ def main():
             except json.JSONDecodeError as e:
                 error_output = {
                     "error": "JSONDecodeError",
-                    "message": f"Invalid JSON provided in --serverdatajson: {str(e)}",
+                    "message": (
+                        f"Invalid JSON provided in --serverdatajson: "
+                        f"{str(e)}"
+                    ),
                     "input_servername": args.servername,
                     "input_analysistype": args.analysistype,
                     "timestamp": datetime.now().isoformat(),
@@ -102,28 +147,35 @@ def main():
                 print(json.dumps(error_output, indent=4), file=sys.stderr)
                 sys.exit(1)
 
-        # Ensure model directory exists, or ArcPredictor will fail to load
+        # Ensure model directory exists
         model_dir_abs = os.path.abspath(args.modeldir)
         if not os.path.isdir(model_dir_abs):
-             # For this script, if models dir doesn't exist, it's a fatal error as Predictor needs it.
-             # In a real scenario, PAE might handle this more gracefully or have a 'no-model' mode.
-             raise FileNotFoundError(f"Model directory not found at: {model_dir_abs}. Please ensure models are trained and available.")
+            # For this script, if models dir doesn't exist, fatal error
+            raise FileNotFoundError(
+                f"Model directory not found at: {model_dir_abs}. "
+                f"Please ensure models are trained and available."
+            )
 
         # Instantiate the real PredictiveAnalyticsEngine
         engine = PredictiveAnalyticsEngine(
-            config=ai_components_config, # Pass the 'aiComponents' section
+            config=ai_components_config,  # Pass the 'aiComponents' section
             model_dir=model_dir_abs
         )
 
-        # analyze_deployment_risk expects a dictionary representing a single server's raw data snapshot
+        # analyze_deployment_risk expects dictionary for server snapshot
         results = engine.analyze_deployment_risk(server_data_input)
 
-        # Optionally record remediation outcome and surface pending retrain signals
+        # Optionally record remediation outcome
         if args.remediationoutcomejson:
             try:
-                remediation_payload = json.loads(args.remediationoutcomejson)
+                remediation_payload = json.loads(
+                    args.remediationoutcomejson
+                )
             except json.JSONDecodeError as e:
-                raise ValueError(f"Invalid JSON provided in --remediationoutcomejson: {e}")
+                raise ValueError(
+                    f"Invalid JSON provided in --remediationoutcomejson: "
+                    f"{e}"
+                )
 
             outcome_response = engine.record_remediation_outcome(
                 remediation_payload=remediation_payload,
@@ -138,25 +190,29 @@ def main():
                 )
                 results["retrain_export"] = export_response
 
-        # Add input servername and analysistype to the results for clarity in PS
+        # Add input servername and analysistype to results
         results['input_servername'] = args.servername
-        results['input_analysistype'] = args.analysistype # analysis_type is not directly used by PAE.analyze_deployment_risk
-                                                         # but can be useful for PS to confirm what it requested.
+        # analysis_type not directly used but useful for PS confirmation
+        results['input_analysistype'] = args.analysistype
 
-        print(json.dumps(results, indent=4)) # Added indent for readability if run manually
+        # Added indent for readability if run manually
+        print(json.dumps(results, indent=4))
         sys.exit(0)
 
     except Exception as e:
         # Ensure args are available for error reporting
-        # If error happens before args parsing, they won't be.
         servername_for_error = "Unknown"
         analysistype_for_error = "Unknown"
         if 'args' in locals():
-            servername_for_error = args.servername if args.servername else "Unknown"
-            analysistype_for_error = args.analysistype if args.analysistype else "Unknown"
+            servername_for_error = (
+                args.servername if args.servername else "Unknown"
+            )
+            analysistype_for_error = (
+                args.analysistype if args.analysistype else "Unknown"
+            )
 
         error_output = {
-            "error": type(e).__name__, # More specific error type
+            "error": type(e).__name__,  # More specific error type
             "message": str(e),
             "details": "An error occurred in the AI engine.",
             "input_servername": servername_for_error,
@@ -165,6 +221,7 @@ def main():
         }
         print(json.dumps(error_output, indent=4), file=sys.stderr)
         sys.exit(1)
+
 
 if __name__ == "__main__":
     main()
