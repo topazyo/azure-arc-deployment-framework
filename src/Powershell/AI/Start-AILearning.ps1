@@ -69,7 +69,8 @@ function Start-AILearning {
         catch {
             $learningResults.Status = "Failed"
             $learningResults.Error = $_.Exception.Message
-            Write-Error "AI Learning failed: $_"
+            Write-Log -Message "AI learning failed: $($_.Exception.Message)" -Level Error -Component 'Start-AILearning'
+            Write-Error -ErrorRecord $_
         }
     }
 

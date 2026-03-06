@@ -54,7 +54,8 @@ function Invoke-AIPrediction {
             $predictionResults.RiskAssessment = Get-RiskAssessment -Predictions $prediction -Thresholds $model.Thresholds
         }
         catch {
-            Write-Error "Prediction failed: $_"
+            Write-Log -Message "AI prediction failed: $($_.Exception.Message)" -Level Error -Component 'Invoke-AIPrediction'
+            Write-Error -ErrorRecord $_
             $predictionResults.Error = $_.Exception.Message
         }
     }

@@ -109,7 +109,8 @@ function Test-DeploymentHealth {
         catch {
             $healthStatus.Success = $false
             $healthStatus.Error = $_.Exception.Message
-            Write-Error $_
+            Write-Log -Message "Deployment health check failed: $($_.Exception.Message)" -Level Error -Component 'Test-DeploymentHealth'
+            Write-Error -ErrorRecord $_
         }
     }
 

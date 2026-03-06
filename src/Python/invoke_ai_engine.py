@@ -115,6 +115,15 @@ def main():
             "after export instead of peeking."
         )
     )
+    parser.add_argument(
+        "--correlation-id",
+        default=None,
+        help=(
+            "Opaque correlation ID injected by the PowerShell caller for "
+            "cross-process tracing (DEBT-SEC-025). Included verbatim in "
+            "all JSON responses on stdout."
+        )
+    )
 
     args = parser.parse_args()
 
@@ -257,6 +266,9 @@ def main():
         results['input_servername'] = args.servername
         # analysis_type not directly used but useful for PS confirmation
         results['input_analysistype'] = args.analysistype
+        # DEBT-SEC-025: echo correlation ID (may be None if not supplied by PS caller)
+        if args.correlation_id:
+            results['correlation_id'] = args.correlation_id
 
         # Added indent for readability if run manually
         print(json.dumps(results, indent=4))
@@ -270,17 +282,23 @@ def main():
         # Catch-all for unexpected errors
         servername_for_error = "Unknown"
         analysistype_for_error = "Unknown"
+        correlation_id_for_error = None
         if 'args' in locals():
             servername_for_error = getattr(args, 'servername', 'Unknown')
             analysistype_for_error = getattr(args, 'analysistype', 'Unknown')
+            correlation_id_for_error = getattr(args, 'correlation_id', None)
+
+        error_details = {
+            "exception_type": type(e).__name__,
+            "context": "Unexpected error in AI engine"
+        }
+        if correlation_id_for_error:
+            error_details["correlation_id"] = correlation_id_for_error
 
         error_response = create_error_response(
             error_type=ErrorCategory.INTERNAL,
             message=str(e),
-            details={
-                "exception_type": type(e).__name__,
-                "context": "Unexpected error in AI engine"
-            },
+            details=error_details,
             server_name=servername_for_error,
             analysis_type=analysistype_for_error
         )

@@ -12,13 +12,22 @@ src/config/schemas/cli_contracts.schema.json
 """
 
 import json
+import os
 import sys
 import time
 import functools
 import signal
+import jsonschema
 from datetime import datetime
 from typing import Any, Callable, Dict, Optional, TypeVar, Union
 from enum import IntEnum
+
+
+# Schema paths for validation (relative to this file's location)
+_SCHEMA_DIR = os.path.normpath(
+    os.path.join(os.path.dirname(__file__), '..', '..', 'config', 'schemas')
+)
+_AI_CONFIG_SCHEMA_PATH = os.path.join(_SCHEMA_DIR, 'ai_config.schema.json')
 
 
 # Exit codes for PowerShell integration
@@ -315,8 +324,6 @@ def safe_file_read(
     Raises:
         SystemExit: If file reading fails
     """
-    import os
-
     if not os.path.exists(file_path):
         emit_error(
             error_type=ErrorCategory.FILE_NOT_FOUND,
@@ -348,9 +355,15 @@ def validate_config(
     required_key: str = "aiComponents",
     config_path: str = "config",
     server_name: Optional[str] = None,
-    analysis_type: Optional[str] = None
+    analysis_type: Optional[str] = None,
+    schema_path: Optional[str] = _AI_CONFIG_SCHEMA_PATH
 ) -> Dict[str, Any]:
     """Validate configuration has required structure.
+
+    Performs two stages of validation:
+    1. JSON Schema validation against schema_path (defaults to ai_config.schema.json).
+       Pass schema_path=None to skip schema validation.
+    2. Required key presence and non-emptiness check.
 
     Args:
         config: Loaded configuration dictionary
@@ -358,6 +371,9 @@ def validate_config(
         config_path: Path to config file (for error messages)
         server_name: Server name for error correlation
         analysis_type: Analysis type for error correlation
+        schema_path: Path to JSON Schema file for structural validation.
+                     Defaults to src/config/schemas/ai_config.schema.json.
+                     Pass None to skip schema validation.
 
     Returns:
         The value of the required key
@@ -365,6 +381,37 @@ def validate_config(
     Raises:
         SystemExit: If validation fails
     """
+    # Stage 1: JSON Schema validation
+    if schema_path is not None and os.path.isfile(schema_path):
+        try:
+            with open(schema_path, 'r', encoding='utf-8') as sf:
+                schema = json.load(sf)
+            jsonschema.validate(instance=config, schema=schema)
+        except jsonschema.ValidationError as ve:
+            emit_error(
+                error_type=ErrorCategory.CONFIGURATION,
+                message=f"Configuration failed schema validation: {ve.message}",
+                exit_code=ExitCode.CONFIG_ERROR,
+                details={
+                    "config_path": config_path,
+                    "schema_path": schema_path,
+                    "schema_field": ve.json_path,
+                    "validator": ve.validator,
+                },
+                server_name=server_name,
+                analysis_type=analysis_type
+            )
+        except jsonschema.SchemaError as se:
+            emit_error(
+                error_type=ErrorCategory.CONFIGURATION,
+                message=f"Schema file is invalid: {se.message}",
+                exit_code=ExitCode.CONFIG_ERROR,
+                details={"schema_path": schema_path},
+                server_name=server_name,
+                analysis_type=analysis_type
+            )
+
+    # Stage 2: Required key presence check
     if required_key not in config:
         emit_error(
             error_type=ErrorCategory.CONFIGURATION,
@@ -410,8 +457,6 @@ def validate_model_directory(
     Returns:
         True if valid, False otherwise (only if exit_on_error=False)
     """
-    import os
-
     if not os.path.exists(model_dir):
         if exit_on_error:
             emit_error(

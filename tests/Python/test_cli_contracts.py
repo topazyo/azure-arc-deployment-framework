@@ -16,6 +16,7 @@ import json
 import subprocess
 import sys
 import os
+import jsonschema
 from datetime import datetime
 
 # Add src to path
@@ -26,7 +27,10 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 SRC_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, '../../src'))
 PYTHON_DIR = os.path.join(SRC_DIR, 'Python')
 CONFIG_DIR = os.path.join(SRC_DIR, 'config')
+SCHEMA_DIR = os.path.join(CONFIG_DIR, 'schemas')
 AI_CONFIG_PATH = os.path.join(CONFIG_DIR, 'ai_config.json')
+AI_CONFIG_SCHEMA_PATH = os.path.join(SCHEMA_DIR, 'ai_config.schema.json')
+CLI_CONTRACTS_SCHEMA_PATH = os.path.join(SCHEMA_DIR, 'cli_contracts.schema.json')
 INVOKE_AI_ENGINE = os.path.join(PYTHON_DIR, 'invoke_ai_engine.py')
 RUN_PREDICTOR = os.path.join(PYTHON_DIR, 'run_predictor.py')
 
@@ -494,3 +498,122 @@ class TestTimestampContract:
                     datetime.fromisoformat(ts.replace('Z', '+00:00'))
             except (json.JSONDecodeError, ValueError):
                 pass  # Not all errors have timestamps
+
+
+class TestFormalSchemaValidation:
+    """Formal JSON Schema validation tests (CONT-002).
+
+    Validates that:
+    - ai_config.json conforms to ai_config.schema.json using jsonschema.validate()
+    - CLI error responses conform to the errorResponse schema in cli_contracts.schema.json
+    - Canonical serverDataInput payloads conform to the serverDataInput schema
+    - Both schema files are syntactically valid
+    - Schema rejects structurally invalid configuration
+    """
+
+    def test_schema_files_exist(self):
+        """Both schema files must be present on disk."""
+        assert os.path.isfile(AI_CONFIG_SCHEMA_PATH), (
+            f"ai_config.schema.json not found at {AI_CONFIG_SCHEMA_PATH}"
+        )
+        assert os.path.isfile(CLI_CONTRACTS_SCHEMA_PATH), (
+            f"cli_contracts.schema.json not found at {CLI_CONTRACTS_SCHEMA_PATH}"
+        )
+
+    def test_schema_files_are_valid_json(self):
+        """Schema files must parse as valid JSON (syntactic integrity)."""
+        with open(AI_CONFIG_SCHEMA_PATH, 'r', encoding='utf-8') as f:
+            ai_schema = json.load(f)
+        assert isinstance(ai_schema, dict), "ai_config.schema.json must be a JSON object"
+
+        with open(CLI_CONTRACTS_SCHEMA_PATH, 'r', encoding='utf-8') as f:
+            contracts_schema = json.load(f)
+        assert isinstance(contracts_schema, dict), "cli_contracts.schema.json must be a JSON object"
+
+    def test_ai_config_validates_against_schema(self):
+        """Contract guarantee: ai_config.json MUST validate against ai_config.schema.json.
+
+        This is the primary CONT-001 gate: the schema files must be enforced,
+        not merely decorative.
+        """
+        with open(AI_CONFIG_SCHEMA_PATH, 'r', encoding='utf-8') as f:
+            schema = json.load(f)
+        with open(AI_CONFIG_PATH, 'r', encoding='utf-8') as f:
+            config = json.load(f)
+
+        # Must not raise jsonschema.ValidationError
+        jsonschema.validate(instance=config, schema=schema)
+
+    def test_schema_rejects_invalid_config(self):
+        """Schema must reject configs that violate required structure."""
+        with open(AI_CONFIG_SCHEMA_PATH, 'r', encoding='utf-8') as f:
+            schema = json.load(f)
+
+        # An empty dict is missing all required keys — must fail validation
+        with pytest.raises(jsonschema.ValidationError):
+            jsonschema.validate(instance={}, schema=schema)
+
+    def test_error_response_validates_against_cli_contracts_schema(self):
+        """CLI error output MUST conform to the errorResponse schema in cli_contracts.schema.json.
+
+        Triggers a known-error path (missing config file) and validates the stderr
+        JSON against the formal errorResponse schema.
+        """
+        with open(CLI_CONTRACTS_SCHEMA_PATH, 'r', encoding='utf-8') as f:
+            contracts = json.load(f)
+
+        error_schema = contracts.get('definitions', {}).get('errorResponse')
+        if error_schema is None:
+            # Some schema layouts put definitions at top-level properties
+            error_schema = contracts.get('properties', {}).get('errorResponse')
+        if error_schema is None:
+            pytest.skip("errorResponse definition not found in cli_contracts.schema.json")
+
+        result = subprocess.run(
+            [
+                sys.executable, INVOKE_AI_ENGINE,
+                '--servername', 'SCHEMA-TEST-SERVER',
+                '--configpath', '/nonexistent/path/ai_config.json'
+            ],
+            capture_output=True,
+            text=True
+        )
+
+        assert result.returncode != 0, "Expected non-zero exit for missing config"
+        assert result.stderr.strip(), "Expected JSON error on stderr"
+
+        try:
+            error_obj = json.loads(result.stderr.strip())
+        except json.JSONDecodeError as exc:
+            pytest.fail(f"stderr is not valid JSON: {exc}\nstderr={result.stderr!r}")
+
+        # Validate the actual error object against the errorResponse schema definition
+        jsonschema.validate(instance=error_obj, schema=error_schema)
+
+    def test_server_data_input_example_validates_against_cli_contracts_schema(self):
+        """Canonical serverDataInput payload must conform to the serverDataInput schema."""
+        with open(CLI_CONTRACTS_SCHEMA_PATH, 'r', encoding='utf-8') as f:
+            contracts = json.load(f)
+
+        server_data_schema = contracts.get('definitions', {}).get('serverDataInput')
+        if server_data_schema is None:
+            server_data_schema = contracts.get('properties', {}).get('serverDataInput')
+        if server_data_schema is None:
+            pytest.skip("serverDataInput definition not found in cli_contracts.schema.json")
+
+        # Canonical minimal serverDataInput (matches CLI-Reference.md examples)
+        canonical_payload = {
+            "server_name_id": "TEST-SERVER-01",
+            "timestamp": datetime.now().isoformat(),
+            "cpu_usage": 0.85,
+            "memory_usage": 0.72,
+            "disk_usage": 0.60,
+            "network_latency": 45,
+            "error_count": 3,
+            "warning_count": 12,
+            "request_count": 1500,
+            "response_time": 250,
+        }
+
+        # Must not raise
+        jsonschema.validate(instance=canonical_payload, schema=server_data_schema)

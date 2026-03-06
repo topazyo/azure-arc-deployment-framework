@@ -1,3 +1,24 @@
+#
+# Invoke-ErrorHandler — Canonical error handling utility for the Azure Arc Framework.
+#
+# STANDARD CATCH BLOCK PATTERN (use in all exported functions):
+#
+#   catch {
+#       Write-Log -Message "Operation failed: $($_.Exception.Message)" -Level Error -Component 'FunctionName'
+#       Write-Error -ErrorRecord $_
+#   }
+#
+# Use -ThrowException to re-throw after logging (for functions that must propagate terminating errors):
+#
+#   catch {
+#       Invoke-ErrorHandler -ErrorRecord $_ -Context 'FunctionName' -ThrowException
+#   }
+#
+# NEVER use:
+#   Write-Error "$_"             ← stringifies the ErrorRecord, loses category/invocation info
+#   Write-Error -Exception $_.Exception  ← loses category, ErrorId, and TargetObject
+#   throw "string message"       ← non-structured; use $PSCmdlet.ThrowTerminatingError() instead
+#
 function Invoke-ErrorHandler {
     [CmdletBinding()]
     param (
@@ -70,8 +91,8 @@ function Invoke-ErrorHandler {
             }
         }
         catch {
-            Write-Error "Error handler failed: $_"
-            Write-Log -Message "Error handler failed: $_" -Level Error
+            Write-Log -Message "Invoke-ErrorHandler itself failed: $($_.Exception.Message)" -Level Error -Component 'Invoke-ErrorHandler'
+            Write-Error -ErrorRecord $_
             if ($ThrowException) {
                 throw
             }
@@ -93,8 +114,11 @@ function Find-ErrorPattern {
     )
 
     foreach ($pattern in $Patterns) {
-        if ($ErrorObj.Message -match $pattern.Pattern -or 
-            $ErrorObj.Exception.GetType().Name -eq $pattern.ExceptionType) {
+        # $ErrorObj is a PSCustomObject from Convert-ErrorToObject (has Message, ErrorId, Category).
+        # Use ErrorId (FullyQualifiedErrorId) for exception-type matching — it commonly embeds the type name.
+        $messageMatch = $pattern.Pattern -and ($ErrorObj.Message -match $pattern.Pattern)
+        $typeMatch = $pattern.ExceptionType -and ($ErrorObj.ErrorId -like "*$($pattern.ExceptionType)*")
+        if ($messageMatch -or $typeMatch) {
             return $pattern
         }
     }

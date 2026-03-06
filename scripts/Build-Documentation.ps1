@@ -16,7 +16,7 @@ function Build-PowerShellDocs {
     )
 
     try {
-        Write-Host "Generating PowerShell documentation..." -ForegroundColor Cyan
+        Write-Information "Generating PowerShell documentation..."
 
         # Import module
         Import-Module (Join-Path $ModulePath "PowerShell\AzureArcFramework.psd1") -Force
@@ -28,11 +28,11 @@ function Build-PowerShellDocs {
         }
 
         New-MarkdownHelp -Module AzureArcFramework -OutputFolder $docsPath -Force
-        Write-Host "Generated PowerShell markdown documentation" -ForegroundColor Green
+        Write-Information "Generated PowerShell markdown documentation"
 
         # Create external help
         New-ExternalHelp -Path $docsPath -OutputPath (Join-Path $ModulePath "PowerShell\en-US") -Force
-        Write-Host "Generated PowerShell external help" -ForegroundColor Green
+        Write-Information "Generated PowerShell external help"
     }
     catch {
         Write-Error "Failed to build PowerShell documentation: $_"
@@ -48,32 +48,38 @@ function Build-PythonDocs {
     )
 
     try {
-        Write-Host "Generating Python documentation..." -ForegroundColor Cyan
+        Write-Information "Generating Python documentation..."
 
         # Ensure Sphinx is installed
         pip install sphinx sphinx-rtd-theme
+        if ($LASTEXITCODE -ne 0) { throw "pip install sphinx sphinx-rtd-theme failed with exit code $LASTEXITCODE" }
 
         # Create Sphinx configuration
         $sphinxPath = Join-Path $OutputPath "Python"
         if (-not (Test-Path $sphinxPath)) {
             sphinx-quickstart -q -p "Azure Arc Framework" -a "Your Name" -v "1.0" -r "1.0" -l "en" --ext-autodoc --ext-viewcode --makefile --batchfile $sphinxPath
+            if ($LASTEXITCODE -ne 0) { throw "sphinx-quickstart failed with exit code $LASTEXITCODE" }
         }
 
         # Generate API documentation
         sphinx-apidoc -f -o $sphinxPath (Join-Path $SourcePath "Python")
+        if ($LASTEXITCODE -ne 0) { throw "sphinx-apidoc failed with exit code $LASTEXITCODE" }
 
         # Build HTML documentation
         Push-Location $sphinxPath
         try {
             sphinx-build -b html . _build/html
-            Write-Host "Generated Python HTML documentation" -ForegroundColor Green
+            if ($LASTEXITCODE -ne 0) { throw "sphinx-build html failed with exit code $LASTEXITCODE" }
+            Write-Information "Generated Python HTML documentation"
 
             if ($GeneratePDF) {
                 sphinx-build -b latex . _build/latex
+                if ($LASTEXITCODE -ne 0) { throw "sphinx-build latex failed with exit code $LASTEXITCODE" }
                 Push-Location _build/latex
                 try {
                     make.bat all-pdf
-                    Write-Host "Generated Python PDF documentation" -ForegroundColor Green
+                    if ($LASTEXITCODE -ne 0) { throw "make.bat all-pdf failed with exit code $LASTEXITCODE" }
+                    Write-Information "Generated Python PDF documentation"
                 }
                 finally {
                     Pop-Location
@@ -98,7 +104,7 @@ function Build-ReadmeDocs {
     )
 
     try {
-        Write-Host "Generating README documentation..." -ForegroundColor Cyan
+        Write-Information "Generating README documentation..."
 
         # Copy main README
         Copy-Item -Path "$SourcePath\..\README.md" -Destination $OutputPath -Force
@@ -130,7 +136,7 @@ $(Get-ChildItem $componentPath -Recurse | Where-Object { -not $_.PSIsContainer }
 "@
 
             $content | Set-Content $readmePath -Force
-            Write-Host "Generated $($component.Name) README" -ForegroundColor Green
+            Write-Information "Generated $($component.Name) README"
         }
     }
     catch {
@@ -154,7 +160,7 @@ try {
     Build-PythonDocs -SourcePath $SourcePath -OutputPath $OutputPath
     Build-ReadmeDocs -SourcePath $SourcePath -OutputPath $OutputPath
 
-    Write-Host "Documentation built successfully" -ForegroundColor Green
+    Write-Information "Documentation built successfully"
 }
 catch {
     Write-Error "Failed to build documentation: $_"

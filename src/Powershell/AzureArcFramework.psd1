@@ -34,6 +34,7 @@
         'Write-Log',
         'New-RetryBlock',
         'Convert-ErrorToObject',
+        'Invoke-ErrorHandler',
         'Test-Connectivity',
         'Merge-CommonHashtable'
     )

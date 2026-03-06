@@ -18,7 +18,18 @@ function Get-PredictiveInsights {
         [string]$AIModelDirectory, # To pass to invoke_ai_engine.py --modeldir
 
         [Parameter()]
-        [string]$AIConfigPath     # To pass to invoke_ai_engine.py --configpath
+        [string]$AIConfigPath,     # To pass to invoke_ai_engine.py --configpath
+
+        [Parameter()]
+        [ValidateRange(10, 600)]
+        [int]$TimeoutSeconds = 120,  # RESIL-001: max seconds before Python process is killed
+
+        [Parameter()]
+        [ValidateRange(0, 5)]
+        [int]$MaxRetries = 2,        # RESIL-002: retries on transient exit code 5
+
+        [Parameter()]
+        [string]$CorrelationId       # DEBT-SEC-025: cross-process tracing ID (auto-generated if not supplied)
     )
 
     begin {
@@ -90,7 +101,12 @@ function Get-PredictiveInsights {
             throw "Python executable not found."
         }
         Write-Verbose "Using Python executable '$PythonExecutable'."
-    }
+
+        # DEBT-SEC-025: Generate correlation ID if not supplied so PS↔Python calls can be traced
+        if ([string]::IsNullOrWhiteSpace($CorrelationId)) {
+            $CorrelationId = [System.Guid]::NewGuid().ToString('N').Substring(0, 16)
+        }
+        Write-Verbose "Correlation ID: $CorrelationId"
 
     process {
         Write-Verbose "Retrieving predictive insights for server '$ServerName' (Analysis: $AnalysisType)..."
@@ -108,57 +124,99 @@ function Get-PredictiveInsights {
         if ($AIConfigPath) {
             $arguments += @("--configpath", "`"$AIConfigPath`"")
         }
+        $arguments += @("--correlation-id", "`"$CorrelationId`"")  # DEBT-SEC-025
 
-        Write-Verbose "Executing: $PythonExecutable $arguments"
+        Write-Verbose "Executing: $PythonExecutable $arguments (Timeout: ${TimeoutSeconds}s, MaxRetries: $MaxRetries)"
 
-        $stdOut = ""
-        $stdErr = ""
-        $process = $null
+        # RESIL-001 + RESIL-002: timeout-aware invocation with retry on transient exit code
+        $maxAttempts  = $MaxRetries + 1
+        $attempt      = 0
+        $timedOut     = $false
+        $stdOut       = ''
+        $stdErr       = ''
+        $process      = $null
 
-        try {
-            $process = Start-Process -FilePath $PythonExecutable -ArgumentList $arguments -Wait -NoNewWindow -PassThru -RedirectStandardOutput "stdout.txt" -RedirectStandardError "stderr.txt" -ErrorAction Stop
-        }
-        catch {
-            if ($env:ARC_AI_FORCE_MOCKS -eq '1') {
-                # In test/mock scenarios we still want to count the invocation and proceed with stubbed outputs
-                if (-not (Test-Path "stdout.txt")) { Set-Content -Path "stdout.txt" -Value "{}" }
-                if (-not (Test-Path "stderr.txt")) { Set-Content -Path "stderr.txt" -Value "" }
+        do {
+            $attempt++
+            $timedOut    = $false
+            $stdOutFile  = [System.IO.Path]::Combine(
+                [System.IO.Path]::GetTempPath(),
+                "arc_stdout_${CorrelationId}_${attempt}.txt")
+            $stdErrFile  = [System.IO.Path]::Combine(
+                [System.IO.Path]::GetTempPath(),
+                "arc_stderr_${CorrelationId}_${attempt}.txt")
+
+            try {
+                $process = Start-Process -FilePath $PythonExecutable -ArgumentList $arguments `
+                    -NoNewWindow -PassThru `
+                    -RedirectStandardOutput $stdOutFile `
+                    -RedirectStandardError  $stdErrFile `
+                    -ErrorAction Stop
+
+                $completed = $process.WaitForExit($TimeoutSeconds * 1000)
+                if (-not $completed) {
+                    $timedOut = $true
+                    try { $process.Kill() } catch {}
+                }
+            }
+            catch {
+                if ($env:ARC_AI_FORCE_MOCKS -eq '1') {
+                    if (-not (Test-Path $stdOutFile)) { Set-Content -Path $stdOutFile -Value '{}' }
+                    if (-not (Test-Path $stdErrFile)) { Set-Content -Path $stdErrFile -Value '' }
+                    $process = [pscustomobject]@{ ExitCode = 0 }
+                    Write-Verbose 'Start-Process failed under mocks; using stubbed process result.'
+                }
+                else { throw }
+            }
+
+            if (-not $process -and $env:ARC_AI_FORCE_MOCKS -eq '1') {
                 $process = [pscustomobject]@{ ExitCode = 0 }
-                Write-Verbose "Start-Process failed under mocks; using stubbed process result."
             }
-            else {
-                throw
+
+            $stdOut = Get-Content -Path $stdOutFile -Raw -ErrorAction SilentlyContinue
+            $stdErr = Get-Content -Path $stdErrFile -Raw -ErrorAction SilentlyContinue
+            if ($null -eq $stdOut) { $stdOut = '' }
+            if ($null -eq $stdErr) { $stdErr = '' }
+            Remove-Item $stdOutFile -ErrorAction SilentlyContinue
+            Remove-Item $stdErrFile -ErrorAction SilentlyContinue
+
+            # Under mocks with no forced failure adjust exit code before retry check
+            if ($env:ARC_AI_FORCE_MOCKS -eq '1' -and $env:ARC_AI_FORCE_PYTHON_FAIL -ne '1' `
+                    -and [string]::IsNullOrWhiteSpace($stdErr)) {
+                $process = [pscustomobject]@{ ExitCode = 0 }
             }
-        }
 
-        if (-not $process -and $env:ARC_AI_FORCE_MOCKS -eq '1') {
-            $process = [pscustomobject]@{ ExitCode = 0 }
-        }
-
-        # Read captured output; mocks set these files explicitly, fallback above ensures they exist for mocked runs
-        $stdOut = -join (Get-Content -Path "stdout.txt" -ErrorAction SilentlyContinue)
-        $stdErr = -join (Get-Content -Path "stderr.txt" -ErrorAction SilentlyContinue)
-
-        if ($env:ARC_AI_FORCE_MOCKS -eq '1') {
-            if ([string]::IsNullOrWhiteSpace($stdOut) -and (Test-Path "stdout.txt")) {
-                $stdOut = [System.IO.File]::ReadAllText("stdout.txt")
+            if ($timedOut) {
+                Write-Log -Message "AI Engine timed out after $TimeoutSeconds seconds (attempt $attempt/$maxAttempts, CorrelationId: $CorrelationId)" `
+                    -Level Warning -Component 'Get-PredictiveInsights'
+                if ($attempt -lt $maxAttempts) {
+                    $delay = [int][Math]::Pow(2, $attempt)
+                    Write-Verbose "Retrying after ${delay}s (timeout, attempt $attempt/$maxAttempts)..."
+                    Start-Sleep -Seconds $delay
+                    continue
+                }
+                throw "AI Engine timed out after $TimeoutSeconds seconds (CorrelationId: $CorrelationId)."
             }
-            if ([string]::IsNullOrWhiteSpace($stdErr) -and (Test-Path "stderr.txt")) {
-                $stdErr = [System.IO.File]::ReadAllText("stderr.txt")
-            }
-        }
-        Remove-Item "stdout.txt" -ErrorAction SilentlyContinue
-        Remove-Item "stderr.txt" -ErrorAction SilentlyContinue
 
-        if ($env:ARC_AI_FORCE_MOCKS -eq '1' -and $env:ARC_AI_FORCE_PYTHON_FAIL -ne '1' -and [string]::IsNullOrWhiteSpace($stdErr)) {
-            # Under mocks, treat missing stderr as success even if the mocked process surfaced a non-zero exit
-            $process = [pscustomobject]@{ ExitCode = 0 }
-        }
+            # Python exit code 5 = TRANSIENT_ERROR (resilience.py ExitCode enum)
+            if ($process.ExitCode -eq 5 -and $attempt -lt $maxAttempts) {
+                Write-Log -Message "AI Engine returned transient error (exit 5), retrying (attempt $attempt/$maxAttempts, CorrelationId: $CorrelationId)" `
+                    -Level Warning -Component 'Get-PredictiveInsights'
+                $delay = [int][Math]::Pow(2, $attempt)
+                Write-Verbose "Retrying after ${delay}s (transient, attempt $attempt/$maxAttempts)..."
+                Start-Sleep -Seconds $delay
+                continue
+            }
+
+            break
+        } while ($attempt -lt $maxAttempts)
 
         if ($process.ExitCode -ne 0) {
-            Write-Error "AI Engine script execution failed. Exit Code: $($process.ExitCode)"
+            Write-Log -Message "AI Engine failed (exit $($process.ExitCode), CorrelationId: $CorrelationId)" `
+                -Level Error -Component 'Get-PredictiveInsights'
+            Write-Error -Message "AI Engine script execution failed. Exit Code: $($process.ExitCode) (CorrelationId: $CorrelationId)"
             if (-not [string]::IsNullOrWhiteSpace($stdErr)) {
-                Write-Error "Error details from AI Engine: $stdErr"
+                Write-Error -Message "Error details from AI Engine: $stdErr"
                 # Attempt to parse stderr as JSON if it might contain structured error from Python
                 try {
                     $errorObject = $stdErr | ConvertFrom-Json -ErrorAction SilentlyContinue
@@ -169,7 +227,9 @@ function Get-PredictiveInsights {
         }
 
         if ([string]::IsNullOrWhiteSpace($stdOut)) {
-            Write-Error "AI Engine script returned no output."
+            Write-Log -Message "AI Engine returned no output (CorrelationId: $CorrelationId)" `
+                -Level Error -Component 'Get-PredictiveInsights'
+            Write-Error -Message "AI Engine script returned no output (CorrelationId: $CorrelationId)."
             if (-not [string]::IsNullOrWhiteSpace($stdErr)) {
                 Write-Warning "Error stream from AI Engine (though exit code was 0): $stdErr"
             }
@@ -179,20 +239,22 @@ function Get-PredictiveInsights {
         try {
             $insights = $stdOut | ConvertFrom-Json -ErrorAction Stop
             Write-Verbose "Successfully parsed JSON response from AI Engine."
-            # Add server name and analysis type from PS parameters for consistency,
-            # in case Python script couldn't pick them up or mangled them.
-            $insights | Add-Member -MemberType NoteProperty -Name "PSServerName" -Value $ServerName -Force
-            $insights | Add-Member -MemberType NoteProperty -Name "PSAnalysisType" -Value $AnalysisType -Force
+            # Add server name, analysis type and correlation ID from PS parameters for consistency
+            $insights | Add-Member -MemberType NoteProperty -Name 'PSServerName'      -Value $ServerName    -Force
+            $insights | Add-Member -MemberType NoteProperty -Name 'PSAnalysisType'    -Value $AnalysisType  -Force
+            $insights | Add-Member -MemberType NoteProperty -Name 'PSCorrelationId'   -Value $CorrelationId -Force
 
             return $insights
         }
         catch {
-            Write-Error "Failed to parse JSON response from AI Engine. Output was: $stdOut"
+            Write-Log -Message "Failed to parse JSON response from AI Engine (CorrelationId: $CorrelationId)" `
+                -Level Error -Component 'Get-PredictiveInsights'
+            Write-Error -ErrorRecord $_
             throw "JSON parsing failed."
         }
     }
 
     end {
-        Write-Verbose "Finished Get-PredictiveInsights for server '$ServerName'."
+        Write-Verbose "Finished Get-PredictiveInsights for server '$ServerName' (CorrelationId: $CorrelationId)."
     }
 }

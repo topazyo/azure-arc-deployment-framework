@@ -40,6 +40,9 @@ python invoke_ai_engine.py --servername <name> [options]
 | `--remediationoutcomejson` | JSON string | None | Feedback from remediation actions for learning |
 | `--configpath` | path | `src/config/ai_config.json` | Path to AI configuration file |
 | `--modeldir` | path | `src/Python/models_placeholder` | Directory containing model artifacts |
+| `--exportretrainpath` | path | None | Path to write pending retrain requests as JSON; consumed when `--consumeexportqueue` is set |
+| `--consumeexportqueue` | flag | false | Clear/consume the retrain request queue after exporting instead of peeking |
+| `--correlation-id` | string | None | Opaque trace ID injected by the PowerShell caller (`$CorrelationId`); echoed in all JSON responses for cross-process tracing |
 
 ### Analysis Types
 

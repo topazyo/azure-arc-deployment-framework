@@ -65,7 +65,8 @@ function Get-ArcHealthStatus {
         catch {
             $healthStatus.Overall = 'Error'
             $healthStatus.Error = Convert-ErrorToObject $_
-            Write-Error -Exception $_.Exception
+            Write-Log -Message "Arc health status check failed: $($_.Exception.Message)" -Level Error -Component 'Get-ArcHealthStatus'
+            Write-Error -ErrorRecord $_
         }
     }
 

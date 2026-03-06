@@ -34,6 +34,7 @@ setup(
         "azure-mgmt-monitor>=3.0.0",
         "azure-identity>=1.7.0",
         "PyYAML>=5.4.1",
+        "jsonschema==4.23.0",
     ],
     extras_require={
         'dev': [

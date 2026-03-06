@@ -18,40 +18,43 @@ function Initialize-PythonEnvironment {
     )
 
     try {
-        Write-Host "Initializing Python environment..." -ForegroundColor Cyan
+        Write-Information "Initializing Python environment..."
         
         # Check Python installation
         $pythonVersion = python --version 2>&1
         if ($LASTEXITCODE -ne 0) {
             throw "Python is not installed or not in PATH"
         }
-        Write-Host "Found Python: $pythonVersion" -ForegroundColor Green
+        Write-Information "Found Python: $pythonVersion"
 
         # Create virtual environment
         $venvPath = Join-Path $WorkingDirectory "venv"
         if (Test-Path $venvPath) {
             if ($Force) {
                 Remove-Item $venvPath -Recurse -Force
-                Write-Host "Removed existing virtual environment" -ForegroundColor Yellow
+                Write-Warning "Removed existing virtual environment"
             }
             else {
-                Write-Host "Virtual environment already exists" -ForegroundColor Yellow
+                Write-Warning "Virtual environment already exists"
                 return
             }
         }
 
         python -m venv $venvPath
-        Write-Host "Created virtual environment at: $venvPath" -ForegroundColor Green
+        if ($LASTEXITCODE -ne 0) { throw "python -m venv failed with exit code $LASTEXITCODE" }
+        Write-Information "Created virtual environment at: $venvPath"
 
         # Activate virtual environment
         $activateScript = Join-Path $venvPath "Scripts\Activate.ps1"
         . $activateScript
-        Write-Host "Activated virtual environment" -ForegroundColor Green
+        Write-Information "Activated virtual environment"
 
         # Install dependencies
         pip install -r (Join-Path $WorkingDirectory "requirements.txt")
+        if ($LASTEXITCODE -ne 0) { throw "pip install requirements.txt failed with exit code $LASTEXITCODE" }
         pip install -e $WorkingDirectory
-        Write-Host "Installed Python dependencies" -ForegroundColor Green
+        if ($LASTEXITCODE -ne 0) { throw "pip install -e failed with exit code $LASTEXITCODE" }
+        Write-Information "Installed Python dependencies"
     }
     catch {
         Write-Error "Failed to initialize Python environment: $_"
@@ -66,7 +69,7 @@ function Initialize-PowerShellEnvironment {
     )
 
     try {
-        Write-Host "Initializing PowerShell environment..." -ForegroundColor Cyan
+        Write-Information "Initializing PowerShell environment..."
 
         # Install required PowerShell modules
         $modules = @(
@@ -80,11 +83,11 @@ function Initialize-PowerShellEnvironment {
 
         foreach ($module in $modules) {
             if (-not (Get-Module -ListAvailable -Name $module.Name -MinimumVersion $module.MinimumVersion)) {
-                Write-Host "Installing module: $($module.Name)" -ForegroundColor Yellow
+                Write-Information "Installing module: $($module.Name)"
                 Install-Module -Name $module.Name -MinimumVersion $module.MinimumVersion -Force -AllowClobber
             }
             else {
-                Write-Host "Module already installed: $($module.Name)" -ForegroundColor Green
+                Write-Verbose "Module already installed: $($module.Name)"
             }
         }
 
@@ -101,7 +104,7 @@ Import-Module AzureArcFramework -Force
             New-Item -Path $profilePath -ItemType File -Force | Out-Null
         }
         Add-Content -Path $profilePath -Value $profileContent
-        Write-Host "Updated PowerShell profile" -ForegroundColor Green
+        Write-Information "Updated PowerShell profile"
     }
     catch {
         Write-Error "Failed to initialize PowerShell environment: $_"
@@ -116,7 +119,7 @@ function Initialize-GitHooks {
     )
 
     try {
-        Write-Host "Initializing Git hooks..." -ForegroundColor Cyan
+        Write-Information "Initializing Git hooks..."
         
         $hooksDir = Join-Path $WorkingDirectory ".git\hooks"
         if (-not (Test-Path $hooksDir)) {
@@ -161,7 +164,7 @@ fi
             chmod +x $preCommitPath
         }
 
-        Write-Host "Git hooks initialized" -ForegroundColor Green
+        Write-Information "Git hooks initialized"
     }
     catch {
         Write-Error "Failed to initialize Git hooks: $_"
@@ -188,7 +191,7 @@ try {
     # Initialize Git hooks
     Initialize-GitHooks -WorkingDirectory $WorkingDirectory
 
-    Write-Host "Development environment initialized successfully" -ForegroundColor Green
+    Write-Information "Development environment initialized successfully"
 }
 catch {
     Write-Error "Failed to initialize development environment: $_"

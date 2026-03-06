@@ -67,6 +67,10 @@ def main():
         "--model-dir", type=str, default=DEFAULT_MODEL_DIR,
         help="Directory where models are stored.")
     parser.add_argument(
+        "--config-path", type=str,
+        default=os.path.join(PROJECT_ROOT_ASSUMED, "src", "config", "ai_config.json"),
+        help="Path to AI configuration file.")
+    parser.add_argument(
         "--telemetrydatajson", type=str, required=True,
         help="JSON string containing the telemetry data for prediction.")
 

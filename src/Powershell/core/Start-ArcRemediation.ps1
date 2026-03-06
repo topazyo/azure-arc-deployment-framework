@@ -121,7 +121,8 @@ function Start-ArcRemediation {
                 $remediationState.Rollback = $rollback
             }
 
-            Write-Error $_
+            Write-Log -Message "Remediation failed: $($_.Exception.Message)" -Level Error -Component 'Start-ArcRemediation'
+            Write-Error -ErrorRecord $_
         }
     }
 

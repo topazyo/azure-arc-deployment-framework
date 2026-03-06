@@ -78,7 +78,8 @@ function Invoke-ArcAnalysis {
             $analysisResults.RiskScore = [double]$risk
         }
         catch {
-            Write-Error "Analysis failed: $_"
+            Write-Log -Message "Arc analysis failed: $($_.Exception.Message)" -Level Error -Component 'Invoke-ArcAnalysis'
+            Write-Error -ErrorRecord $_
             $analysisResults.Error = $_.Exception.Message
         }
     }

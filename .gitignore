@@ -16,6 +16,8 @@ AGENTS.md
 *.log
 *.tmp
 .vscode/
+.venv/
+.pytest_cache/
 .idea/
 config/local-settings.json
 **/bin/

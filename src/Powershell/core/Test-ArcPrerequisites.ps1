@@ -198,8 +198,8 @@ function Test-ArcPrerequisites {
         catch {
             $results.Success = $false
             $results.Error = $_.Exception.Message
-            Write-Error $_
-            try { Write-Log -Level Error -Message "$($_)" } catch {}
+            Write-Log -Message "Arc prerequisites check failed: $($_.Exception.Message)" -Level Error -Component 'Test-ArcPrerequisites'
+            Write-Error -ErrorRecord $_
         }
     }
 

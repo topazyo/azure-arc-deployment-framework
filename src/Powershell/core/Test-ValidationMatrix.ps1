@@ -155,7 +155,8 @@ function Test-ValidationMatrix {
         catch {
             $results.OverallStatus = 'Error'
             $results.Error = Convert-ErrorToObject $_
-            Write-Error -Exception $_.Exception
+            Write-Log -Message "Validation matrix test failed: $($_.Exception.Message)" -Level Error -Component 'Test-ValidationMatrix'
+            Write-Error -ErrorRecord $_
         }
     }
 
