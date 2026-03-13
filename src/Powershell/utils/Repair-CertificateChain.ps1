@@ -53,8 +53,8 @@ Function Repair-CertificateChain {
     Write-Log "Starting Repair-CertificateChain for certificate: Subject='$($Certificate.Subject)', Thumbprint='$($Certificate.Thumbprint)'."
     Write-Log "Parameters: InstallMissingIntermediates='$InstallMissingIntermediates'."
 
-    $PSScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path -Resolve
-    $PathInstallIntermediateCerts = Join-Path $PSScriptRoot "Install-IntermediateCertificates.ps1"
+    $_scriptRoot = if ($PSScriptRoot) { $PSScriptRoot } elseif ($MyInvocation.MyCommand.Path) { Split-Path -Parent $MyInvocation.MyCommand.Path } else { '' }
+    $PathInstallIntermediateCerts = if ($_scriptRoot) { Join-Path $_scriptRoot "Install-IntermediateCertificates.ps1" } else { 'Install-IntermediateCertificates.ps1' }
 
 
     # --- Administrator Privilege Check (if installing to LocalMachine) ---

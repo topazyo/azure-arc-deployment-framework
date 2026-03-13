@@ -115,7 +115,7 @@ function Test-PerformanceValidation {
             }
 
             # AMA Agent Resource Usage Validation (if installed)
-            $amaService = Get-Service -Name "AzureMonitorAgent" -ComputerName $ServerName -ErrorAction SilentlyContinue
+            $amaService = Get-Service -Name "AzureMonitorAgent" -ErrorAction SilentlyContinue
             if ($amaService) {
                 $amaAgentCheck = Test-AMAAgentResourceUsage -ServerName $ServerName
                 $validationResults.Checks += @{
@@ -475,7 +475,9 @@ function Test-ArcAgentResourceUsage {
 
     try {
         # Get Arc agent process information
-        $arcProcess = Get-Process -Name "himds" -ComputerName $ServerName -ErrorAction SilentlyContinue
+        $arcProcess = Invoke-Command -ComputerName $ServerName -ScriptBlock {
+            Get-Process -Name 'himds' -ErrorAction SilentlyContinue
+        } -ErrorAction SilentlyContinue
         
         if (-not $arcProcess) {
             $result.Status = "Critical"
@@ -535,7 +537,9 @@ function Test-AMAAgentResourceUsage {
 
     try {
         # Get AMA agent process information
-        $amaProcess = Get-Process -Name "AzureMonitorAgent" -ComputerName $ServerName -ErrorAction SilentlyContinue
+        $amaProcess = Invoke-Command -ComputerName $ServerName -ScriptBlock {
+            Get-Process -Name 'AzureMonitorAgent' -ErrorAction SilentlyContinue
+        } -ErrorAction SilentlyContinue
         
         if (-not $amaProcess) {
             $result.Status = "Critical"

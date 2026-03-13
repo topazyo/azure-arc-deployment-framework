@@ -309,7 +309,9 @@ class TestValidateConfig:
         """Test valid config returns the required key's value."""
         config = {"aiComponents": {"key": "value"}}
 
-        result = validate_config(config, required_key="aiComponents")
+        # Pass schema_path=None to skip full schema validation — this test
+        # exercises the required-key presence logic, not schema structure.
+        result = validate_config(config, required_key="aiComponents", schema_path=None)
         assert result == {"key": "value"}
 
     def test_missing_key_exits(self):

@@ -57,7 +57,7 @@ Function Get-AIRecommendations {
             return & $ConditionValue $InputItem
         }
 
-        if (-not ($ConditionValue -is [hashtable]) -and $ConditionValue -and $ConditionValue.PSObject -and $ConditionValue.PSObject.Properties.Count -gt 0) {
+        if (-not ($ConditionValue -is [hashtable]) -and ($ConditionValue -is [pscustomobject]) -and $ConditionValue.PSObject.Properties.Count -gt 0) {
             $converted = @{}
             foreach ($prop in $ConditionValue.PSObject.Properties) {
                 $converted[$prop.Name] = $prop.Value

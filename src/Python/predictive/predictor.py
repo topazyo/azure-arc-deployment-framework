@@ -1,3 +1,4 @@
+import os
 import numpy as np
 import pandas as pd
 import joblib
@@ -9,6 +10,11 @@ from ..common.logging_config import get_logger
 
 class ArcPredictor:
     """Loads trained models and makes predictions."""
+
+    # PERF-003: Module-level artifact cache — keyed by realpath(model_dir).
+    # Avoids repeated joblib.load() calls when ArcPredictor is re-instantiated
+    # with the same model directory within the same process.
+    _model_cache: Dict[str, Dict[str, Any]] = {}
 
     # Added config
     def __init__(self, model_dir: str, config: Dict[str, Any] = None):
@@ -25,6 +31,20 @@ class ArcPredictor:
 
     def load_models(self):
         """Load all trained models and scalers."""
+        # PERF-003: Check the process-level artifact cache first.
+        cache_key = os.path.realpath(self.model_dir)
+        if cache_key in ArcPredictor._model_cache:
+            cached = ArcPredictor._model_cache[cache_key]
+            self.models = dict(cached['models'])
+            self.scalers = dict(cached['scalers'])
+            self.feature_info = dict(cached['feature_info'])
+            self.model_load_errors = dict(cached['model_load_errors'])
+            self.logger.info(
+                "ArcPredictor: loaded model artifacts from in-process cache "
+                "(skipped disk I/O)."
+            )
+            return
+
         model_types = [
             'health_prediction',
             'anomaly_detection',
@@ -135,6 +155,14 @@ class ArcPredictor:
                 self.feature_info[model_type]['algorithm'] = 'Unknown'
 
         self.logger.info("Model load completed.")
+
+        # PERF-003: Store in cache for future instantiations with same model_dir.
+        ArcPredictor._model_cache[cache_key] = {
+            'models': dict(self.models),
+            'scalers': dict(self.scalers),
+            'feature_info': dict(self.feature_info),
+            'model_load_errors': dict(self.model_load_errors),
+        }
 
     def _ensure_model_loaded(
             self, model_type: str) -> Optional[Dict[str, Any]]:

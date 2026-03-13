@@ -231,6 +231,8 @@ def find_patterns(
                             'count': len(change_points)
                         })
 
+    return patterns
+
 
 def run_statistical_tests(
     data: pd.DataFrame,

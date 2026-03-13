@@ -56,6 +56,26 @@ foreach ($folder in $functionFolders) {
         $functions = Get-ChildItem -Path $folderPath -Filter "*.ps1"
         foreach ($function in $functions) {
             try {
+                $tokens = $null
+                $parseErrors = $null
+                $ast = [System.Management.Automation.Language.Parser]::ParseFile($function.FullName, [ref]$tokens, [ref]$parseErrors)
+
+                if ($parseErrors.Count -gt 0) {
+                    Write-Warning "Skipping function import for $($function.FullName) because the file has parse errors."
+                    continue
+                }
+
+                $topLevelStatements = @($ast.EndBlock.Statements)
+                $containsOnlyFunctions =
+                    $topLevelStatements.Count -gt 0 -and
+                    @($topLevelStatements | Where-Object { $_ -isnot [System.Management.Automation.Language.FunctionDefinitionAst] }).Count -eq 0 -and
+                    -not $ast.ParamBlock
+
+                if (-not $containsOnlyFunctions) {
+                    Write-Verbose "Skipping script-style file during module import: $($function.FullName)"
+                    continue
+                }
+
                 . $function.FullName
             }
             catch {

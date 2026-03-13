@@ -25,7 +25,9 @@ from Python.common.security import (  # noqa: E402
     validate_server_name,
     validate_analysis_type,
     parse_json_safely,
-    InputValidationError
+    InputValidationError,
+    validate_json_against_schema,
+    load_cli_contracts_schema_definition
 )
 
 
@@ -159,7 +161,7 @@ def main():
 
     try:
         # Load configuration from JSON file
-        config_path = os.path.abspath(args.configpath)
+        config_path = os.path.realpath(os.path.abspath(args.configpath))
         if not os.path.exists(config_path):
             emit_error(
                 error_type=ErrorCategory.FILE_NOT_FOUND,
@@ -218,9 +220,25 @@ def main():
                     server_name=args.servername,
                     analysis_type=args.analysistype
                 )
+            # SEC-001: Validate the parsed payload against CLI contracts schema
+            _srv_schema = load_cli_contracts_schema_definition('serverDataInput')
+            if _srv_schema is not None:
+                _valid, _err = validate_json_against_schema(
+                    server_data_input, _srv_schema,
+                    param_name="--serverdatajson"
+                )
+                if not _valid:
+                    emit_error(
+                        error_type=ErrorCategory.VALIDATION,
+                        message=_err,
+                        exit_code=ExitCode.VALIDATION_ERROR,
+                        details={"param_name": "--serverdatajson"},
+                        server_name=args.servername,
+                        analysis_type=args.analysistype
+                    )
 
         # Validate model directory exists and has content
-        model_dir_abs = os.path.abspath(args.modeldir)
+        model_dir_abs = os.path.realpath(os.path.abspath(args.modeldir))
         validate_model_directory(
             model_dir=model_dir_abs,
             server_name=args.servername,
@@ -240,14 +258,32 @@ def main():
         # Optionally record remediation outcome
         if args.remediationoutcomejson:
             try:
-                remediation_payload = json.loads(
-                    args.remediationoutcomejson
+                remediation_payload = parse_json_safely(
+                    args.remediationoutcomejson,
+                    param_name="--remediationoutcomejson"
+                )
+            except InputValidationError as e:
+                raise ValueError(
+                    f"Invalid --remediationoutcomejson payload: {e.message}"
                 )
             except json.JSONDecodeError as e:
                 raise ValueError(
                     f"Invalid JSON provided in --remediationoutcomejson: "
                     f"{e}"
                 )
+            # SEC-001: Validate the remediation payload structure
+            _rem_schema = load_cli_contracts_schema_definition(
+                'remediationOutcomeInput'
+            )
+            if _rem_schema is not None:
+                _valid, _err = validate_json_against_schema(
+                    remediation_payload, _rem_schema,
+                    param_name="--remediationoutcomejson"
+                )
+                if not _valid:
+                    raise ValueError(
+                        f"Remediation payload schema validation failed: {_err}"
+                    )
 
             outcome_response = engine.record_remediation_outcome(
                 remediation_payload=remediation_payload,
@@ -257,7 +293,9 @@ def main():
 
             if args.exportretrainpath:
                 export_response = engine.export_retrain_requests(
-                    output_path=os.path.abspath(args.exportretrainpath),
+                    output_path=os.path.realpath(
+                        os.path.abspath(args.exportretrainpath)
+                    ),
                     consume=args.consumeexportqueue,
                 )
                 results["retrain_export"] = export_response

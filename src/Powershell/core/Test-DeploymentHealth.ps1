@@ -20,7 +20,7 @@ function Test-DeploymentHealth {
         try {
             # Check Arc Agent Status
             $arcStatus = Get-ArcAgentStatus -ServerName $ServerName
-            $arcStatusValue = if ($null -ne $arcStatus.Status) { $arcStatus.Status } else { $arcStatus.Success }
+            $arcStatusValue = if ($null -ne $arcStatus.Status) { $arcStatus.Status -eq 'Connected' } else { [bool]$arcStatus.Success }
             $healthStatus.Components += @{
                 Name = "ArcAgent"
                 Status = $arcStatusValue
@@ -30,7 +30,7 @@ function Test-DeploymentHealth {
 
             # Check Arc Connection
             $arcConnection = Test-ArcConnection -ServerName $ServerName
-            $arcConnectionValue = if ($null -ne $arcConnection.Status) { $arcConnection.Status } else { $arcConnection.Success }
+            $arcConnectionValue = if ($null -ne $arcConnection.Status) { [bool]$arcConnection.Status } else { [bool]$arcConnection.Success }
             $healthStatus.Components += @{
                 Name = "ArcConnectivity"
                 Status = $arcConnectionValue

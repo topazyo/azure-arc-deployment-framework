@@ -85,7 +85,7 @@ try {
             Write-Log "Creating local test log directory: $LocalTestLogDirectory"
             New-Item -ItemType Directory -Path $LocalTestLogDirectory -Force -ErrorAction Stop | Out-Null
         }
-        Write-Log "Appending test message to $fullLocalTestLogPath: `"$testMessage`""
+        Write-Log ("Appending test message to {0}: {1}" -f $fullLocalTestLogPath, $testMessage)
         Add-Content -Path $fullLocalTestLogPath -Value $testMessage -ErrorAction Stop
     } catch {
         Write-Log "Failed to write test log entry to '$fullLocalTestLogPath'. Error: $($_.Exception.Message)" -Level "ERROR"
@@ -144,7 +144,8 @@ try {
         $finalMessage = "Test log entry with TestID '$uniqueTestId' successfully found in '$TestLogTableName'. Ingestion time approx $ingestionTimeSeconds seconds."
     }
 
-    Write-Log $finalMessage -Level (if($logFound){"INFO"}else{"ERROR"})
+    $finalLevel = if ($logFound) { 'INFO' } else { 'ERROR' }
+    Write-Log $finalMessage -Level $finalLevel
 
     $result = @{
         TestID                 = $uniqueTestId

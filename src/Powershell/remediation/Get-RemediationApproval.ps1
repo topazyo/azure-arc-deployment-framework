@@ -108,6 +108,7 @@ Function Get-RemediationApproval {
                 "Q"         { $approvalStatus = "UserQuit"; break }
                 default     { Write-Host "Invalid input. Please enter Y, N, D, or Q." -ForegroundColor Red }
             }
+            if ($approvalStatus -ne 'Pending') { break }
         } catch {
              Write-Log "Error during user prompt: $($_.Exception.Message)" -Level "ERROR"
              $approvalStatus = "ErrorPromptFailed" # Or handle as Denied

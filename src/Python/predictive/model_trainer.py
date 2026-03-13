@@ -124,7 +124,7 @@ class ArcModelTrainer:
                     fill_value = 0  # Fallback to 0
                     self.logger.warning(
                         f"Mean for column {col} in {model_type} is NaN. Filling with 0.")
-                df[col].fillna(fill_value, inplace=True)
+                df[col] = df[col].fillna(fill_value)
         elif strategy == 'median':
             for col in numeric_cols:
                 fill_value = df[col].median()
@@ -132,11 +132,11 @@ class ArcModelTrainer:
                     fill_value = 0
                     self.logger.warning(
                         f"Median for column {col} in {model_type} is NaN. Filling with 0.")
-                df[col].fillna(fill_value, inplace=True)
+                df[col] = df[col].fillna(fill_value)
         elif strategy == 'zero':
-            df.fillna(0, inplace=True)
+            df = df.fillna(0)
         elif strategy == 'dropna':  # Not generally recommended for feature sets unless handled carefully
-            df.dropna(inplace=True)
+            df = df.dropna()
             self.logger.info(
                 f"Dropped rows with NaNs for {model_type}. Original rows: {original_nan_counts}, After drop: {
                     len(df)}")

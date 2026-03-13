@@ -48,7 +48,7 @@ function Test-ArcPrerequisites {
 
             $osStatus = $false
             if (-not [string]::IsNullOrWhiteSpace($osVersion)) {
-                $osStatus = Test-OSCompatibility -OSVersion $osVersion
+                $osStatus = Test-OSCompatibility -Version $osVersion
             }
 
             $osDetails = $null

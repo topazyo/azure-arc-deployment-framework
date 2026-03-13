@@ -21,7 +21,7 @@ def test_create_temporal_features(sample_training_data, sample_config):
     sample_training_data['timestamp'] = pd.date_range(
         start='2024-01-01',
         periods=len(sample_training_data),
-        freq='H'
+        freq='h'
     )
     
     temporal_features = engineer._create_temporal_features(sample_training_data)

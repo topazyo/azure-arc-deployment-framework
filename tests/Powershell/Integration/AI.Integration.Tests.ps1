@@ -179,7 +179,7 @@ Describe "Get-PredictiveInsights - Python Integration Tests" {
                     param($FilePath, $ArgumentList, $Wait, $PassThru, $NoNewWindow, $RedirectStandardOutput, $RedirectStandardError)
                     $analysisType = $ArgumentList[5].Trim('"')
                     $serverName = $ArgumentList[3].Trim('"')
-                                        $mockOut = @"
+                    $mockOut = @"
 {
     "overall_risk": { "score": 0.4, "level": "Low" },
     "recommendations": ["mock recommendation", "mock recommendation 2"],
@@ -187,9 +187,12 @@ Describe "Get-PredictiveInsights - Python Integration Tests" {
     "input_analysistype": "$analysisType"
 }
 "@
-                    Set-Content -Path 'stdout.txt' -Value $mockOut -ErrorAction SilentlyContinue
-                    Set-Content -Path 'stderr.txt' -Value '' -ErrorAction SilentlyContinue
-                    return [pscustomobject]@{ ExitCode = 0 }
+                    Set-Content -Path $RedirectStandardOutput -Value $mockOut -ErrorAction SilentlyContinue
+                    Set-Content -Path $RedirectStandardError -Value '' -ErrorAction SilentlyContinue
+                    $mockProc = [pscustomobject]@{ ExitCode = 0 }
+                    $mockProc | Add-Member -MemberType ScriptMethod -Name 'WaitForExit' -Value { param($ms) return $true }
+                    $mockProc | Add-Member -MemberType ScriptMethod -Name 'Kill' -Value { }
+                    return $mockProc
                 }
 
                 Mock Get-Content -ParameterFilter { $Path -eq 'stdout.txt' } {
@@ -258,9 +261,13 @@ Describe "Get-PredictiveInsights - Python Integration Tests" {
             if ($script:IntegrationSkipReason -and -not $script:UseMockIntegration) { Set-ItResult -Skipped -Because $script:IntegrationSkipReason; return }
             if ($script:UseMockIntegration) {
                 Mock Start-Process {
-                    Set-Content -Path 'stdout.txt' -Value ''
-                    Set-Content -Path 'stderr.txt' -Value 'mock failure'
-                    return [pscustomobject]@{ ExitCode = 1 }
+                    param($FilePath, $ArgumentList, $Wait, $PassThru, $NoNewWindow, $RedirectStandardOutput, $RedirectStandardError)
+                    Set-Content -Path $RedirectStandardOutput -Value '' -ErrorAction SilentlyContinue
+                    Set-Content -Path $RedirectStandardError -Value 'mock failure' -ErrorAction SilentlyContinue
+                    $mockProc = [pscustomobject]@{ ExitCode = 1 }
+                    $mockProc | Add-Member -MemberType ScriptMethod -Name 'WaitForExit' -Value { param($ms) return $true }
+                    $mockProc | Add-Member -MemberType ScriptMethod -Name 'Kill' -Value { }
+                    return $mockProc
                 }
             }
 

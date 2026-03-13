@@ -25,7 +25,9 @@ from Python.common.security import (  # noqa: E402
     validate_server_name,
     validate_analysis_type,
     parse_json_safely,
-    InputValidationError
+    InputValidationError,
+    validate_json_against_schema,
+    load_cli_contracts_schema_definition
 )
 
 # If script is in src/Python/ and models in data/models/latest at
@@ -114,13 +116,14 @@ def main():
 
     try:
         # Validate model directory
-        model_exists = os.path.exists(args.model_dir)
-        model_has_files = model_exists and os.listdir(args.model_dir)
+        model_dir = os.path.realpath(os.path.abspath(args.model_dir))
+        model_exists = os.path.exists(model_dir)
+        model_has_files = model_exists and os.listdir(model_dir)
         if not model_exists or not model_has_files:
             emit_structured_error(
                 error_type=ErrorCategory.MODEL_ERROR,
                 message="Model directory is empty or does not exist",
-                details={"model_dir": args.model_dir}
+                details={"model_dir": model_dir}
             )
             return
 
@@ -129,7 +132,7 @@ def main():
         def load_predictor(model_dir: str) -> ArcPredictor:
             return ArcPredictor(model_dir=model_dir)
 
-        predictor = load_predictor(args.model_dir)
+        predictor = load_predictor(model_dir)
 
         # Check if models were loaded
         if not predictor.models:
@@ -166,6 +169,23 @@ def main():
                 }
             )
             return
+
+        # SEC-001: Validate telemetry payload against CLI contracts schema
+        _telem_schema = load_cli_contracts_schema_definition(
+            'telemetryDataInput'
+        )
+        if _telem_schema is not None:
+            _valid, _err = validate_json_against_schema(
+                telemetry_data, _telem_schema,
+                param_name="--telemetrydatajson"
+            )
+            if not _valid:
+                emit_structured_error(
+                    error_type=ErrorCategory.VALIDATION,
+                    message=_err,
+                    details={"param_name": "--telemetrydatajson"}
+                )
+                return
 
         # Build output results
         output_results = {

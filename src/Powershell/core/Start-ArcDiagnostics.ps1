@@ -196,13 +196,14 @@ function Start-ArcDiagnostics {
             Write-Verbose "Diagnostic results exported to: $outputFile"
         }
         catch {
-            Write-Log -Message "Diagnostic collection failed: $($_.Exception.Message)" -Level Error -Component 'Start-ArcDiagnostics'
-            Write-Error -ErrorRecord $_
             $diagnosticResults.Error = @{
                 Message = $_.Exception.Message
                 Time = Get-Date
                 Details = $_.Exception.StackTrace
             }
+            try {
+                Write-Log -Message "Diagnostic collection failed: $($_.Exception.Message)" -Level Error -Component 'Start-ArcDiagnostics'
+            } catch { }
         }
     }
 

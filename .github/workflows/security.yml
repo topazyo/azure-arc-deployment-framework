@@ -1,0 +1,43 @@
+name: Security Scanning
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: [main, develop]
+  schedule:
+    - cron: '0 2 * * 1'  # Weekly scan on Mondays at 02:00 UTC
+
+jobs:
+  secret-scan:
+    name: Gitleaks Secret Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history required for complete scanning
+
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  hardcoded-secret-grep:
+    name: Hardcoded Secret Pattern Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Scan for ARC_WORKSPACE_KEY / ARC_WORKSPACE_ID literals
+        run: |
+          echo "Scanning for hardcoded workspace credentials..."
+          MATCHES=$(git grep -rn "ARC_WORKSPACE_KEY\|ARC_WORKSPACE_ID" \
+            -- '*.json' '*.ps1' '*.py' '*.yml' '*.yaml' 2>/dev/null || true)
+          if [ -n "$MATCHES" ]; then
+            echo "::error::Hardcoded workspace credentials detected:"
+            echo "$MATCHES"
+            exit 1
+          fi
+          echo "No hardcoded credentials found."

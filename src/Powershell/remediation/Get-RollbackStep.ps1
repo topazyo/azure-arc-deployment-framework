@@ -90,7 +90,7 @@ Function Get-RollbackStep {
                 ImplementationType  = $stepDef.ImplementationType
                 RollbackTarget      = $stepDef.TargetScriptPath # Or TargetFunction, etc.
                 ResolvedParameters  = $params
-                ConfirmationRequired = if($stepDef.PSObject.Properties.Contains('ConfirmationRequired')) { $stepDef.ConfirmationRequired } else { $true }
+                ConfirmationRequired = if($null -ne $stepDef.PSObject.Properties['ConfirmationRequired']) { $stepDef.ConfirmationRequired } else { $true }
             }) | Out-Null
              Write-Log "Added rollback step from specific rule: Title='$($stepDef.Title)'."
         }

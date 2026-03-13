@@ -39,19 +39,12 @@ Describe "Get-PredictiveInsights AI Function" {
         # Mock Start-Process to simulate successful Python script execution
         Mock Start-Process {
             param($FilePath, $ArgumentList, $Wait, $NoNewWindow, $PassThru, $RedirectStandardOutput, $RedirectStandardError)
-            # Simulate Python script writing to stdout.txt
-            Set-Content -Path "stdout.txt" -Value '{"overall_risk": {"score": 0.5, "level": "Medium"}, "recommendations": []}'
-            Set-Content -Path "stderr.txt" -Value "" # Empty stderr
-            return [pscustomobject]@{ ExitCode = 0 } # Simulate successful exit
-        }
-
-        Mock Get-Content {
-            param($Path)
-            if ($Path -eq "stdout.txt") {
-                return Microsoft.PowerShell.Management\Get-Content -LiteralPath "stdout.txt" -Raw # Read actual temp content
-            } elseif ($Path -eq "stderr.txt") {
-                return Microsoft.PowerShell.Management\Get-Content -LiteralPath "stderr.txt" -Raw
-            }
+            Set-Content -Path $RedirectStandardOutput -Value '{"overall_risk": {"score": 0.5, "level": "Medium"}, "recommendations": []}'
+            Set-Content -Path $RedirectStandardError -Value ""
+            $mockProc = [pscustomobject]@{ ExitCode = 0 }
+            $mockProc | Add-Member -MemberType ScriptMethod -Name 'WaitForExit' -Value { param($ms) return $true }
+            $mockProc | Add-Member -MemberType ScriptMethod -Name 'Kill' -Value { }
+            return $mockProc
         }
 
         Mock Remove-Item { } # Mock Remove-Item to do nothing for temp files
@@ -96,16 +89,19 @@ Describe "Get-PredictiveInsights AI Function" {
         Should -Invoke -CommandName Start-Process -Times 1 -ParameterFilter {
             $ArgumentList[2] -eq "--servername" -and $ArgumentList[3] -eq "`"$server`"" -and $ArgumentList[4] -eq "--analysistype" -and $ArgumentList[5] -eq "`"$analysis`""
         }
-        Should -Invoke -CommandName Get-Content -Times 2 # Once for stdout, once for stderr
-        Should -Invoke -CommandName Remove-Item -Times 2 # For stdout.txt and stderr.txt
+        Should -Invoke -CommandName Remove-Item -Times 2 # For stdout and stderr temp files
     }
 
     It "should THROW if Python script returns non-zero exit code and provides stderr" {
         $errMsg = "Python script error"
         Mock Start-Process -MockWith {
-            Set-Content "stdout.txt" -Value ""
-            Set-Content "stderr.txt" -Value $errMsg
-            return [pscustomobject]@{ ExitCode = 1 }
+            param($FilePath, $ArgumentList, $Wait, $NoNewWindow, $PassThru, $RedirectStandardOutput, $RedirectStandardError)
+            Set-Content -Path $RedirectStandardOutput -Value ""
+            Set-Content -Path $RedirectStandardError -Value $errMsg
+            $mockProc = [pscustomobject]@{ ExitCode = 1 }
+            $mockProc | Add-Member -MemberType ScriptMethod -Name 'WaitForExit' -Value { param($ms) return $true }
+            $mockProc | Add-Member -MemberType ScriptMethod -Name 'Kill' -Value { }
+            return $mockProc
         }
         { Get-PredictiveInsights -ServerName "server01" } | Should -Throw "AI Engine script failed."
         # Warning/Error messages with $errMsg should be in the console output (Pester might capture this)
@@ -114,9 +110,13 @@ Describe "Get-PredictiveInsights AI Function" {
     It "should return structured error if Python script returns non-zero exit code and stderr is JSON" {
         $errorJson = '{"error": "PythonDetailedError", "details": "Something specific failed"}'
         Mock Start-Process -MockWith {
-            Set-Content "stdout.txt" -Value ""
-            Set-Content "stderr.txt" -Value $errorJson
-            return [pscustomobject]@{ ExitCode = 1 }
+            param($FilePath, $ArgumentList, $Wait, $NoNewWindow, $PassThru, $RedirectStandardOutput, $RedirectStandardError)
+            Set-Content -Path $RedirectStandardOutput -Value ""
+            Set-Content -Path $RedirectStandardError -Value $errorJson
+            $mockProc = [pscustomobject]@{ ExitCode = 1 }
+            $mockProc | Add-Member -MemberType ScriptMethod -Name 'WaitForExit' -Value { param($ms) return $true }
+            $mockProc | Add-Member -MemberType ScriptMethod -Name 'Kill' -Value { }
+            return $mockProc
         }
         # The function currently throws a generic "AI Engine script failed."
         # To test returning the object, the function would need to change its throw behavior for JSON errors.
@@ -126,18 +126,26 @@ Describe "Get-PredictiveInsights AI Function" {
 
     It "should THROW if Python script returns zero exit code but empty stdout" {
         Mock Start-Process -MockWith {
-            Set-Content "stdout.txt" -Value ""
-            Set-Content "stderr.txt" -Value ""
-            return [pscustomobject]@{ ExitCode = 0 }
+            param($FilePath, $ArgumentList, $Wait, $NoNewWindow, $PassThru, $RedirectStandardOutput, $RedirectStandardError)
+            Set-Content -Path $RedirectStandardOutput -Value ""
+            Set-Content -Path $RedirectStandardError -Value ""
+            $mockProc = [pscustomobject]@{ ExitCode = 0 }
+            $mockProc | Add-Member -MemberType ScriptMethod -Name 'WaitForExit' -Value { param($ms) return $true }
+            $mockProc | Add-Member -MemberType ScriptMethod -Name 'Kill' -Value { }
+            return $mockProc
         }
         { Get-PredictiveInsights -ServerName "server01" } | Should -Throw "AI Engine returned empty output."
     }
 
     It "should THROW if Python script returns zero exit code but invalid JSON in stdout" {
         Mock Start-Process -MockWith {
-            Set-Content "stdout.txt" -Value "This is not JSON"
-            Set-Content "stderr.txt" -Value ""
-            return [pscustomobject]@{ ExitCode = 0 }
+            param($FilePath, $ArgumentList, $Wait, $NoNewWindow, $PassThru, $RedirectStandardOutput, $RedirectStandardError)
+            Set-Content -Path $RedirectStandardOutput -Value "This is not JSON"
+            Set-Content -Path $RedirectStandardError -Value ""
+            $mockProc = [pscustomobject]@{ ExitCode = 0 }
+            $mockProc | Add-Member -MemberType ScriptMethod -Name 'WaitForExit' -Value { param($ms) return $true }
+            $mockProc | Add-Member -MemberType ScriptMethod -Name 'Kill' -Value { }
+            return $mockProc
         }
         { Get-PredictiveInsights -ServerName "server01" } | Should -Throw "JSON parsing failed."
     }
@@ -149,10 +157,13 @@ Describe "Get-PredictiveInsights AI Function" {
         foreach ($aType in $analysisTypesToTest) {
             # Reset Start-Process mock for verification if it's not in BeforeEach for parameter filter
             Mock Start-Process {
-                param($FilePath, $ArgumentList) # simplified for this test
-                Set-Content -Path "stdout.txt" -Value ('{"overall_risk": {"score": 0.3, "level": "Low"}, "analysis_type_processed": "' + $ArgumentList[5].Trim('"') + '" }') # Python script echoes analysistype
-                Set-Content -Path "stderr.txt" -Value ""
-                return [pscustomobject]@{ ExitCode = 0 }
+                param($FilePath, $ArgumentList, $Wait, $NoNewWindow, $PassThru, $RedirectStandardOutput, $RedirectStandardError)
+                Set-Content -Path $RedirectStandardOutput -Value ('{"overall_risk": {"score": 0.3, "level": "Low"}, "analysis_type_processed": "' + $ArgumentList[5].Trim('"') + '" }')
+                Set-Content -Path $RedirectStandardError -Value ""
+                $mockProc = [pscustomobject]@{ ExitCode = 0 }
+                $mockProc | Add-Member -MemberType ScriptMethod -Name 'WaitForExit' -Value { param($ms) return $true }
+                $mockProc | Add-Member -MemberType ScriptMethod -Name 'Kill' -Value { }
+                return $mockProc
             } -Verifiable
 
             $result = Get-PredictiveInsights -ServerName $server -AnalysisType $aType
@@ -174,9 +185,12 @@ Describe "Get-PredictiveInsights AI Function" {
              $FilePath | Should -Be $customPython
              $ArgumentList[0].Trim('"') | Should -Be $customScriptPath # ArgumentList[0] is the script path
 
-             Set-Content "stdout.txt" -Value "{}"
-             Set-Content "stderr.txt" -Value ""
-             return [pscustomobject]@{ ExitCode = 0 }
+             Set-Content -Path $RedirectStandardOutput -Value "{}"
+             Set-Content -Path $RedirectStandardError -Value ""
+             $mockProc = [pscustomobject]@{ ExitCode = 0 }
+             $mockProc | Add-Member -MemberType ScriptMethod -Name 'WaitForExit' -Value { param($ms) return $true }
+             $mockProc | Add-Member -MemberType ScriptMethod -Name 'Kill' -Value { }
+             return $mockProc
            } -Verifiable
 
         Get-PredictiveInsights -ServerName "serverX" -PythonExecutable $customPython -ScriptPath $customScriptPath | Should -Not -BeNull

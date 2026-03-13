@@ -107,6 +107,7 @@ function Get-PredictiveInsights {
             $CorrelationId = [System.Guid]::NewGuid().ToString('N').Substring(0, 16)
         }
         Write-Verbose "Correlation ID: $CorrelationId"
+    }
 
     process {
         Write-Verbose "Retrieving predictive insights for server '$ServerName' (Analysis: $AnalysisType)..."

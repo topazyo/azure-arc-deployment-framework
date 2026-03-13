@@ -1,0 +1,51 @@
+{
+  "Logs": {
+    "AMA": null,
+    "Security": null,
+    "System": null,
+    "Arc": null
+  },
+  "ServerName": "TEST-SERVER",
+  "DetailedAnalysis": {},
+  "Connectivity": {
+    "AMA": {
+      "Success": true
+    },
+    "Proxy": {
+      "Proxy": null
+    },
+    "Arc": {
+      "Success": true
+    },
+    "NetworkPaths": null
+  },
+  "ArcStatus": {
+    "Configuration": {
+      "Version": "1.0"
+    },
+    "Dependencies": null,
+    "ServiceStatus": "Running",
+    "LastHeartbeat": "2026-03-08T07:26:30.6408176+02:00",
+    "StartType": "Automatic"
+  },
+  "AMAStatus": {
+    "DCRStatus": {
+      "State": "Enabled"
+    },
+    "Configuration": {
+      "Version": "1.0"
+    },
+    "ServiceStatus": "Running",
+    "DataCollection": {
+      "Status": "Active",
+      "LastHeartbeat": "2026-03-08T07:31:30.6455682+02:00"
+    },
+    "StartType": "Automatic"
+  },
+  "Timestamp": "2026-03-08T07:31:30.6338939+02:00",
+  "SystemState": {
+    "OS": {
+      "Version": "10.0.19041"
+    }
+  }
+}

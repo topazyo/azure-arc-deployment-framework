@@ -46,7 +46,7 @@ Function Test-OperationResult {
     Write-Log "Starting Test-OperationResult script."
     Write-Log "Parameters: ExpectedStatus='$ExpectedStatus', SuccessIfAllExpectedPropertiesMatch='$SuccessIfAllExpectedPropertiesMatch'."
     if ($ExpectedProperties) { Write-Log "ExpectedProperties provided: $($ExpectedProperties.Keys -join ', ')" -Level "DEBUG" }
-    if ($OperationOutput) { Write-Log "OperationOutput received: $($OperationOutput | Out-String -Depth 2 -Width 120)" -Level "DEBUG"} else { Write-Log "OperationOutput is null."}
+    if ($OperationOutput) { Write-Log "OperationOutput received: $($OperationOutput | Out-String -Width 120)" -Level "DEBUG"} else { Write-Log "OperationOutput is null."}
 
 
     $validationDetails = [System.Collections.ArrayList]::new()
@@ -124,11 +124,11 @@ Function Test-OperationResult {
                         # Invoke scriptblock, passing the actual value as $_ or $args[0]
                         $propMatch = Invoke-Command -ScriptBlock $expectedPropCondition -ArgumentList $actualPropValue # Or $actualPropValue | & $expectedPropCondition
                         $propCheckMessage = "Property '$propKey': Custom logic (ScriptBlock) evaluated to $propMatch. Actual value: '$actualPropValue'."
-                        Write-Log $propCheckMessage -Level (if($propMatch){"DEBUG"}else{"WARNING"})
+                        Write-Log $propCheckMessage -Level $(if($propMatch){"DEBUG"}else{"WARNING"})
                     } else { # Static value comparison
                         $propMatch = ($actualPropValue -eq $expectedPropCondition)
                         $propCheckMessage = "Property '$propKey': Expected: '$expectedPropCondition', Actual: '$actualPropValue'."
-                        Write-Log $propCheckMessage -Level (if($propMatch){"DEBUG"}else{"WARNING"})
+                        Write-Log $propCheckMessage -Level $(if($propMatch){"DEBUG"}else{"WARNING"})
                     }
                 } catch {
                     $propMatch = $false

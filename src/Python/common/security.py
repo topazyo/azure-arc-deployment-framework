@@ -9,9 +9,11 @@ This module provides security-related utilities including:
 Phase 5 (Security Hardening) implementation.
 """
 
+import os
 import re
 import json
 import logging
+import jsonschema
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 
@@ -56,6 +58,16 @@ SENSITIVE_VALUE_PATTERNS: List[re.Pattern] = [
 
 # Redaction placeholder
 REDACTED_VALUE = '*** REDACTED ***'
+
+# ===========================================================================
+# SEC-001 Input Payload Validation — CLI contracts schema path
+# ===========================================================================
+_CLI_CONTRACTS_SCHEMA_DIR = os.path.normpath(
+    os.path.join(os.path.dirname(__file__), '..', '..', 'config', 'schemas')
+)
+_CLI_CONTRACTS_SCHEMA_PATH = os.path.join(
+    _CLI_CONTRACTS_SCHEMA_DIR, 'cli_contracts.schema.json'
+)
 
 
 def is_sensitive_key(key: Any) -> bool:
@@ -342,6 +354,56 @@ def parse_json_safely(
     return json.loads(json_string)
 
 
+def load_cli_contracts_schema_definition(
+    definition_name: str
+) -> Optional[Dict[str, Any]]:
+    """
+    Load a named $defs definition from cli_contracts.schema.json.
+
+    Args:
+        definition_name: Name of the $defs key (e.g., 'serverDataInput')
+
+    Returns:
+        Schema definition dict, or None if the file is unavailable
+    """
+    try:
+        with open(_CLI_CONTRACTS_SCHEMA_PATH, 'r') as f:
+            schema = json.load(f)
+        defn = schema.get('$defs', {}).get(definition_name)
+        # Strip legacy anchor-style $id ("#name") which is not a valid URI
+        # and causes jsonschema SchemaError when used as a standalone schema.
+        if defn and '$id' in defn:
+            defn = {k: v for k, v in defn.items() if k != '$id'}
+        return defn
+    except (IOError, json.JSONDecodeError):
+        return None
+
+
+def validate_json_against_schema(
+    data: Any,
+    schema: Dict[str, Any],
+    param_name: str = "input"
+) -> Tuple[bool, Optional[str]]:
+    """
+    Validate parsed JSON data against a JSON Schema definition.
+
+    Args:
+        data: Parsed JSON data to validate
+        schema: JSON Schema definition dict
+        param_name: Parameter name for error messages
+
+    Returns:
+        Tuple of (is_valid, error_message)
+    """
+    try:
+        jsonschema.validate(instance=data, schema=schema)
+        return True, None
+    except jsonschema.ValidationError as e:
+        return False, f"{param_name}: {e.message}"
+    except jsonschema.SchemaError as e:
+        return False, f"Internal schema error for {param_name}: {e.message}"
+
+
 def validate_server_name(server_name: str) -> Tuple[bool, Optional[str]]:
     """
     Validate server name to prevent injection attacks.
@@ -423,24 +485,22 @@ def validate_file_path(
     Returns:
         Tuple of (is_valid, error_message)
     """
-    import os
-
     if not path:
         return False, "File path cannot be empty"
 
     if not isinstance(path, str):
         return False, f"File path must be string, got {type(path).__name__}"
 
-    # Normalize path to detect traversal
-    abs_path = os.path.abspath(path)
-
-    # Check for path traversal attempts
+    # Reject traversal sequences in the raw input before canonicalization
     if '..' in path:
         return False, "Path traversal patterns (..) not allowed"
 
-    # Check extension if required
+    # Canonicalize: resolve symlinks and eliminate any remaining traversal
+    abs_path = os.path.realpath(os.path.abspath(path))
+
+    # Check extension if required (use canonicalized path)
     if allowed_extensions:
-        _, ext = os.path.splitext(path)
+        _, ext = os.path.splitext(abs_path)
         if ext.lower() not in [e.lower() for e in allowed_extensions]:
             return False, (
                 f"File extension '{ext}' not allowed. "

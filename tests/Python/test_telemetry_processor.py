@@ -22,7 +22,8 @@ def test_prepare_data(sample_telemetry_data, sample_config):
     assert isinstance(df, pd.DataFrame)
     assert not df.empty
     assert 'timestamp' in df.columns
-    assert df['timestamp'].dtype == 'datetime64[ns]'
+    # Accept either ns or us precision — pandas 3.0 defaults to datetime64[us]
+    assert str(df['timestamp'].dtype).startswith('datetime64[')
     assert not df.duplicated().any()
 
 def test_extract_features(sample_telemetry_data, sample_config):
