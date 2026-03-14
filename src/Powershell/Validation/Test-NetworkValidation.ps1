@@ -1,5 +1,6 @@
 function Test-NetworkValidation {
     [CmdletBinding()]
+    [OutputType([pscustomobject])]
     param (
         [Parameter(Mandatory)]
         [string]$ServerName,
@@ -130,7 +131,7 @@ function Test-NetworkValidation {
 
             # 7. Network Route Tests (if detailed output requested)
             if ($DetailedOutput) {
-                $routeResults = Test-NetworkRoutes -ServerName $ServerName
+                $routeResults = Test-NetworkRoute -ServerName $ServerName
                 $validationResults.Details += @{
                     Component = "Routes"
                     Results = $routeResults
@@ -153,7 +154,7 @@ function Test-NetworkValidation {
             }
 
             # Generate recommendations
-            $validationResults.Recommendations = Get-NetworkRecommendations -ValidationResults $validationResults.Details
+            $validationResults.Recommendations = Get-NetworkRecommendation -ValidationResults $validationResults.Details
         }
         catch {
             $validationResults.Status = "Error"
@@ -171,6 +172,7 @@ function Test-NetworkValidation {
 
 function Test-EndpointConnectivity {
     [CmdletBinding()]
+    [OutputType([hashtable])]
     param (
         [Parameter(Mandatory)]
         [string]$ServerName,
@@ -285,6 +287,7 @@ function Test-EndpointConnectivity {
 
 function Test-DNSResolution {
     [CmdletBinding()]
+    [OutputType([hashtable])]
     param (
         [Parameter(Mandatory)]
         [string]$ServerName,
@@ -348,6 +351,7 @@ function Test-DNSResolution {
 
 function Test-ProxyConfiguration {
     [CmdletBinding()]
+    [OutputType([hashtable])]
     param ([string]$ServerName)
 
     $results = @{
@@ -464,6 +468,7 @@ function Test-ProxyConfiguration {
 
 function Test-TLSConfiguration {
     [CmdletBinding()]
+    [OutputType([hashtable])]
     param ([string]$ServerName)
 
     $results = @{
@@ -590,6 +595,7 @@ function Test-TLSConfiguration {
 
 function Test-NetworkPerformance {
     [CmdletBinding()]
+    [OutputType([hashtable])]
     param (
         [Parameter(Mandatory)]
         [string]$ServerName,
@@ -721,6 +727,7 @@ function Test-NetworkPerformance {
 
 function Test-FirewallConfiguration {
     [CmdletBinding()]
+    [OutputType([hashtable])]
     param ([string]$ServerName)
 
     $results = @{
@@ -827,8 +834,9 @@ function Test-FirewallConfiguration {
     return $results
 }
 
-function Test-NetworkRoutes {
+function Test-NetworkRoute {
     [CmdletBinding()]
+    [OutputType([hashtable])]
     param ([string]$ServerName)
 
     $results = @{
@@ -917,8 +925,9 @@ function Test-NetworkRoutes {
     return $results
 }
 
-function Get-NetworkRecommendations {
+function Get-NetworkRecommendation {
     [CmdletBinding()]
+    [OutputType([array])]
     param ([array]$ValidationResults)
 
     $recommendations = @()

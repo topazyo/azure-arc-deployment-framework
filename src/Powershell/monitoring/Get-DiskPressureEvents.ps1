@@ -36,12 +36,12 @@ function Get-DriveLetterFromSrvEvent2013 {
 
 # --- Main Script Logic ---
 try {
-    Write-Log "Starting Get-DiskPressureEvents script."
-    Write-Log "Parameters: DiskSpaceWarningThresholdPercent='$DiskSpaceWarningThresholdPercent' (conceptual), MaxEventsPerQuery='$MaxEventsPerQuery', StartTime='$StartTime', ServerName='$ServerName'"
+    Write-Log "Starting Get-DiskPressureEvents script." -LogPath $LogPath
+    Write-Log "Parameters: DiskSpaceWarningThresholdPercent='$DiskSpaceWarningThresholdPercent' (conceptual), MaxEventsPerQuery='$MaxEventsPerQuery', StartTime='$StartTime', ServerName='$ServerName'" -LogPath $LogPath
 
     if (-not $StartTime) {
         $StartTime = (Get-Date).AddDays(-1)
-        Write-Log "StartTime not specified, defaulting to last 24 hours: $StartTime"
+        Write-Log "StartTime not specified, defaulting to last 24 hours: $StartTime" -LogPath $LogPath
     }
 
     $allDiskRelatedEvents = [System.Collections.ArrayList]::new()
@@ -71,10 +71,10 @@ try {
         # Application logs for specific app errors due to disk full (e.g., database, backup software).
     )
 
-    Write-Log 'Querying event logs for potential disk pressure indicators...'
+    Write-Log 'Querying event logs for potential disk pressure indicators...' -LogPath $LogPath
 
     foreach ($query in $queries) {
-        Write-Log "Executing query: LogName='$($query.LogName)', ProviderName='$($query.ProviderName)', ID='$($query.Id)', Label='$($query.Label)', Keywords='$($query.KeywordsFilter)' on '$ServerName' since '$StartTime'."
+        Write-Log "Executing query: LogName='$($query.LogName)', ProviderName='$($query.ProviderName)', ID='$($query.Id)', Label='$($query.Label)', Keywords='$($query.KeywordsFilter)' on '$ServerName' since '$StartTime'." -LogPath $LogPath
 
         try {
             $filterHashtable = @{
@@ -139,29 +139,29 @@ try {
                     }
                 }
 
-                Write-Log "Found $eventCount relevant events for query [Label: $($query.Label)]."
+                Write-Log "Found $eventCount relevant events for query [Label: $($query.Label)]." -LogPath $LogPath
             }
             else {
-                Write-Log "No events found for query [Label: $($query.Label)] before keyword filtering."
+                Write-Log "No events found for query [Label: $($query.Label)] before keyword filtering." -LogPath $LogPath
             }
         }
         catch [System.Diagnostics.Eventing.Reader.EventLogNotFoundException], [System.UnauthorizedAccessException] {
-            Write-Log "Failed to execute query [Label: $($query.Label)]. Log '$($query.LogName)' might not exist or is inaccessible on '$ServerName'. Error: $($_.Exception.Message)" -Level 'WARNING'
+            Write-Log "Failed to execute query [Label: $($query.Label)]. Log '$($query.LogName)' might not exist or is inaccessible on '$ServerName'. Error: $($_.Exception.Message)" -Level 'WARNING' -LogPath $LogPath
         }
         catch {
-            Write-Log "An error occurred while executing query [Label: $($query.Label)] on '$ServerName'. Error: $($_.Exception.Message)" -Level 'ERROR'
+            Write-Log "An error occurred while executing query [Label: $($query.Label)] on '$ServerName'. Error: $($_.Exception.Message)" -Level 'ERROR' -LogPath $LogPath
         }
     }
 
     $sortedEvents = $allDiskRelatedEvents | Sort-Object Timestamp -Descending
 
-    Write-Log "Get-DiskPressureEvents script finished. Total potentially relevant events retrieved: $($sortedEvents.Count)."
+    Write-Log "Get-DiskPressureEvents script finished. Total potentially relevant events retrieved: $($sortedEvents.Count)." -LogPath $LogPath
     return $sortedEvents
 }
 catch {
-    Write-Log "A critical error occurred in Get-DiskPressureEvents script: $($_.Exception.Message)" -Level 'FATAL'
+    Write-Log "A critical error occurred in Get-DiskPressureEvents script: $($_.Exception.Message)" -Level 'FATAL' -LogPath $LogPath
     if ($_.ScriptStackTrace) {
-        Write-Log "Stack Trace: $($_.ScriptStackTrace)" -Level 'FATAL'
+        Write-Log "Stack Trace: $($_.ScriptStackTrace)" -Level 'FATAL' -LogPath $LogPath
     }
     return @()
 }
