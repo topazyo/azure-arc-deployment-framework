@@ -10,7 +10,7 @@ param (
     [string]$TestLogTableName = "ArcFrameworkDataFlowTest_CL",
 
     # Parameters for DCR/Table creation are omitted in this version as per design.
-    # [string]$DcrName, 
+    # [string]$DcrName,
     # [string]$DcrResourceGroupName,
     # [string]$Location,
 
@@ -27,7 +27,7 @@ param (
 )
 
 # --- Logging Function (for script activity) ---
-function Write-Log {
+function Write-ActivityLog {
     param (
         [string]$Message,
         [string]$Level = "INFO", # INFO, WARNING, ERROR
@@ -35,7 +35,7 @@ function Write-Log {
     )
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
     $logEntry = "[$timestamp] [$Level] $Message"
-    
+
     try {
         if (-not (Test-Path (Split-Path $Path -Parent))) {
             New-Item -ItemType Directory -Path (Split-Path $Path -Parent) -Force -ErrorAction Stop | Out-Null
@@ -44,31 +44,31 @@ function Write-Log {
     }
     catch {
         Write-Warning "Failed to write to activity log file $Path. Error: $($_.Exception.Message). Logging to console instead."
-        Write-Host $logEntry
+        Write-Verbose $logEntry
     }
 }
 
 # --- Main Script Logic ---
 try {
-    Write-Log "Starting Test-DataFlow script."
-    Write-Log "Parameters: WorkspaceId='$WorkspaceId', TestLogTableName='$TestLogTableName', TimeoutSeconds='$TimeoutSeconds', LocalTestLogDir='$LocalTestLogDirectory', LocalTestLogFile='$LocalTestLogFileName'"
-    Write-Log "IMPORTANT ASSUMPTIONS:" -Level "WARNING"
-    Write-Log "1. Custom Log Table '$TestLogTableName' is PRE-CONFIGURED in Workspace '$WorkspaceId'." -Level "WARNING"
-    Write-Log "2. A Data Collection Rule (DCR) is PRE-CONFIGURED and associated with this machine (or relevant target machines)." -Level "WARNING"
-    Write-Log "   This DCR must be set up to collect text logs from '$((Join-Path $LocalTestLogDirectory $LocalTestLogFileName))' and send them to '$TestLogTableName'." -Level "WARNING"
+    Write-ActivityLog "Starting Test-DataFlow script."
+    Write-ActivityLog "Parameters: WorkspaceId='$WorkspaceId', TestLogTableName='$TestLogTableName', TimeoutSeconds='$TimeoutSeconds', LocalTestLogDir='$LocalTestLogDirectory', LocalTestLogFile='$LocalTestLogFileName'"
+    Write-ActivityLog "IMPORTANT ASSUMPTIONS:" -Level "WARNING"
+    Write-ActivityLog "1. Custom Log Table '$TestLogTableName' is PRE-CONFIGURED in Workspace '$WorkspaceId'." -Level "WARNING"
+    Write-ActivityLog "2. A Data Collection Rule (DCR) is PRE-CONFIGURED and associated with this machine (or relevant target machines)." -Level "WARNING"
+    Write-ActivityLog "   This DCR must be set up to collect text logs from '$((Join-Path $LocalTestLogDirectory $LocalTestLogFileName))' and send them to '$TestLogTableName'." -Level "WARNING"
 
     # 1. Azure Prerequisites Check
-    Write-Log "Checking for required Azure PowerShell modules (Az.OperationalInsights, Az.Monitor)..."
+    Write-ActivityLog "Checking for required Azure PowerShell modules (Az.OperationalInsights, Az.Monitor)..."
     # Az.Monitor might be needed if we were creating DCRs, less so for just querying if table exists.
     $azOperationalInsights = Get-Module -Name Az.OperationalInsights -ListAvailable
     if (-not $azOperationalInsights) { throw "Az.OperationalInsights PowerShell module is not installed." }
-    Write-Log "Required Azure modules found."
+    Write-ActivityLog "Required Azure modules found."
 
-    Write-Log "Checking for active Azure context..."
+    Write-ActivityLog "Checking for active Azure context..."
     $azContext = Get-AzContext -ErrorAction SilentlyContinue
     if (-not $azContext) { throw "No active Azure context. Please connect using Connect-AzAccount." }
-    Write-Log "Active Azure context found."
-    
+    Write-ActivityLog "Active Azure context found."
+
     # Optional: Set context to the subscription of the workspace if it can be determined,
     # though Invoke-AzOperationalInsightsQuery primarily uses WorkspaceId.
 
@@ -77,18 +77,18 @@ try {
     $testMessage = "Timestamp=$(Get-Date -Format o), TestID=$uniqueTestId, Message=DataFlowTestEntry from $($env:COMPUTERNAME)"
     $fullLocalTestLogPath = Join-Path $LocalTestLogDirectory $LocalTestLogFileName
 
-    Write-Log "Generated TestID: $uniqueTestId"
-    Write-Log "Test log file path: $fullLocalTestLogPath"
+    Write-ActivityLog "Generated TestID: $uniqueTestId"
+    Write-ActivityLog "Test log file path: $fullLocalTestLogPath"
 
     try {
         if (-not (Test-Path $LocalTestLogDirectory -PathType Container)) {
-            Write-Log "Creating local test log directory: $LocalTestLogDirectory"
+            Write-ActivityLog "Creating local test log directory: $LocalTestLogDirectory"
             New-Item -ItemType Directory -Path $LocalTestLogDirectory -Force -ErrorAction Stop | Out-Null
         }
-        Write-Log ("Appending test message to {0}: {1}" -f $fullLocalTestLogPath, $testMessage)
+        Write-ActivityLog ("Appending test message to {0}: {1}" -f $fullLocalTestLogPath, $testMessage)
         Add-Content -Path $fullLocalTestLogPath -Value $testMessage -ErrorAction Stop
     } catch {
-        Write-Log "Failed to write test log entry to '$fullLocalTestLogPath'. Error: $($_.Exception.Message)" -Level "ERROR"
+        Write-ActivityLog "Failed to write test log entry to '$fullLocalTestLogPath'. Error: $($_.Exception.Message)" -Level "ERROR"
         throw "Failed to write local test log. Check permissions and path."
     }
 
@@ -98,40 +98,40 @@ try {
     # We will try to be a bit flexible by checking RawData first, then specific field.
     $kqlQueryBase = "$TestLogTableName | where RawData contains '$uniqueTestId' or TestID_s == '$uniqueTestId'"
     $kqlQuery = "$kqlQueryBase | take 1"
-    
-    Write-Log "Will query Log Analytics using base: $kqlQueryBase"
-    
+
+    Write-ActivityLog "Will query Log Analytics using base: $kqlQueryBase"
+
     $startTimeOuter = Get-Date
     $elapsedSeconds = 0
     $logFound = $false
     $ingestionTimeSeconds = -1
 
     # Initial delay before first query
-    $initialDelaySeconds = 120 
-    Write-Log "Waiting $initialDelaySeconds seconds for initial ingestion lag..."
+    $initialDelaySeconds = 120
+    Write-ActivityLog "Waiting $initialDelaySeconds seconds for initial ingestion lag..."
     Start-Sleep -Seconds $initialDelaySeconds
     $elapsedSeconds = [int](New-TimeSpan -Start $startTimeOuter -End (Get-Date)).TotalSeconds
 
-    Write-Log "Starting polling for log entry in workspace '$WorkspaceId' (Timeout: $($TimeoutSeconds - $elapsedSeconds) more seconds)..."
+    Write-ActivityLog "Starting polling for log entry in workspace '$WorkspaceId' (Timeout: $($TimeoutSeconds - $elapsedSeconds) more seconds)..."
     while ($elapsedSeconds -lt $TimeoutSeconds) {
         try {
-            Write-Log "Executing KQL query: $kqlQuery (Attempt at $elapsedSeconds seconds)"
+            Write-ActivityLog "Executing KQL query: $kqlQuery (Attempt at $elapsedSeconds seconds)"
             $queryResults = Invoke-AzOperationalInsightsQuery -WorkspaceId $WorkspaceId -Query $kqlQuery -ErrorAction Stop
-            
+
             if ($queryResults.Results.Count -gt 0) {
-                Write-Log "SUCCESS: Test log entry with TestID '$uniqueTestId' found in '$TestLogTableName'." -Level "INFO"
+                Write-ActivityLog "SUCCESS: Test log entry with TestID '$uniqueTestId' found in '$TestLogTableName'." -Level "INFO"
                 $logFound = $true
                 $ingestionTimeSeconds = $elapsedSeconds
                 break
             } else {
-                Write-Log "Log entry not yet found. Retrying in 30 seconds..."
+                Write-ActivityLog "Log entry not yet found. Retrying in 30 seconds..."
             }
         }
         catch {
-            Write-Log "Error during Invoke-AzOperationalInsightsQuery: $($_.Exception.Message)" -Level "WARNING"
+            Write-ActivityLog "Error during Invoke-AzOperationalInsightsQuery: $($_.Exception.Message)" -Level "WARNING"
             # Continue retrying unless it's a fatal error (which ErrorAction Stop should handle by exiting script)
         }
-        
+
         Start-Sleep -Seconds 30
         $elapsedSeconds = [int](New-TimeSpan -Start $startTimeOuter -End (Get-Date)).TotalSeconds
     }
@@ -145,7 +145,7 @@ try {
     }
 
     $finalLevel = if ($logFound) { 'INFO' } else { 'ERROR' }
-    Write-Log $finalMessage -Level $finalLevel
+    Write-ActivityLog $finalMessage -Level $finalLevel
 
     $result = @{
         TestID                 = $uniqueTestId
@@ -159,14 +159,14 @@ try {
         TotalDurationSeconds   = $elapsedSeconds
         Timestamp              = Get-Date
     }
-    
-    Write-Log "Test-DataFlow script finished."
+
+    Write-ActivityLog "Test-DataFlow script finished."
     return $result
 }
 catch {
-    Write-Log "A critical error occurred in Test-DataFlow script: $($_.Exception.Message)" -Level "FATAL"
+    Write-ActivityLog "A critical error occurred in Test-DataFlow script: $($_.Exception.Message)" -Level "FATAL"
     if ($_.ScriptStackTrace) {
-        Write-Log "Stack Trace: $($_.ScriptStackTrace)" -Level "FATAL"
+        Write-ActivityLog "Stack Trace: $($_.ScriptStackTrace)" -Level "FATAL"
     }
     return @{
         TestID                 = if($uniqueTestId){$uniqueTestId}else{"N/A"}

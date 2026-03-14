@@ -1,14 +1,47 @@
+<#
+.SYNOPSIS
+Runs AI-assisted troubleshooting for a target server.
+
+.DESCRIPTION
+Initializes AI components, performs predictive analysis, analyzes diagnostic data,
+and optionally runs AI-driven remediation before producing an enhanced report.
+
+.PARAMETER ServerName
+Target server to troubleshoot.
+
+.PARAMETER AutoRemediate
+Runs the generated remediation plan when supported by the workflow.
+
+.OUTPUTS
+PSCustomObject
+
+.EXAMPLE
+Start-AIEnhancedTroubleshooting -ServerName 'SERVER01' -AutoRemediate
+#>
 function Start-AIEnhancedTroubleshooting {
-    [CmdletBinding()]
+    [CmdletBinding(SupportsShouldProcess)]
     param (
         [string]$ServerName,
+        [string]$WorkspaceId,
         [switch]$AutoRemediate
     )
 
-    # Initialize AI components
-    $ai = Initialize-AIComponents -Config $AIConfig
+    $ai = $null
+    $remediationResult = $null
 
     try {
+        if (-not $PSCmdlet.ShouldProcess($ServerName, "Run AI-enhanced troubleshooting workflow")) {
+            return [PSCustomObject]@{
+                ServerName = $ServerName
+                WorkspaceId = $WorkspaceId
+                Status = 'Skipped'
+                Reason = 'ShouldProcess declined execution.'
+            }
+        }
+
+        # Initialize AI components
+        $ai = Initialize-AIComponents -Config $AIConfig
+
         # 1. Predictive Analysis
         $deploymentRisk = $ai.PredictDeploymentRisk($ServerName)
         if ($deploymentRisk.Score -gt 0.7) {
@@ -23,7 +56,7 @@ function Start-AIEnhancedTroubleshooting {
         if ($AutoRemediate) {
             $remediationPlan = $ai.GenerateRemediationPlan($aiInsights)
             $remediationResult = Start-ArcRemediation -Plan $remediationPlan
-            
+
             # Learn from remediation outcome
             $ai.LearnFromRemediation($remediationResult)
         }
@@ -36,7 +69,15 @@ function Start-AIEnhancedTroubleshooting {
         return $report
     }
     catch {
-        $ai.LogException($_)
-        throw
+        if ($ai -and $ai.PSObject.Methods['LogException']) {
+            $ai.LogException($_)
+        }
+
+        return [PSCustomObject]@{
+            ServerName = $ServerName
+            WorkspaceId = $WorkspaceId
+            Status = 'Failed'
+            Error = $_.Exception.Message
+        }
     }
 }

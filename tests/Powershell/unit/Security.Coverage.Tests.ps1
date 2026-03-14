@@ -438,6 +438,7 @@ Describe 'Set-AuditPolicies.ps1 additional invocation coverage' {
         $script:AuditPolScriptPath = Join-Path $script:SrcRoot 'security\Set-AuditPolicies.ps1'
         Set-Item 'Function:global:Test-IsAdministrator' -Value { $true }
         Set-Item 'Function:global:Write-Log' -Value { param([string]$Message,[string]$Level='INFO',[string]$Path) }
+        Set-Item 'Function:global:Invoke-AuditPolCommand' -Value { param([string[]]$Arguments) }
     }
 
     BeforeEach {
@@ -455,7 +456,7 @@ Describe 'Set-AuditPolicies.ps1 additional invocation coverage' {
                 }
             }
         }
-        Mock Invoke-Expression {}
+        Mock Invoke-AuditPolCommand {}
         { . $script:AuditPolScriptPath -EnforceSettings $false -BackupSettings $false -LogPath "$TestDrive\audit.log" } | Should -Not -Throw
     }
 
@@ -469,7 +470,7 @@ Describe 'Set-AuditPolicies.ps1 additional invocation coverage' {
                 }
             }
         }
-        Mock Invoke-Expression {}
+        Mock Invoke-AuditPolCommand {}
         { . $script:AuditPolScriptPath -EnforceSettings $true -BackupSettings $false -LogPath "$TestDrive\audit.log" } | Should -Not -Throw
     }
 
@@ -491,6 +492,7 @@ Describe 'Set-FirewallRules.ps1 additional invocation coverage' {
         Set-Item 'Function:global:Invoke-GetNetFirewallRule' -Value { param() @() }
         Set-Item 'Function:global:Invoke-NewNetFirewallRule' -Value { param() [PSCustomObject]@{ Name='Arc'; Enabled=$true } }
         Set-Item 'Function:global:Invoke-SetNetFirewallRule' -Value { param() }
+        Set-Item 'Function:global:Export-FirewallPolicy' -Value { param([string]$BackupFilePath) }
     }
 
     BeforeEach {

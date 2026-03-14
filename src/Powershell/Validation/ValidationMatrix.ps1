@@ -1,14 +1,17 @@
-$ValidationMatrix = @{
+$azureManagementEndpoint = 'management.azure.com'
+$azureIdentityEndpoint = 'login.microsoftonline.com'
+
+Set-Variable -Name ValidationMatrix -Scope Script -Force -Value (@{
     Connectivity = @{
         Tests = @(
             @{
                 Name = "Azure Management Endpoint"
-                Test = { Test-NetConnection -ComputerName "management.azure.com" -Port 443 }
+                Test = { Test-NetConnection -ComputerName $azureManagementEndpoint -Port 443 }
                 ExpectedResult = { param($result) $result.TcpTestSucceeded }
             },
             @{
                 Name = "Azure Identity Endpoint"
-                Test = { Test-NetConnection -ComputerName "login.microsoftonline.com" -Port 443 }
+                Test = { Test-NetConnection -ComputerName $azureIdentityEndpoint -Port 443 }
                 ExpectedResult = { param($result) $result.TcpTestSucceeded }
             }
         )
@@ -39,4 +42,4 @@ $ValidationMatrix = @{
         )
         Weight = 0.3
     }
-}
+})

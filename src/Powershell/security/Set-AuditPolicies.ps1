@@ -31,6 +31,17 @@ if (-not (Get-Command Test-IsAdministrator -ErrorAction SilentlyContinue)) {
     . (Join-Path $ScriptRoot '..\utils\Test-IsAdministrator.ps1')
 }
 
+if (-not (Get-Command Invoke-AuditPolCommand -ErrorAction SilentlyContinue)) {
+    function Invoke-AuditPolCommand {
+        param(
+            [Parameter(Mandatory)]
+            [string[]]$Arguments
+        )
+
+        & auditpol @Arguments | Out-Null
+    }
+}
+
 # --- Backup Function ---
 function Backup-AuditPolicy {
     param(
@@ -41,7 +52,7 @@ function Backup-AuditPolicy {
         if (-not (Test-Path (Split-Path $BackupFilePath -Parent))) {
             New-Item -ItemType Directory -Path (Split-Path $BackupFilePath -Parent) -Force -ErrorAction Stop | Out-Null
         }
-        Invoke-Expression "auditpol /backup /file:`"$BackupFilePath`"" | Out-Null
+        Invoke-AuditPolCommand -Arguments @('/backup', "/file:$BackupFilePath")
         Write-Log "Audit policy successfully backed up to $BackupFilePath."
     }
     catch {
@@ -168,7 +179,7 @@ try {
                 $collapsed = ($subcategoryName -replace '\s+', '')
                 $subcategoryName = ConvertTo-AuditPolSubcategoryName -JsonName $collapsed
             }
-            
+
             Write-Log "Setting policy for Subcategory: '$subcategoryName' to '$policyValue'"
 
             $successArg = "/success:disable"
@@ -187,12 +198,12 @@ try {
                 Write-Log "Invalid policy value '$policyValue' for subcategory '$subcategoryName'. Skipping." -Level "WARNING"
                 continue
             }
-            
+
             $auditPolArgs = "/set /subcategory:`"$subcategoryName`" $successArg $failureArg"
             Write-Log "Executing: auditpol $auditPolArgs"
 
             try {
-                Invoke-Expression "auditpol $auditPolArgs" | Out-Null
+                Invoke-AuditPolCommand -Arguments @('/set', "/subcategory:$subcategoryName", $successArg, $failureArg)
                 # Check for errors from auditpol (it might not throw terminating errors)
                 if ($LASTEXITCODE -ne 0) {
                     # Attempt to get error output if possible (may require more complex handling for stderr)

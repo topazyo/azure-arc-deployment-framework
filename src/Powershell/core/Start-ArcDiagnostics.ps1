@@ -1,5 +1,32 @@
+<#
+.SYNOPSIS
+Collects Arc and optional AMA diagnostics for a target server.
+
+.DESCRIPTION
+Builds a diagnostics bundle containing system state, Arc status, AMA status,
+connectivity data, logs, and optional detailed-analysis sections, then writes the
+result to the requested output location.
+
+.PARAMETER ServerName
+Target server to diagnose.
+
+.PARAMETER WorkspaceId
+Optional workspace identifier used for AMA-related diagnostics.
+
+.PARAMETER DetailedScan
+Includes additional detailed-analysis sections in the diagnostics bundle.
+
+.PARAMETER OutputPath
+Directory used for diagnostics output artifacts.
+
+.OUTPUTS
+PSCustomObject
+
+.EXAMPLE
+Start-ArcDiagnostics -ServerName 'SERVER01' -WorkspaceId '<workspace-id>' -DetailedScan -OutputPath '.\Diagnostics'
+#>
 function Start-ArcDiagnostics {
-    [CmdletBinding()]
+    [CmdletBinding(SupportsShouldProcess)]
     param (
         [Parameter(Mandatory)]
         [string]$ServerName,
@@ -10,13 +37,13 @@ function Start-ArcDiagnostics {
         [Parameter()]
         [string]$OutputPath = ".\Diagnostics"
     )
-    
+
     begin {
         $useTestData = $env:ARC_DIAG_TESTDATA -eq '1'
 
         # Ensure logging path exists for Write-Log consumers; default to OutputPath if not preset
         $existingLogPath = $null
-        try { $existingLogPath = Get-Variable -Name AzureArcFramework_LogPath -Scope Global -ValueOnly -ErrorAction Stop } catch { }
+        try { $existingLogPath = Get-Variable -Name AzureArcFramework_LogPath -Scope Global -ValueOnly -ErrorAction Stop } catch { Write-Verbose 'Global log path is not preset; defaulting to the diagnostics output path.' }
 
         if (-not $existingLogPath) {
             try {
@@ -42,6 +69,28 @@ function Start-ArcDiagnostics {
         }
 
         # Ensure output directory exists
+
+        function Get-ArcHeartbeatSnapshot {
+            [CmdletBinding()]
+            param (
+                [Parameter(Mandatory)]
+                [string]$ServerName
+            )
+
+            if (Get-Command Get-LastHeartbeat -ErrorAction SilentlyContinue) {
+                return Get-LastHeartbeat -ServerName $ServerName
+            }
+
+            $heartbeatScriptPath = Join-Path $PSScriptRoot 'Get-LastHeartbeat.ps1'
+            if (Test-Path $heartbeatScriptPath -PathType Leaf) {
+                . $heartbeatScriptPath
+                if (Get-Command Get-LastHeartbeat -ErrorAction SilentlyContinue) {
+                    return Get-LastHeartbeat -ServerName $ServerName
+                }
+            }
+
+            return $null
+        }
         if (-not (Test-Path $OutputPath)) {
             New-Item -Path $OutputPath -ItemType Directory -Force | Out-Null
         }
@@ -139,7 +188,7 @@ function Start-ArcDiagnostics {
                 StartType = $arcStatus.StartType
                 Dependencies = Get-OptionalPropertyValue -InputObject $arcStatus -PropertyName 'DependentServices' -Default @()
                 Configuration = Get-ArcAgentConfig -ServerName $ServerName
-                LastHeartbeat = Get-LastHeartbeat -ServerName $ServerName
+                LastHeartbeat = Get-ArcHeartbeatSnapshot -ServerName $ServerName
             }
             Write-Progress -Activity "Arc Diagnostics" -Status "Checking Arc Status" -PercentComplete 40
 
@@ -203,7 +252,7 @@ function Start-ArcDiagnostics {
             }
             try {
                 Write-Log -Message "Diagnostic collection failed: $($_.Exception.Message)" -Level Error -Component 'Start-ArcDiagnostics'
-            } catch { }
+            } catch { Write-Warning "Failed to write diagnostic failure to the framework log: $($_.Exception.Message)" }
         }
     }
 
@@ -215,7 +264,7 @@ function Start-ArcDiagnostics {
 
 function Get-ArcAgentConfig {
     param ([string]$ServerName)
-    
+
     try {
         $configPath = "\\$ServerName\c$\Program Files\Azure Connected Machine Agent\config"
         $config = Get-Content "$configPath\agentconfig.json" -ErrorAction Stop | ConvertFrom-Json
@@ -229,7 +278,7 @@ function Get-ArcAgentConfig {
 
 function Get-AMAConfig {
     param ([string]$ServerName)
-    
+
     try {
         $configPath = "\\$ServerName\c$\Program Files\Azure Monitor Agent\config"
         $config = Get-Content "$configPath\settings.json" -ErrorAction Stop | ConvertFrom-Json
@@ -246,7 +295,7 @@ function Get-DataCollectionStatus {
         [string]$ServerName,
         [string]$WorkspaceId
     )
-    
+
     try {
         $query = @"
             Heartbeat
@@ -255,7 +304,19 @@ function Get-DataCollectionStatus {
             | summarize LastHeartbeat = max(TimeGenerated)
 "@
         $result = Invoke-AzOperationalInsightsQuery -WorkspaceId $WorkspaceId -Query $query
-        
+
+
+if (-not (Get-Command Get-LastHeartbeat -ErrorAction SilentlyContinue)) {
+    function Get-LastHeartbeat {
+        [CmdletBinding()]
+        param (
+            [Parameter(Mandatory)]
+            [string]$ServerName
+        )
+
+        return Get-ArcHeartbeatSnapshot -ServerName $ServerName
+    }
+}
         return @{
             LastHeartbeat = $result.Results.LastHeartbeat
             Status = if ($result.Results.LastHeartbeat -gt (Get-Date).AddMinutes(-10)) { "Active" } else { "Inactive" }
@@ -269,7 +330,7 @@ function Get-DataCollectionStatus {
 
 function Test-NetworkPaths {
     param ([string]$ServerName)
-    
+
     $endpoints = @(
         @{
             Name = "Arc Management"

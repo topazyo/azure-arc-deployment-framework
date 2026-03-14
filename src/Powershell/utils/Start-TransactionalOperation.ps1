@@ -1,5 +1,5 @@
 function Start-TransactionalOperation {
-    [CmdletBinding()]
+    [CmdletBinding(SupportsShouldProcess)]
     param (
         [Parameter(Mandatory)]
         [scriptblock]$Operation,
@@ -101,11 +101,11 @@ function Start-TransactionalOperation {
     end {
         $transactionState.EndTime = Get-Date
         $transactionState.Duration = $transactionState.EndTime - $transactionState.StartTime
-        
+
         # Export transaction log
         $logPath = Join-Path $BackupPath "$OperationName`_$(Get-Date -Format 'yyyyMMdd_HHmmss').json"
         $transactionState | ConvertTo-Json -Depth 10 | Out-File $logPath
-        
+
         return [PSCustomObject]$transactionState
     }
 }

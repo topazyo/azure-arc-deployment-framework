@@ -1,3 +1,30 @@
+<#
+.SYNOPSIS
+Retrieves recent Arc and AMA heartbeat status for a target server.
+
+.DESCRIPTION
+Builds a combined heartbeat view across Arc and AMA agents, with optional
+detail expansion for Azure-side and local diagnostic context. AMA checks are
+performed only when a workspace identifier is provided.
+
+.PARAMETER ServerName
+Target server to inspect.
+
+.PARAMETER WorkspaceId
+Log Analytics workspace identifier used for AMA heartbeat queries.
+
+.PARAMETER IncludeDetails
+Includes expanded per-agent diagnostic details.
+
+.PARAMETER LookbackHours
+Heartbeat query lookback window for AMA checks.
+
+.PARAMETER AgentType
+Limits the query to Arc, AMA, or both agents.
+
+.OUTPUTS
+PSCustomObject
+#>
 function Get-LastHeartbeat {
     [CmdletBinding()]
     param (
@@ -75,6 +102,30 @@ function Get-LastHeartbeat {
     }
 }
 
+function Get-HeartbeatService {
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory)]
+        [string]$Name,
+        [Parameter(Mandatory)]
+        [string]$ServerName
+    )
+
+    $getServiceCommand = Get-Command Get-Service -ErrorAction SilentlyContinue
+    if ($getServiceCommand -and $getServiceCommand.Parameters.ContainsKey('ComputerName')) {
+        return Get-Service -Name $Name -ComputerName $ServerName -ErrorAction SilentlyContinue
+    }
+
+    return Get-Service -Name $Name -ErrorAction SilentlyContinue
+}
+
+<#
+.SYNOPSIS
+Determines Arc heartbeat recency and health classification.
+
+.PARAMETER ServerName
+Target server to inspect.
+#>
 function Get-ArcAgentHeartbeat {
     [CmdletBinding()]
     param ([string]$ServerName)
@@ -86,7 +137,7 @@ function Get-ArcAgentHeartbeat {
 
     try {
         # Check if Arc agent is installed
-        $service = Get-Service -Name "himds" -ComputerName $ServerName -ErrorAction SilentlyContinue
+        $service = Get-HeartbeatService -Name "himds" -ServerName $ServerName
         if (-not $service) {
             $result.Status = "NotInstalled"
             return $result
@@ -111,10 +162,10 @@ function Get-ArcAgentHeartbeat {
             $state = Get-Content $stateFile -Raw | ConvertFrom-Json
             if ($state.lastHeartbeat) {
                 $result.LastHeartbeat = [datetime]$state.lastHeartbeat
-                
+
                 # Calculate heartbeat age
                 $heartbeatAge = (Get-Date) - $result.LastHeartbeat
-                
+
                 # Determine status based on heartbeat age
                 if ($heartbeatAge.TotalMinutes -le 5) {
                     $result.Status = "Healthy"
@@ -139,10 +190,10 @@ function Get-ArcAgentHeartbeat {
             $arcMachine = Get-AzConnectedMachine -Name $ServerName -ErrorAction SilentlyContinue
             if ($arcMachine) {
                 $result.LastHeartbeat = $arcMachine.LastStatusChange
-                
+
                 # Calculate heartbeat age
                 $heartbeatAge = (Get-Date) - $result.LastHeartbeat
-                
+
                 # Determine status based on heartbeat age
                 if ($heartbeatAge.TotalMinutes -le 5) {
                     $result.Status = "Healthy"
@@ -165,6 +216,13 @@ function Get-ArcAgentHeartbeat {
     return $result
 }
 
+<#
+.SYNOPSIS
+Collects detailed Arc heartbeat context from Azure and local logs.
+
+.PARAMETER ServerName
+Target server to inspect.
+#>
 function Get-ArcAgentHeartbeatDetails {
     [CmdletBinding()]
     param ([string]$ServerName)
@@ -184,13 +242,13 @@ function Get-ArcAgentHeartbeatDetails {
             $details.ConnectionStatus = $arcMachine.Status
             $details.AgentVersion = $arcMachine.AgentVersion
             $details.LastOperationResult = $arcMachine.LastStatusChange
-            
+
             # Get configuration status
             $guestConfig = Get-AzConnectedMachineExtension -MachineName $ServerName -Name "GuestConfigurationForLinux" -ErrorAction SilentlyContinue
             if ($guestConfig) {
                 $details.ConfigurationStatus = $guestConfig.ProvisioningState
             }
-            
+
             # Get all extensions
             $extensions = Get-AzConnectedMachineExtension -MachineName $ServerName -ErrorAction SilentlyContinue
             if ($extensions) {
@@ -204,18 +262,18 @@ function Get-ArcAgentHeartbeatDetails {
                 }
             }
         }
-        
+
         # Get local agent logs for additional context
         $logPath = "\\$ServerName\c$\Program Files\Azure Connected Machine Agent\logs"
         if (Test-Path $logPath) {
-            $recentLogs = Get-ChildItem $logPath -Filter "*.log" | 
-                Sort-Object LastWriteTime -Descending | 
+            $recentLogs = Get-ChildItem $logPath -Filter "*.log" |
+                Sort-Object LastWriteTime -Descending |
                 Select-Object -First 1
-            
+
             if ($recentLogs) {
                 $logContent = Get-Content $recentLogs.FullName -Tail 50
                 $heartbeatEntries = $logContent | Select-String "Heartbeat" -Context 0,5
-                
+
                 if ($heartbeatEntries) {
                     $details.RecentHeartbeatLogs = $heartbeatEntries | ForEach-Object { $_.Line }
                 }
@@ -245,7 +303,7 @@ function Get-AMAHeartbeat {
 
     try {
         # Check if AMA is installed
-        $service = Get-Service -Name "AzureMonitorAgent" -ComputerName $ServerName -ErrorAction SilentlyContinue
+        $service = Get-HeartbeatService -Name "AzureMonitorAgent" -ServerName $ServerName
         if (-not $service) {
             $result.Status = "NotInstalled"
             return $result
@@ -265,15 +323,15 @@ function Get-AMAHeartbeat {
                 | where Computer == '$ServerName'
                 | summarize LastHeartbeat = max(TimeGenerated)
 "@
-            
+
             $queryResults = Invoke-AzOperationalInsightsQuery -WorkspaceId $WorkspaceId -Query $query
-            
+
             if ($queryResults.Results.LastHeartbeat) {
                 $result.LastHeartbeat = [datetime]$queryResults.Results.LastHeartbeat
-                
+
                 # Calculate heartbeat age
                 $heartbeatAge = (Get-Date) - $result.LastHeartbeat
-                
+
                 # Determine status based on heartbeat age
                 if ($heartbeatAge.TotalMinutes -le 5) {
                     $result.Status = "Healthy"
@@ -293,16 +351,16 @@ function Get-AMAHeartbeat {
             # If no workspace ID, check local agent logs
             $logPath = "\\$ServerName\c$\Program Files\Microsoft Monitoring Agent\Agent\Health Service State"
             if (Test-Path $logPath) {
-                $stateFiles = Get-ChildItem $logPath -Filter "*.log" -Recurse | 
+                $stateFiles = Get-ChildItem $logPath -Filter "*.log" -Recurse |
                     Where-Object { $_.LastWriteTime -gt (Get-Date).AddHours(-$LookbackHours) } |
                     Sort-Object LastWriteTime -Descending
-                
+
                 if ($stateFiles) {
                     $result.LastHeartbeat = $stateFiles[0].LastWriteTime
-                    
+
                     # Calculate heartbeat age
                     $heartbeatAge = (Get-Date) - $result.LastHeartbeat
-                    
+
                     # Determine status based on heartbeat age
                     if ($heartbeatAge.TotalMinutes -le 5) {
                         $result.Status = "Healthy"
@@ -355,7 +413,7 @@ function Get-AMAHeartbeatDetails {
             | summarize count() by Type
             | project DataType = Type, Count = count_
 "@
-        
+
         $dataTypes = Invoke-AzOperationalInsightsQuery -WorkspaceId $WorkspaceId -Query $dataTypesQuery
         if ($dataTypes.Results) {
             $details.DataTypes = $dataTypes.Results
@@ -368,7 +426,7 @@ function Get-AMAHeartbeatDetails {
             | where Computer == '$ServerName'
             | summarize TotalRecords = count(), DataSizeMB = sum(_BilledSize)/(1024*1024)
 "@
-        
+
         $volume = Invoke-AzOperationalInsightsQuery -WorkspaceId $WorkspaceId -Query $volumeQuery
         if ($volume.Results) {
             $details.DataVolume = @{
@@ -384,13 +442,13 @@ function Get-AMAHeartbeatDetails {
             | where Computer == '$ServerName'
             | extend IngestionTime = ingestion_time()
             | extend IngestionLatency = datetime_diff('second', IngestionTime, TimeGenerated)
-            | summarize 
+            | summarize
                 AvgLatency = avg(IngestionLatency),
                 MaxLatency = max(IngestionLatency),
                 MinLatency = min(IngestionLatency),
                 P95Latency = percentile(IngestionLatency, 95)
 "@
-        
+
         $latency = Invoke-AzOperationalInsightsQuery -WorkspaceId $WorkspaceId -Query $latencyQuery
         if ($latency.Results) {
             $details.LatencyStats = @{
@@ -405,7 +463,7 @@ function Get-AMAHeartbeatDetails {
         $configPath = "\\$ServerName\c$\Program Files\Microsoft Monitoring Agent\Agent\Health Service State\Configurations"
         if (Test-Path $configPath) {
             $configFiles = Get-ChildItem $configPath -Filter "*.xml" -Recurse
-            
+
             if ($configFiles) {
                 $details.ConfiguredDataSources = $configFiles | ForEach-Object {
                     $content = Get-Content $_.FullName -Raw

@@ -167,220 +167,42 @@ class SimpleRCAEstimator:
             :100]
         self.logger.info(
             f"Predicting root cause for incident: {desc_snippet}...")
-        potential_causes = []
-
         description = str(incident_data.get('description', '')).lower()
-        metrics = incident_data.get('metrics', {})
-        # Some callers/tests provide metrics as top-level keys rather
-        # than nested under "metrics".
-        if not isinstance(metrics, dict) or not metrics:
-            exclude_keys = {
-                'description', 'metrics', 'metrics_timeseries',
-                'timestamp', 'priority', 'incident_id'
-            }
-            metrics = {
-                k: v for k, v in incident_data.items()
-                if k not in exclude_keys
-            }
-
-        def _metric_value_from_contains(substr: str) -> Any:
-            """
-            Return the max numeric metric value whose name contains
-            substr (case-insensitive).
-            """
-            if not substr:
-                return None
-            substr_l = substr.lower()
-            candidates: List[float] = []
-            for key, value in (metrics or {}).items():
-                if (substr_l in str(key).lower() and
-                        isinstance(value, (int, float))):
-                    if not (np.isnan(value) or np.isinf(value)):
-                        candidates.append(float(value))
-            return max(candidates) if candidates else None
+        metrics = self._extract_incident_metrics(incident_data)
+        potential_causes = []
 
         for rule_name, rule_details in self.rules.items():
             self.logger.debug(f"Evaluating rule: {rule_name}")
-            trigger_reasons_list = []
-
-            # Support a simplified rule schema (used in tests) where the
-            # rule name itself acts as the keyword (e.g. "network error"),
-            # and a single numeric threshold is provided via
-            # "metric_threshold".
-            has_keywords_any = 'keywords_any' in rule_details
-            has_keywords_all = 'keywords_all' in rule_details
-            if not has_keywords_any and not has_keywords_all:
-                rule_details = {
-                    **rule_details,
-                    'keywords_any': [str(rule_name)]
-                }
-
-            has_metric_threshold = 'metric_threshold' in rule_details
-            has_metrics_thresholds = 'metrics_thresholds' in rule_details
-            if not has_metrics_thresholds and has_metric_threshold:
-                rule_details = {
-                    **rule_details,
-                    'metrics_thresholds': [
-                        {
-                            'metric_contains': str(rule_name),
-                            'threshold': rule_details.get('metric_threshold'),
-                            'operator': '>'
-                        }
-                    ]
-                }
-
-            # Keyword matching
-            keyword_match_all_met = True
-            if rule_details.get('keywords_all'):
-                all_present = True
-                for kw in rule_details['keywords_all']:
-                    pattern = r'\b' + re.escape(kw.lower()) + r'\b'
-                    if not re.search(pattern, description):
-                        all_present = False
-                        break
-                if all_present:
-                    kw_list = rule_details['keywords_all']
-                    trigger_reasons_list.append(
-                        f"Matched all keywords: {kw_list}")
-                else:
-                    keyword_match_all_met = False
-
-            # True if no 'keywords_any' defined
-            keyword_match_any_met = True
-            if rule_details.get('keywords_any'):
-                any_present = False
-                matched_any_kws = []
-                for kw in rule_details['keywords_any']:
-                    pattern = r'\b' + re.escape(kw.lower()) + r'\b'
-                    if re.search(pattern, description):
-                        any_present = True
-                        matched_any_kws.append(kw)
-                if any_present:
-                    trigger_reasons_list.append(
-                        f"Matched one or more keywords: "
-                        f"{matched_any_kws}")
-                else:
-                    # Only false if keywords_any is defined but none
-                    # matched
-                    keyword_match_any_met = False
-
-            # Metric threshold matching
-            # True if no 'metrics_thresholds' defined
-            metric_thresholds_met = True
-            if rule_details.get('metrics_thresholds'):
-                all_metrics_match = True
-                for cond in rule_details['metrics_thresholds']:
-                    metric_name = cond.get('metric')
-                    metric_contains = cond.get('metric_contains')
-                    threshold = cond.get('threshold')
-                    operator = cond.get('operator', '>')  # Default operator
-
-                    if metric_name:
-                        metric_val = metrics.get(metric_name)
-                    elif metric_contains:
-                        metric_val = _metric_value_from_contains(
-                            str(metric_contains))
-                    else:
-                        metric_val = None
-                    # Metric not present in incident data
-                    if metric_val is None:
-                        all_metrics_match = False
-                        break
-                    # Metric not numeric
-                    if not isinstance(metric_val, (int, float)):
-                        self.logger.warning(
-                            f"Metric {metric_name} for rule {rule_name} "
-                            f"is not numeric: {metric_val}")
-                        all_metrics_match = False
-                        break
-
-                    condition_met_flag = False
-                    if operator == '>':
-                        condition_met_flag = metric_val > threshold
-                    elif operator == '>=':
-                        condition_met_flag = metric_val >= threshold
-                    elif operator == '<':
-                        condition_met_flag = metric_val < threshold
-                    elif operator == '<=':
-                        condition_met_flag = metric_val <= threshold
-                    elif operator == '==':
-                        condition_met_flag = metric_val == threshold
-                    else:
-                        self.logger.warning(
-                            f"Unsupported operator {operator} in rule "
-                            f"{rule_name}")
-                        continue
-
-                    if condition_met_flag:
-                        trigger_reasons_list.append(
-                            f"Metric '{metric_name}' ({metric_val}) met "
-                            f"condition ({operator} {threshold})")
-                    else:
-                        all_metrics_match = False
-                        break
-                if not all_metrics_match:
-                    metric_thresholds_met = False
-            # Determine if rule is triggered based on combined logic
-            rule_triggered = False
-            has_keyword_conditions = bool(
-                rule_details.get('keywords_all') or
-                rule_details.get('keywords_any')
+            normalized_rule_details = self._normalize_rule_details(
+                rule_name,
+                rule_details,
             )
-            has_metric_conditions = bool(
-                rule_details.get('metrics_thresholds')
+            keyword_results, trigger_reasons_list = self._evaluate_keyword_conditions(
+                normalized_rule_details,
+                description,
             )
+            metric_thresholds_met, metric_reasons = self._evaluate_metric_conditions(
+                rule_name,
+                normalized_rule_details,
+                metrics,
+            )
+            trigger_reasons_list.extend(metric_reasons)
 
-            if has_keyword_conditions and has_metric_conditions:
-                rule_triggered = (
-                    keyword_match_all_met and keyword_match_any_met and
-                    metric_thresholds_met
+            if self._rule_is_triggered(
+                    normalized_rule_details,
+                    keyword_results,
+                    metric_thresholds_met):
+                final_confidence = self._calculate_rule_confidence(
+                    normalized_rule_details,
+                    keyword_results,
+                    metric_thresholds_met,
                 )
-            elif has_keyword_conditions:
-                rule_triggered = (
-                    keyword_match_all_met and keyword_match_any_met
-                )
-            elif has_metric_conditions:
-                rule_triggered = metric_thresholds_met
-
-            if rule_triggered:
-                final_confidence = rule_details.get(
-                    'base_confidence', self.default_confidence)
-                # Boost confidence if multiple types of conditions met
-                # effectively (e.g. keywords AND metrics)
-                num_condition_types_met = 0
-                if (keyword_match_all_met and
-                        rule_details.get('keywords_all')):
-                    num_condition_types_met += 1
-                # This logic could be more nuanced
-                if (keyword_match_any_met and
-                        rule_details.get('keywords_any')):
-                    num_condition_types_met += 1
-                if (metric_thresholds_met and
-                        rule_details.get('metrics_thresholds')):
-                    num_condition_types_met += 1
-
-                # Simplified: if both keyword group (any or all) and
-                # metrics were involved and met
-                keyword_cond = (
-                    (keyword_match_all_met and
-                     rule_details.get('keywords_all')) or
-                    (keyword_match_any_met and
-                     rule_details.get('keywords_any'))
-                )
-                metric_cond = (
-                    metric_thresholds_met and
-                    rule_details.get('metrics_thresholds')
-                )
-                if keyword_cond and metric_cond:
-                    boost = self.multi_condition_confidence_boost
-                    final_confidence = min(0.95, final_confidence + boost)
-
                 potential_causes.append({
-                    'type': rule_details.get("cause", "Unknown"),
+                    'type': normalized_rule_details.get("cause", "Unknown"),
                     'confidence': round(final_confidence, 2),
-                    'recommendation': rule_details.get(
+                    'recommendation': normalized_rule_details.get(
                         "recommendation", "Review incident details."),
-                    'impact': rule_details.get("impact_score", 0.5),
+                    'impact': normalized_rule_details.get("impact_score", 0.5),
                     'trigger_reason': "; ".join(trigger_reasons_list)
                 })
                 self.logger.debug(
@@ -390,23 +212,263 @@ class SimpleRCAEstimator:
         if not potential_causes:
             self.logger.info(
                 "No specific rules matched. Returning default cause.")
-            potential_causes.append({
-                'type': "Unknown/Complex Issue",
-                'confidence': 0.3,
-                'recommendation': (
-                    "Requires further detailed investigation. Review logs "
-                    "and full telemetry."
-                ),
-                'impact': 0.5,  # Default impact
-                'trigger_reason': (
-                    "No specific rule matched the incident data."
-                )
-            })
+            potential_causes.append(self._build_default_cause())
 
         # Sort by impact (descending) then confidence (descending)
         potential_causes.sort(
             key=lambda x: (x['impact'], x['confidence']), reverse=True)
         return potential_causes
+
+    @staticmethod
+    def _extract_incident_metrics(incident_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Extract metrics from nested or top-level incident payload shapes."""
+        metrics = incident_data.get('metrics', {})
+        if isinstance(metrics, dict) and metrics:
+            return metrics
+
+        exclude_keys = {
+            'description', 'metrics', 'metrics_timeseries',
+            'timestamp', 'priority', 'incident_id'
+        }
+        return {
+            key: value for key, value in incident_data.items()
+            if key not in exclude_keys
+        }
+
+    @staticmethod
+    def _normalize_rule_details(
+            rule_name: str, rule_details: Dict[str, Any]) -> Dict[str, Any]:
+        """Normalize simplified rule schema into the canonical RCA shape."""
+        normalized = dict(rule_details)
+        if 'keywords_any' not in normalized and 'keywords_all' not in normalized:
+            normalized['keywords_any'] = [str(rule_name)]
+
+        if 'metrics_thresholds' not in normalized and 'metric_threshold' in normalized:
+            normalized['metrics_thresholds'] = [{
+                'metric_contains': str(rule_name),
+                'threshold': normalized.get('metric_threshold'),
+                'operator': '>'
+            }]
+        return normalized
+
+    def _evaluate_keyword_conditions(
+            self,
+            rule_details: Dict[str, Any],
+            description: str) -> Any:
+        """Evaluate keyword conditions and collect trigger reasons."""
+        trigger_reasons_list = []
+        keyword_match_all_met = self._match_all_keywords(
+            rule_details.get('keywords_all', []),
+            description,
+            trigger_reasons_list,
+        )
+        keyword_match_any_met = self._match_any_keywords(
+            rule_details.get('keywords_any', []),
+            description,
+            trigger_reasons_list,
+        )
+        return {
+            'all_met': keyword_match_all_met,
+            'any_met': keyword_match_any_met,
+        }, trigger_reasons_list
+
+    @staticmethod
+    def _match_keyword(keyword: str, description: str) -> bool:
+        """Return whether a keyword is present as a whole-word match."""
+        pattern = r'\b' + re.escape(keyword.lower()) + r'\b'
+        return bool(re.search(pattern, description))
+
+    def _match_all_keywords(
+            self,
+            keywords: List[str],
+            description: str,
+            trigger_reasons_list: List[str]) -> bool:
+        """Evaluate all-keyword matching semantics for a rule."""
+        if not keywords:
+            return True
+        if all(self._match_keyword(keyword, description) for keyword in keywords):
+            trigger_reasons_list.append(f"Matched all keywords: {keywords}")
+            return True
+        return False
+
+    def _match_any_keywords(
+            self,
+            keywords: List[str],
+            description: str,
+            trigger_reasons_list: List[str]) -> bool:
+        """Evaluate any-keyword matching semantics for a rule."""
+        if not keywords:
+            return True
+        matched_keywords = [
+            keyword for keyword in keywords
+            if self._match_keyword(keyword, description)
+        ]
+        if matched_keywords:
+            trigger_reasons_list.append(
+                f"Matched one or more keywords: {matched_keywords}"
+            )
+            return True
+        return False
+
+    def _evaluate_metric_conditions(
+            self,
+            rule_name: str,
+            rule_details: Dict[str, Any],
+            metrics: Dict[str, Any]) -> Any:
+        """Evaluate metric thresholds for a rule and collect trigger reasons."""
+        metric_conditions = rule_details.get('metrics_thresholds', [])
+        if not metric_conditions:
+            return True, []
+
+        trigger_reasons = []
+        for condition in metric_conditions:
+            condition_met, trigger_reason = self._evaluate_metric_condition(
+                rule_name,
+                condition,
+                metrics,
+            )
+            if not condition_met:
+                return False, []
+            trigger_reasons.append(trigger_reason)
+        return True, trigger_reasons
+
+    def _evaluate_metric_condition(
+            self,
+            rule_name: str,
+            condition: Dict[str, Any],
+            metrics: Dict[str, Any]) -> Any:
+        """Evaluate one metric condition for an RCA rule."""
+        metric_name = condition.get('metric')
+        metric_contains = condition.get('metric_contains')
+        threshold = condition.get('threshold')
+        operator = condition.get('operator', '>')
+
+        metric_value = self._resolve_metric_value(
+            metrics,
+            metric_name,
+            metric_contains,
+        )
+        if metric_value is None:
+            return False, None
+        if not isinstance(metric_value, (int, float)):
+            self.logger.warning(
+                f"Metric {metric_name} for rule {rule_name} is not numeric: {metric_value}")
+            return False, None
+        if not self._metric_condition_matches(metric_value, threshold, operator, rule_name):
+            return False, None
+
+        display_name = metric_name or metric_contains or 'unknown_metric'
+        return True, (
+            f"Metric '{display_name}' ({metric_value}) met condition "
+            f"({operator} {threshold})"
+        )
+
+    def _resolve_metric_value(
+            self,
+            metrics: Dict[str, Any],
+            metric_name: str,
+            metric_contains: str) -> Any:
+        """Resolve a metric by exact name or substring match."""
+        if metric_name:
+            return metrics.get(metric_name)
+        if metric_contains:
+            return self._metric_value_from_contains(metrics, str(metric_contains))
+        return None
+
+    @staticmethod
+    def _metric_value_from_contains(
+            metrics: Dict[str, Any], substr: str) -> Any:
+        """Return the max numeric metric value whose name contains a substring."""
+        if not substr:
+            return None
+        substr_l = substr.lower()
+        candidates: List[float] = []
+        for key, value in (metrics or {}).items():
+            if (substr_l in str(key).lower() and
+                    isinstance(value, (int, float)) and
+                    not (np.isnan(value) or np.isinf(value))):
+                candidates.append(float(value))
+        return max(candidates) if candidates else None
+
+    def _metric_condition_matches(
+            self,
+            metric_value: float,
+            threshold: Any,
+            operator: str,
+            rule_name: str) -> bool:
+        """Check whether a metric value satisfies the configured operator."""
+        if operator == '>':
+            return metric_value > threshold
+        if operator == '>=':
+            return metric_value >= threshold
+        if operator == '<':
+            return metric_value < threshold
+        if operator == '<=':
+            return metric_value <= threshold
+        if operator == '==':
+            return metric_value == threshold
+
+        self.logger.warning(
+            f"Unsupported operator {operator} in rule {rule_name}")
+        return False
+
+    @staticmethod
+    def _rule_is_triggered(
+            rule_details: Dict[str, Any],
+            keyword_results: Dict[str, bool],
+            metric_thresholds_met: bool) -> bool:
+        """Determine whether a normalized rule is triggered."""
+        has_keyword_conditions = bool(
+            rule_details.get('keywords_all') or rule_details.get('keywords_any')
+        )
+        has_metric_conditions = bool(rule_details.get('metrics_thresholds'))
+
+        if has_keyword_conditions and has_metric_conditions:
+            return (
+                keyword_results['all_met'] and
+                keyword_results['any_met'] and
+                metric_thresholds_met
+            )
+        if has_keyword_conditions:
+            return keyword_results['all_met'] and keyword_results['any_met']
+        if has_metric_conditions:
+            return metric_thresholds_met
+        return False
+
+    def _calculate_rule_confidence(
+            self,
+            rule_details: Dict[str, Any],
+            keyword_results: Dict[str, bool],
+            metric_thresholds_met: bool) -> float:
+        """Calculate final confidence for a triggered rule."""
+        final_confidence = rule_details.get(
+            'base_confidence', self.default_confidence
+        )
+        keyword_cond = (
+            (keyword_results['all_met'] and rule_details.get('keywords_all')) or
+            (keyword_results['any_met'] and rule_details.get('keywords_any'))
+        )
+        metric_cond = metric_thresholds_met and rule_details.get('metrics_thresholds')
+        if keyword_cond and metric_cond:
+            final_confidence = min(
+                0.95,
+                final_confidence + self.multi_condition_confidence_boost,
+            )
+        return final_confidence
+
+    @staticmethod
+    def _build_default_cause() -> Dict[str, Any]:
+        """Build the fallback RCA cause when no rules match."""
+        return {
+            'type': "Unknown/Complex Issue",
+            'confidence': 0.3,
+            'recommendation': (
+                "Requires further detailed investigation. Review logs "
+                "and full telemetry."
+            ),
+            'impact': 0.5,
+            'trigger_reason': "No specific rule matched the incident data."
+        }
 
 
 class SimpleRCAExplainer:

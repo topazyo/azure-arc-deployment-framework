@@ -1,6 +1,6 @@
 # Get-HighCPUEvents.ps1
 # This script retrieves events that may indicate periods of high CPU utilization.
-# Note: Windows Event Log does not typically log CPU percentage directly by default. 
+# Note: Windows Event Log does not typically log CPU percentage directly by default.
 # This script looks for indirect evidence or events from specific diagnostic logs.
 
 param (
@@ -41,12 +41,12 @@ try {
     # Define queries for events that *might* indicate high CPU
     # This is heuristic and depends on what's logged on the system.
     $queries = @(
-        @{ 
-            LogName='System'; 
-            ProviderName='Microsoft-Windows-Resource-Exhaustion-Detector'; 
+        @{
+            LogName='System';
+            ProviderName='Microsoft-Windows-Resource-Exhaustion-Detector';
             Id=2004; # Windows Resource Exhaustion Detector detected a condition
             KeywordsFilter = "CPU", "processor"; # Filter for high CPU related messages
-            Label="Resource Exhaustion (System)" 
+            Label="Resource Exhaustion (System)"
         },
         @{
             LogName='Microsoft-Windows-Resource-Exhaustion-Resolver/Operational';
@@ -67,7 +67,7 @@ try {
     )
 
     Write-Log "Querying event logs for potential high CPU indicators..."
-    
+
     foreach ($query in $queries) {
         Write-Log "Executing query: LogName='$($query.LogName)', ProviderName='$($query.ProviderName)', ID='$($query.Id)', Label='$($query.Label)', Keywords='$($query.KeywordsFilter)' on '$ServerName' since '$StartTime'."
         try {
@@ -80,20 +80,20 @@ try {
 
             $getWinEventParams = @{
                 FilterHashtable = $filterHashtable
-                MaxEvents = $MaxEventsPerQuery 
+                MaxEvents = $MaxEventsPerQuery
                 ErrorAction = 'Stop'
             }
 
             if ($ServerName -ne $env:COMPUTERNAME -and -not ([string]::IsNullOrWhiteSpace($ServerName))) {
                 $getWinEventParams.ComputerName = $ServerName
             }
-            
+
             $events = Get-WinEvent @getWinEventParams
 
             if ($events) {
                 $eventCount = 0
-                foreach ($event in $events) {
-                    $message = $event.Message
+                foreach ($inputEvent in $events) {
+                    $message = $inputEvent.Message
                     $match = $true # Assume match unless KeywordsFilter is present
 
                     if ($query.KeywordsFilter) {
@@ -105,16 +105,16 @@ try {
                             }
                         }
                     }
-                    
+
                     if($match){
                         $eventCount++
                         $allHighCpuRelatedEvents.Add([PSCustomObject]@{
-                            Timestamp   = $event.TimeCreated
-                            SourceLog   = $event.LogName
-                            EventId     = $event.Id
-                            ProviderName= $event.ProviderName
-                            Message     = $message 
-                            MachineName = $event.MachineName
+                            Timestamp   = $inputEvent.TimeCreated
+                            SourceLog   = $inputEvent.LogName
+                            EventId     = $inputEvent.Id
+                            ProviderName= $inputEvent.ProviderName
+                            Message     = $message
+                            MachineName = $inputEvent.MachineName
                             QueryLabel  = $query.Label
                         }) | Out-Null
                     }
@@ -125,17 +125,17 @@ try {
                 Write-Log "No events found for query [Label: $($query.Label)] before keyword filtering."
             }
         }
-        catch [System.Diagnostics.Eventing.Reader.EventLogNotFoundException],[System.UnauthorizedAccessException] { 
+        catch [System.Diagnostics.Eventing.Reader.EventLogNotFoundException],[System.UnauthorizedAccessException] {
             Write-Log "Failed to execute query [Label: $($query.Label)]. Log '$($query.LogName)' might not exist or is inaccessible on '$ServerName'. Error: $($_.Exception.Message)" -Level "WARNING"
         }
-        catch { 
+        catch {
             Write-Log "An error occurred while executing query [Label: $($query.Label)] on '$ServerName'. Error: $($_.Exception.Message)" -Level "ERROR"
         }
     }
 
     # Sort all collected events by Timestamp
     $sortedEvents = $allHighCpuRelatedEvents | Sort-Object Timestamp -Descending
-    
+
     Write-Log "Get-HighCPUEvents script finished. Total potentially relevant events retrieved: $($sortedEvents.Count)."
     return $sortedEvents
 
@@ -145,5 +145,5 @@ catch {
     if ($_.ScriptStackTrace) {
         Write-Log "Stack Trace: $($_.ScriptStackTrace)" -Level "FATAL"
     }
-    return @() 
+    return @()
 }

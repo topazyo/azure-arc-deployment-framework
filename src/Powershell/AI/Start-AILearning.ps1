@@ -1,5 +1,32 @@
+<#
+.SYNOPSIS
+Runs the AI learning and model update workflow.
+
+.DESCRIPTION
+Loads training data, updates the pattern-recognition, prediction, and anomaly
+detection components, calculates aggregate learning metrics, and saves updated
+models when improvement is recorded.
+
+.PARAMETER AIEngine
+Initialized AI engine object containing the components to update.
+
+.PARAMETER TrainingDataPath
+Path to the training data input directory.
+
+.PARAMETER ModelOutputPath
+Path used when saving updated model artifacts.
+
+.PARAMETER ForceTrain
+Forces prediction model retraining where supported by the implementation.
+
+.OUTPUTS
+PSCustomObject
+
+.EXAMPLE
+Start-AILearning -AIEngine $engine -TrainingDataPath '.\Data\Training' -ModelOutputPath '.\Models'
+#>
 function Start-AILearning {
-    [CmdletBinding()]
+    [CmdletBinding(SupportsShouldProcess)]
     param (
         [Parameter(Mandatory)]
         [PSCustomObject]$AIEngine,
@@ -60,7 +87,7 @@ function Start-AILearning {
             $learningResults.Metrics = Calculate-LearningMetrics -Updates $learningResults.ModelUpdates
 
             # Save updated models
-            if ($learningResults.Metrics.Improvement -gt 0) {
+            if ($learningResults.Metrics.Improvement -gt 0 -and $PSCmdlet.ShouldProcess($ModelOutputPath, 'Save updated AI models')) {
                 Save-MLModels -Models $AIEngine.Models -Path $ModelOutputPath
             }
 

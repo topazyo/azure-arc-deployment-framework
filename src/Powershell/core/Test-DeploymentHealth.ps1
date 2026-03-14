@@ -1,3 +1,24 @@
+<#
+.SYNOPSIS
+Validates deployment health for Arc and optional AMA components.
+
+.DESCRIPTION
+Checks Arc agent status and connectivity and, when requested, validates AMA
+service state, log ingestion, and data-collection-rule association before
+returning an overall success result.
+
+.PARAMETER ServerName
+Target server to validate.
+
+.PARAMETER ValidateAMA
+Includes AMA-related checks in the health evaluation.
+
+.OUTPUTS
+PSCustomObject
+
+.EXAMPLE
+Test-DeploymentHealth -ServerName 'SERVER01' -ValidateAMA
+#>
 function Test-DeploymentHealth {
     [CmdletBinding()]
     param (

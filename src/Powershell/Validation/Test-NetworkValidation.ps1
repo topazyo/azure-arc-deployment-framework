@@ -139,12 +139,12 @@ function Test-NetworkValidation {
             }
 
             # Determine overall status
-            $criticalComponents = $validationResults.Details | 
-                Where-Object { 
-                    $_.Component -in @("Endpoints", "DNS", "Proxy", "TLS") -and 
-                    -not $_.Success 
+            $criticalComponents = $validationResults.Details |
+                Where-Object {
+                    $_.Component -in @("Endpoints", "DNS", "Proxy", "TLS") -and
+                    -not $_.Success
                 }
-            
+
             $validationResults.Status = if ($criticalComponents.Count -eq 0) {
                 "Success"
             }
@@ -189,37 +189,35 @@ function Test-EndpointConnectivity {
     try {
         foreach ($endpoint in $Endpoints) {
             $endpointUrl = $endpoint.Url -replace '\*', 'dc'  # Replace wildcard with 'dc' for testing
-            
+            $endpointPort = $endpoint.Port
+            $endpointTimeout = $Timeout
+
             # Test TCP connectivity
             $tcpTest = Invoke-Command -ComputerName $ServerName -ScriptBlock {
-                param($url, $port, $timeout)
-                
                 $tcpClient = New-Object System.Net.Sockets.TcpClient
-                $connection = $tcpClient.BeginConnect($url, $port, $null, $null)
-                $success = $connection.AsyncWaitHandle.WaitOne($timeout * 1000, $true)
-                
+                $connection = $tcpClient.BeginConnect($using:endpointUrl, $using:endpointPort, $null, $null)
+                $success = $connection.AsyncWaitHandle.WaitOne($using:endpointTimeout * 1000, $true)
+
                 if ($success) {
                     $tcpClient.EndConnect($connection)
                 }
-                
+
                 $tcpClient.Close()
                 return $success
-            } -ArgumentList $endpointUrl, $endpoint.Port, $Timeout
-            
+            }
+
             # Test HTTPS connectivity if TCP succeeds
             $httpsTest = if ($tcpTest) {
                 Invoke-Command -ComputerName $ServerName -ScriptBlock {
-                    param($url, $timeout)
-                    
                     try {
-                        $request = [System.Net.WebRequest]::Create("https://$url")
-                        $request.Timeout = $timeout * 1000
+                        $request = [System.Net.WebRequest]::Create("https://$using:endpointUrl")
+                        $request.Timeout = $using:endpointTimeout * 1000
                         $request.Method = "HEAD"
-                        
+
                         $response = $request.GetResponse()
                         $statusCode = [int]$response.StatusCode
                         $response.Close()
-                        
+
                         return @{
                             Success = $statusCode -ge 200 -and $statusCode -lt 400
                             StatusCode = $statusCode
@@ -247,7 +245,7 @@ function Test-EndpointConnectivity {
                             Error = $_.Exception.Message
                         }
                     }
-                } -ArgumentList $endpointUrl, $Timeout
+                }
             }
             else {
                 @{
@@ -255,7 +253,7 @@ function Test-EndpointConnectivity {
                     Error = "TCP connection failed"
                 }
             }
-            
+
             $endpointResult = @{
                 Name = $endpoint.Name
                 Url = $endpoint.Url
@@ -267,9 +265,9 @@ function Test-EndpointConnectivity {
                 Error = $httpsTest.Error
                 Success = $tcpTest -and $httpsTest.Success
             }
-            
+
             $results.Endpoints += $endpointResult
-            
+
             if (-not $endpointResult.Success -and $endpoint.Critical) {
                 $results.CriticalFailures++
                 $results.OverallSuccess = $false
@@ -303,12 +301,10 @@ function Test-DNSResolution {
     try {
         foreach ($endpoint in $Endpoints) {
             $endpointUrl = $endpoint.Url -replace '\*', 'dc'  # Replace wildcard with 'dc' for testing
-            
+
             $dnsResult = Invoke-Command -ComputerName $ServerName -ScriptBlock {
-                param($url)
-                
                 try {
-                    $resolution = Resolve-DnsName -Name $url -ErrorAction Stop
+                    $resolution = Resolve-DnsName -Name $using:endpointUrl -ErrorAction Stop
                     return @{
                         Success = $true
                         IPs = $resolution | Where-Object { $_.Type -eq 'A' } | Select-Object -ExpandProperty IPAddress
@@ -321,8 +317,8 @@ function Test-DNSResolution {
                         Error = $_.Exception.Message
                     }
                 }
-            } -ArgumentList $endpointUrl
-            
+            }
+
             $resolutionResult = @{
                 Name = $endpoint.Name
                 Url = $endpoint.Url
@@ -332,9 +328,9 @@ function Test-DNSResolution {
                 Error = $dnsResult.Error
                 Critical = $endpoint.Critical
             }
-            
+
             $results.Resolutions += $resolutionResult
-            
+
             if (-not $resolutionResult.Success -and $endpoint.Critical) {
                 $results.CriticalFailures++
                 $results.OverallSuccess = $false
@@ -373,7 +369,7 @@ function Test-ProxyConfiguration {
             }
             return $config
         }
-        
+
         $results.Configuration = @{
             WinHTTPProxy = $proxyConfig.WinHTTP
             WinINetProxy = $proxyConfig.WinINet.ProxyServer
@@ -382,34 +378,34 @@ function Test-ProxyConfiguration {
             ProxyEnabled = $proxyConfig.WinINet.ProxyEnable -eq 1
             ArcProxyConfig = if ($proxyConfig.ArcConfig.proxy) { $proxyConfig.ArcConfig.proxy } else { $null }
         }
-        
+
         # Validate proxy configuration
         $proxyValidation = Invoke-Command -ComputerName $ServerName -ScriptBlock {
             $validations = @()
-            
+
             # Test if proxy is needed
             $directAccess = try {
                 $request = [System.Net.WebRequest]::Create("https://management.azure.com")
                 $request.Timeout = 10000
                 $request.Method = "HEAD"
                 $request.Proxy = [System.Net.GlobalProxySelection]::GetEmptyWebProxy()
-                
+
                 $response = $request.GetResponse()
                 $statusCode = [int]$response.StatusCode
                 $response.Close()
-                
+
                 $statusCode -ge 200 -and $statusCode -lt 400
             }
             catch {
                 $false
             }
-            
+
             $validations += @{
                 Check = "Direct Access"
                 Success = $directAccess
                 Details = if ($directAccess) { "Direct access to Azure endpoints is possible" } else { "Direct access to Azure endpoints is blocked" }
             }
-            
+
             # Test if proxy is working (if configured)
             $proxySettings = Get-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings'
             if ($proxySettings.ProxyEnable -eq 1 -and $proxySettings.ProxyServer) {
@@ -417,44 +413,44 @@ function Test-ProxyConfiguration {
                     $request = [System.Net.WebRequest]::Create("https://management.azure.com")
                     $request.Timeout = 10000
                     $request.Method = "HEAD"
-                    
+
                     $response = $request.GetResponse()
                     $statusCode = [int]$response.StatusCode
                     $response.Close()
-                    
+
                     $statusCode -ge 200 -and $statusCode -lt 400
                 }
                 catch {
                     $false
                 }
-                
+
                 $validations += @{
                     Check = "Proxy Access"
                     Success = $proxyAccess
                     Details = if ($proxyAccess) { "Access through proxy is working" } else { "Access through proxy is failing" }
                 }
             }
-            
+
             # Check if Arc agent proxy settings match system settings
             $arcConfig = if (Test-Path 'C:\Program Files\Azure Connected Machine Agent\config\agentconfig.json') {
                 Get-Content 'C:\Program Files\Azure Connected Machine Agent\config\agentconfig.json' -ErrorAction SilentlyContinue | ConvertFrom-Json
             } else { $null }
-            
+
             if ($arcConfig -and $arcConfig.proxy) {
                 $arcProxyMatch = $arcConfig.proxy -eq $proxySettings.ProxyServer
-                
+
                 $validations += @{
                     Check = "Arc Proxy Configuration"
                     Success = $arcProxyMatch
                     Details = if ($arcProxyMatch) { "Arc proxy settings match system settings" } else { "Arc proxy settings do not match system settings" }
                 }
             }
-            
+
             return $validations
         }
-        
+
         $results.Validation = $proxyValidation
-        
+
         # Determine overall success
         $results.Success = ($proxyValidation | Where-Object { -not $_.Success }).Count -eq 0
     }
@@ -483,11 +479,11 @@ function Test-TLSConfiguration {
                 SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol
                 Registry = @{}
             }
-            
+
             # Check registry settings
             $protocols = @('SSL 2.0', 'SSL 3.0', 'TLS 1.0', 'TLS 1.1', 'TLS 1.2')
             $sides = @('Client', 'Server')
-            
+
             foreach ($protocol in $protocols) {
                 foreach ($side in $sides) {
                     $regPath = "HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\$protocol\$side"
@@ -500,7 +496,7 @@ function Test-TLSConfiguration {
                     }
                 }
             }
-            
+
             # Check .NET Framework settings
             $frameworkVersions = @('v2.0.50727', 'v4.0.30319')
             foreach ($version in $frameworkVersions) {
@@ -510,16 +506,16 @@ function Test-TLSConfiguration {
                     SchUseStrongCrypto = (Get-ItemProperty -Path $regPath -Name "SchUseStrongCrypto" -ErrorAction SilentlyContinue).SchUseStrongCrypto
                 }
             }
-            
+
             return $config
         }
-        
+
         $results.Configuration = $tlsConfig
-        
+
         # Validate TLS configuration
         $tlsValidation = Invoke-Command -ComputerName $ServerName -ScriptBlock {
             $validations = @()
-            
+
             # Check if TLS 1.2 is enabled
             $tls12Enabled = $false
             if ([Net.ServicePointManager]::SecurityProtocol -match 'Tls12') {
@@ -528,14 +524,14 @@ function Test-TLSConfiguration {
             elseif ($Registry.'TLS 1.2-Client' -eq 1) {
                 $tls12Enabled = $true
             }
-            
+
             $validations += @{
                 Check = "TLS 1.2 Enabled"
                 Success = $tls12Enabled
                 Details = if ($tls12Enabled) { "TLS 1.2 is enabled" } else { "TLS 1.2 is not enabled" }
                 Critical = $true
             }
-            
+
             # Check if older protocols are disabled
             $oldProtocolsDisabled = $true
             foreach ($protocol in @('SSL 2.0', 'SSL 3.0')) {
@@ -544,42 +540,42 @@ function Test-TLSConfiguration {
                     break
                 }
             }
-            
+
             $validations += @{
                 Check = "Old Protocols Disabled"
                 Success = $oldProtocolsDisabled
                 Details = if ($oldProtocolsDisabled) { "Insecure protocols are disabled" } else { "Insecure protocols are enabled" }
                 Critical = $true
             }
-            
+
             # Test TLS connection to Azure endpoints
             $tlsConnection = try {
                 $request = [System.Net.WebRequest]::Create("https://management.azure.com")
                 $request.Timeout = 10000
                 $request.Method = "HEAD"
-                
+
                 $response = $request.GetResponse()
                 $statusCode = [int]$response.StatusCode
                 $response.Close()
-                
+
                 $statusCode -ge 200 -and $statusCode -lt 400
             }
             catch {
                 $false
             }
-            
+
             $validations += @{
                 Check = "TLS Connection"
                 Success = $tlsConnection
                 Details = if ($tlsConnection) { "TLS connection to Azure endpoints is successful" } else { "TLS connection to Azure endpoints is failing" }
                 Critical = $true
             }
-            
+
             return $validations
         }
-        
+
         $results.Validation = $tlsValidation
-        
+
         # Determine overall success
         $criticalChecks = $tlsValidation | Where-Object { $_.Critical -and -not $_.Success }
         $results.Success = $criticalChecks.Count -eq 0
@@ -616,21 +612,19 @@ function Test-NetworkPerformance {
         $totalLatency = 0
         $totalEndpoints = 0
         $totalPacketLoss = 0
-        
+
         foreach ($endpoint in $Endpoints) {
             $endpointUrl = $endpoint.Url -replace '\*', 'dc'  # Replace wildcard with 'dc' for testing
-            
+
             # Test network performance
             $performanceTest = Invoke-Command -ComputerName $ServerName -ScriptBlock {
-                param($url)
-                
-                $pingResults = Test-Connection -ComputerName $url -Count 10 -ErrorAction SilentlyContinue
-                
+                $pingResults = Test-Connection -ComputerName $using:endpointUrl -Count 10 -ErrorAction SilentlyContinue
+
                 if ($pingResults) {
                     $successCount = ($pingResults | Measure-Object).Count
                     $packetLoss = 100 - ($successCount * 10)
                     $avgLatency = ($pingResults | Measure-Object -Property ResponseTime -Average).Average
-                    
+
                     return @{
                         Success = $true
                         AverageLatency = $avgLatency
@@ -645,23 +639,23 @@ function Test-NetworkPerformance {
                     for ($i = 0; $i -lt 5; $i++) {
                         $startTime = Get-Date
                         $tcpClient = New-Object System.Net.Sockets.TcpClient
-                        $connection = $tcpClient.BeginConnect($url, 443, $null, $null)
+                        $connection = $tcpClient.BeginConnect($using:endpointUrl, 443, $null, $null)
                         $success = $connection.AsyncWaitHandle.WaitOne(5000, $true)
                         $endTime = Get-Date
-                        
+
                         if ($success) {
                             $tcpClient.EndConnect($connection)
                             $latency = ($endTime - $startTime).TotalMilliseconds
                             $tcpLatencies += $latency
                         }
-                        
+
                         $tcpClient.Close()
                     }
-                    
+
                     if ($tcpLatencies.Count -gt 0) {
                         $avgLatency = ($tcpLatencies | Measure-Object -Average).Average
                         $packetLoss = 100 - (($tcpLatencies.Count / 5) * 100)
-                        
+
                         return @{
                             Success = $true
                             AverageLatency = $avgLatency
@@ -679,8 +673,8 @@ function Test-NetworkPerformance {
                         }
                     }
                 }
-            } -ArgumentList $endpointUrl
-            
+            }
+
             $endpointResult = @{
                 Name = $endpoint.Name
                 Url = $endpoint.Url
@@ -694,14 +688,14 @@ function Test-NetworkPerformance {
                 PacketLossThresholdExceeded = $performanceTest.PacketLoss -gt $PacketLossThreshold
                 Error = $performanceTest.Error
             }
-            
+
             $results.Endpoints += $endpointResult
-            
+
             if ($performanceTest.Success) {
                 $totalLatency += $performanceTest.AverageLatency
                 $totalPacketLoss += $performanceTest.PacketLoss
                 $totalEndpoints++
-                
+
                 if ($performanceTest.AverageLatency -gt $LatencyThreshold -or $performanceTest.PacketLoss -gt $PacketLossThreshold) {
                     $results.Success = $false
                 }
@@ -710,7 +704,7 @@ function Test-NetworkPerformance {
                 $results.Success = $false
             }
         }
-        
+
         if ($totalEndpoints -gt 0) {
             $results.AverageLatency = $totalLatency / $totalEndpoints
             $results.PacketLoss = $totalPacketLoss / $totalEndpoints
@@ -740,87 +734,87 @@ function Test-FirewallConfiguration {
         $firewallConfig = Invoke-Command -ComputerName $ServerName -ScriptBlock {
             $config = @{
                 Profiles = Get-NetFirewallProfile | Select-Object Name, Enabled
-                ArcRules = Get-NetFirewallRule | Where-Object { 
-                    $_.DisplayName -like "*Azure*" -or 
-                    $_.DisplayName -like "*Arc*" -or 
-                    $_.DisplayName -like "*Monitor*" 
+                ArcRules = Get-NetFirewallRule | Where-Object {
+                    $_.DisplayName -like "*Azure*" -or
+                    $_.DisplayName -like "*Arc*" -or
+                    $_.DisplayName -like "*Monitor*"
                 } | Select-Object DisplayName, Enabled, Direction, Action
                 OutboundRules = Get-NetFirewallRule -Direction Outbound | Where-Object { $_.Enabled -eq $true -and $_.Action -eq "Allow" } | Select-Object -First 10
             }
             return $config
         }
-        
+
         $results.Configuration = $firewallConfig
-        
+
         # Validate firewall configuration
         $firewallValidation = Invoke-Command -ComputerName $ServerName -ScriptBlock {
             $validations = @()
-            
+
             # Check if any firewall profile is enabled
             $firewallEnabled = (Get-NetFirewallProfile | Where-Object { $_.Enabled -eq $true }).Count -gt 0
-            
+
             $validations += @{
                 Check = "Firewall Enabled"
                 Success = $firewallEnabled
                 Details = if ($firewallEnabled) { "At least one firewall profile is enabled" } else { "No firewall profiles are enabled" }
             }
-            
+
             # Check outbound connectivity
-            $outboundAllowed = (Get-NetFirewallRule -Direction Outbound | Where-Object { 
-                $_.Enabled -eq $true -and 
-                $_.Action -eq "Allow" 
+            $outboundAllowed = (Get-NetFirewallRule -Direction Outbound | Where-Object {
+                $_.Enabled -eq $true -and
+                $_.Action -eq "Allow"
             }).Count -gt 0
-            
+
             $validations += @{
                 Check = "Outbound Connectivity"
                 Success = $outboundAllowed
                 Details = if ($outboundAllowed) { "Outbound connectivity is allowed" } else { "Outbound connectivity may be restricted" }
                 Critical = $true
             }
-            
+
             # Check for Arc-specific rules
-            $arcRules = Get-NetFirewallRule | Where-Object { 
-                $_.DisplayName -like "*Azure*" -or 
-                $_.DisplayName -like "*Arc*" -or 
-                $_.DisplayName -like "*Monitor*" 
+            $arcRules = Get-NetFirewallRule | Where-Object {
+                $_.DisplayName -like "*Azure*" -or
+                $_.DisplayName -like "*Arc*" -or
+                $_.DisplayName -like "*Monitor*"
             }
-            
+
             $arcRulesExist = $arcRules.Count -gt 0
-            
+
             $validations += @{
                 Check = "Arc-Specific Rules"
                 Success = $arcRulesExist
                 Details = if ($arcRulesExist) { "Arc-specific firewall rules exist" } else { "No Arc-specific firewall rules found" }
             }
-            
+
             # Test outbound connectivity to Azure endpoints
             $azureConnectivity = try {
                 $request = [System.Net.WebRequest]::Create("https://management.azure.com")
                 $request.Timeout = 10000
                 $request.Method = "HEAD"
-                
+
                 $response = $request.GetResponse()
                 $statusCode = [int]$response.StatusCode
                 $response.Close()
-                
+
                 $statusCode -ge 200 -and $statusCode -lt 400
             }
             catch {
                 $false
             }
-            
+
             $validations += @{
                 Check = "Azure Connectivity"
                 Success = $azureConnectivity
                 Details = if ($azureConnectivity) { "Outbound connectivity to Azure is working" } else { "Outbound connectivity to Azure is blocked" }
                 Critical = $true
             }
-            
+
             return $validations
         }
-        
+
         $results.Validation = $firewallValidation
-        
+
         # Determine overall success
         $criticalChecks = $firewallValidation | Where-Object { $_.Critical -and -not $_.Success }
         $results.Success = $criticalChecks.Count -eq 0
@@ -847,68 +841,69 @@ function Test-NetworkRoutes {
         # Get network routes and interfaces
         $networkData = Invoke-Command -ComputerName $ServerName -ScriptBlock {
             $data = @{
-                Routes = Get-NetRoute | Where-Object { 
+                Routes = Get-NetRoute | Where-Object {
                     $_.DestinationPrefix -notlike '169.254.*' -and
                     $_.DestinationPrefix -notlike '224.0.0.*'
                 } | Select-Object DestinationPrefix, NextHop, RouteMetric, InterfaceIndex
-                
+
                 Interfaces = Get-NetAdapter | Where-Object { $_.Status -eq 'Up' } | Select-Object Name, InterfaceDescription, Status, MacAddress, LinkSpeed, ifIndex
-                
-                DefaultGateway = (Get-NetRoute | Where-Object { 
-                    $_.DestinationPrefix -eq '0.0.0.0/0' -or 
-                    $_.DestinationPrefix -eq '::/0' 
+
+                DefaultGateway = (Get-NetRoute | Where-Object {
+                    $_.DestinationPrefix -eq '0.0.0.0/0' -or
+                    $_.DestinationPrefix -eq '::/0'
                 }).NextHop
             }
             return $data
         }
-        
+
         $results.Routes = $networkData.Routes
         $results.Interfaces = $networkData.Interfaces
         $results.DefaultGateway = $networkData.DefaultGateway
-        
+
         # Validate routes
         $routeValidation = Invoke-Command -ComputerName $ServerName -ScriptBlock {
             $validations = @()
-            
+
             # Check if default gateway exists
-            $defaultGatewayExists = (Get-NetRoute | Where-Object { 
-                $_.DestinationPrefix -eq '0.0.0.0/0' -or 
-                $_.DestinationPrefix -eq '::/0' 
+            $defaultGatewayExists = (Get-NetRoute | Where-Object {
+                $_.DestinationPrefix -eq '0.0.0.0/0' -or
+                $_.DestinationPrefix -eq '::/0'
             }).Count -gt 0
-            
+
             $validations += @{
                 Check = "Default Gateway"
                 Success = $defaultGatewayExists
                 Details = if ($defaultGatewayExists) { "Default gateway is configured" } else { "No default gateway found" }
                 Critical = $true
             }
-            
+
             # Check if interfaces are up
             $activeInterfaces = (Get-NetAdapter | Where-Object { $_.Status -eq 'Up' }).Count
-            
+
             $validations += @{
                 Check = "Active Interfaces"
                 Success = $activeInterfaces -gt 0
                 Details = if ($activeInterfaces -gt 0) { "$activeInterfaces active network interfaces found" } else { "No active network interfaces found" }
                 Critical = $true
             }
-            
+
             # Check route to Azure endpoints
-            $azureRouteTest = Test-NetConnection -ComputerName "management.azure.com" -TraceRoute
-            $azureRouteSuccess = $azureRouteTest.TraceRoute[-1] -eq "management.azure.com"
-            
+            $azureManagementEndpoint = 'management.azure.com'
+            $azureRouteTest = Test-NetConnection -ComputerName $azureManagementEndpoint -TraceRoute
+            $azureRouteSuccess = $azureRouteTest.TraceRoute[-1] -eq $azureManagementEndpoint
+
             $validations += @{
                 Check = "Azure Route"
                 Success = $azureRouteSuccess
                 Details = if ($azureRouteSuccess) { "Route to Azure endpoints is valid" } else { "Route to Azure endpoints may be invalid" }
                 TraceRoute = $azureRouteTest.TraceRoute
             }
-            
+
             return $validations
         }
-        
+
         $results.Validation = $routeValidation
-        
+
         # Determine overall success
         $criticalChecks = $routeValidation | Where-Object { $_.Critical -and -not $_.Success }
         $results.Success = $criticalChecks.Count -eq 0
@@ -942,7 +937,7 @@ function Get-NetworkRecommendations {
                     }
                 }
             }
-            
+
             "DNS" {
                 $failedResolutions = $component.Results.Resolutions | Where-Object { -not $_.Success }
                 foreach ($resolution in $failedResolutions) {
@@ -955,7 +950,7 @@ function Get-NetworkRecommendations {
                     }
                 }
             }
-            
+
             "Proxy" {
                 $failedChecks = $component.Results.Validation | Where-Object { -not $_.Success }
                 foreach ($check in $failedChecks) {
@@ -973,7 +968,7 @@ function Get-NetworkRecommendations {
                     }
                 }
             }
-            
+
             "TLS" {
                 $failedChecks = $component.Results.Validation | Where-Object { -not $_.Success }
                 foreach ($check in $failedChecks) {
@@ -991,10 +986,10 @@ function Get-NetworkRecommendations {
                     }
                 }
             }
-            
+
             "Performance" {
-                $poorPerformance = $component.Results.Endpoints | Where-Object { 
-                    $_.LatencyThresholdExceeded -or $_.PacketLossThresholdExceeded 
+                $poorPerformance = $component.Results.Endpoints | Where-Object {
+                    $_.LatencyThresholdExceeded -or $_.PacketLossThresholdExceeded
                 }
                 foreach ($endpoint in $poorPerformance) {
                     $recommendations += @{
@@ -1002,19 +997,21 @@ function Get-NetworkRecommendations {
                         Priority = "Medium"
                         Issue = if ($endpoint.LatencyThresholdExceeded) {
                             "High latency to $($endpoint.Name) ($($endpoint.AverageLatency)ms)"
-                        } else {
+                        }
+                        else {
                             "High packet loss to $($endpoint.Name) ($($endpoint.PacketLoss)%)"
                         }
                         Recommendation = if ($endpoint.LatencyThresholdExceeded) {
                             "Investigate network latency issues to $($endpoint.Url)"
-                        } else {
+                        }
+                        else {
                             "Investigate packet loss issues to $($endpoint.Url)"
                         }
                         Details = "Latency: $($endpoint.AverageLatency)ms, Packet Loss: $($endpoint.PacketLoss)%"
                     }
                 }
             }
-            
+
             "Firewall" {
                 $failedChecks = $component.Results.Validation | Where-Object { -not $_.Success }
                 foreach ($check in $failedChecks) {
@@ -1032,7 +1029,7 @@ function Get-NetworkRecommendations {
                     }
                 }
             }
-            
+
             "Routes" {
                 $failedChecks = $component.Results.Validation | Where-Object { -not $_.Success }
                 foreach ($check in $failedChecks) {

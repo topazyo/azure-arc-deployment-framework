@@ -22,7 +22,7 @@ Function Test-OperationResult {
     )
 
     # --- Logging Function (for script activity) ---
-    function Write-Log {
+    function Write-ActivityLog {
         param (
             [string]$Message,
             [string]$Level = "INFO", # INFO, WARNING, ERROR, DEBUG
@@ -30,7 +30,7 @@ Function Test-OperationResult {
         )
         $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
         $logEntry = "[$timestamp] [$Level] $Message"
-        
+
         try {
             if (-not (Test-Path (Split-Path $Path -Parent) -PathType Container)) {
                 New-Item -ItemType Directory -Path (Split-Path $Path -Parent) -Force -ErrorAction Stop | Out-Null
@@ -39,14 +39,14 @@ Function Test-OperationResult {
         }
         catch {
             Write-Warning "ACTIVITY_LOG_FAIL: Failed to write to activity log file $Path. Error: $($_.Exception.Message). Logging to console instead."
-            Write-Host $logEntry 
+            Write-Verbose $logEntry
         }
     }
 
-    Write-Log "Starting Test-OperationResult script."
-    Write-Log "Parameters: ExpectedStatus='$ExpectedStatus', SuccessIfAllExpectedPropertiesMatch='$SuccessIfAllExpectedPropertiesMatch'."
-    if ($ExpectedProperties) { Write-Log "ExpectedProperties provided: $($ExpectedProperties.Keys -join ', ')" -Level "DEBUG" }
-    if ($OperationOutput) { Write-Log "OperationOutput received: $($OperationOutput | Out-String -Width 120)" -Level "DEBUG"} else { Write-Log "OperationOutput is null."}
+    Write-ActivityLog "Starting Test-OperationResult script."
+    Write-ActivityLog "Parameters: ExpectedStatus='$ExpectedStatus', SuccessIfAllExpectedPropertiesMatch='$SuccessIfAllExpectedPropertiesMatch'."
+    if ($ExpectedProperties) { Write-ActivityLog "ExpectedProperties provided: $($ExpectedProperties.Keys -join ', ')" -Level "DEBUG" }
+    if ($OperationOutput) { Write-ActivityLog "OperationOutput received: $($OperationOutput | Out-String -Width 120)" -Level "DEBUG"} else { Write-ActivityLog "OperationOutput is null."}
 
 
     $validationDetails = [System.Collections.ArrayList]::new()
@@ -54,7 +54,7 @@ Function Test-OperationResult {
     $actualStatus = $null
 
     # --- Status Check ---
-    Write-Log "Performing Status Check..."
+    Write-ActivityLog "Performing Status Check..."
     if ($null -eq $OperationOutput) {
         $actualStatus = "NullObject"
         $statusCheckPassed = ($ExpectedStatus -eq "NullObject") # Pass only if specifically expecting null
@@ -65,7 +65,7 @@ Function Test-OperationResult {
             Result   = if($statusCheckPassed){"Passed"}else{"Failed"}
             Message  = "OperationOutput object was null."
         }) | Out-Null
-        Write-Log "OperationOutput is null. Status check: $($validationDetails[-1].Result)." -Level "WARNING"
+        Write-ActivityLog "OperationOutput is null. Status check: $($validationDetails[-1].Result)." -Level "WARNING"
     }
     elseif (-not $OperationOutput.PSObject.Properties['Status']) {
         $actualStatus = "StatusPropertyMissing"
@@ -77,7 +77,7 @@ Function Test-OperationResult {
             Result   = if($statusCheckPassed){"Passed"}else{"Failed"}
             Message  = "OperationOutput object lacks a 'Status' property."
         }) | Out-Null
-        Write-Log "OperationOutput lacks a 'Status' property. Status check: $($validationDetails[-1].Result)." -Level "WARNING"
+        Write-ActivityLog "OperationOutput lacks a 'Status' property. Status check: $($validationDetails[-1].Result)." -Level "WARNING"
     } else {
         $actualStatus = $OperationOutput.Status
         if ($actualStatus -eq $ExpectedStatus) {
@@ -89,7 +89,7 @@ Function Test-OperationResult {
                 Result   = "Passed"
                 Message  = "Actual status '$actualStatus' matches expected status."
             }) | Out-Null
-            Write-Log "Status check passed. Expected: '$ExpectedStatus', Actual: '$actualStatus'."
+            Write-ActivityLog "Status check passed. Expected: '$ExpectedStatus', Actual: '$actualStatus'."
         } else {
             $statusCheckPassed = $false
             $validationDetails.Add([PSCustomObject]@{
@@ -99,46 +99,44 @@ Function Test-OperationResult {
                 Result   = "Failed"
                 Message  = "Actual status '$actualStatus' does not match expected status '$ExpectedStatus'."
             }) | Out-Null
-            Write-Log "Status check failed. Expected: '$ExpectedStatus', Actual: '$actualStatus'." -Level "WARNING"
+            Write-ActivityLog "Status check failed. Expected: '$ExpectedStatus', Actual: '$actualStatus'." -Level "WARNING"
         }
     }
 
     # --- Expected Properties Check ---
     $allPropertiesMatched = $true # Assume true if no ExpectedProperties are provided or all match
     if ($ExpectedProperties) {
-        Write-Log "Performing Expected Properties Check..."
+        Write-ActivityLog "Performing Expected Properties Check..."
         foreach ($propKey in $ExpectedProperties.Keys) {
             $expectedPropCondition = $ExpectedProperties[$propKey]
-            $propertyExists = $false
             $actualPropValue = $null
             $propMatch = $false
             $propCheckMessage = ""
 
             if ($null -ne $OperationOutput -and $OperationOutput.PSObject.Properties[$propKey]) {
-                $propertyExists = $true
                 $actualPropValue = $OperationOutput.$($propKey)
-                
+
                 try {
                     if ($expectedPropCondition -is [ScriptBlock]) {
-                        Write-Log "Evaluating ScriptBlock for property '$propKey'." -Level "DEBUG"
+                        Write-ActivityLog "Evaluating ScriptBlock for property '$propKey'." -Level "DEBUG"
                         # Invoke scriptblock, passing the actual value as $_ or $args[0]
                         $propMatch = Invoke-Command -ScriptBlock $expectedPropCondition -ArgumentList $actualPropValue # Or $actualPropValue | & $expectedPropCondition
                         $propCheckMessage = "Property '$propKey': Custom logic (ScriptBlock) evaluated to $propMatch. Actual value: '$actualPropValue'."
-                        Write-Log $propCheckMessage -Level $(if($propMatch){"DEBUG"}else{"WARNING"})
+                        Write-ActivityLog $propCheckMessage -Level $(if($propMatch){"DEBUG"}else{"WARNING"})
                     } else { # Static value comparison
                         $propMatch = ($actualPropValue -eq $expectedPropCondition)
                         $propCheckMessage = "Property '$propKey': Expected: '$expectedPropCondition', Actual: '$actualPropValue'."
-                        Write-Log $propCheckMessage -Level $(if($propMatch){"DEBUG"}else{"WARNING"})
+                        Write-ActivityLog $propCheckMessage -Level $(if($propMatch){"DEBUG"}else{"WARNING"})
                     }
                 } catch {
                     $propMatch = $false
                     $propCheckMessage = "Property '$propKey': Error during evaluation. Expected: '$expectedPropCondition', Actual: '$actualPropValue'. Error: $($_.Exception.Message)"
-                    Write-Log $propCheckMessage -Level "ERROR"
+                    Write-ActivityLog $propCheckMessage -Level "ERROR"
                 }
             } else { # Property does not exist on OperationOutput
                 $propMatch = $false
                 $propCheckMessage = "Property '$propKey': Expected to exist, but was not found on OperationOutput."
-                Write-Log $propCheckMessage -Level "WARNING"
+                Write-ActivityLog $propCheckMessage -Level "WARNING"
                 $actualPropValue = "PropertyNotFoun_d" # Special value
             }
 
@@ -153,9 +151,9 @@ Function Test-OperationResult {
                 Message  = $propCheckMessage
             }) | Out-Null
         }
-        Write-Log "Expected Properties check completed. All matched: $allPropertiesMatched."
+        Write-ActivityLog "Expected Properties check completed. All matched: $allPropertiesMatched."
     } else {
-        Write-Log "No ExpectedProperties provided; skipping this check."
+        Write-ActivityLog "No ExpectedProperties provided; skipping this check."
         # $allPropertiesMatched remains true by default
     }
 
@@ -166,7 +164,7 @@ Function Test-OperationResult {
     } else {
         $overallTestPassed = $statusCheckPassed # Only status matters for overall pass/fail
     }
-    Write-Log "Overall test result: $(if($overallTestPassed){'Passed'}else{'Failed'}). (StatusCheck: $statusCheckPassed, PropertiesMatch: $allPropertiesMatched, SuccessIfAllPropsMatch: $SuccessIfAllExpectedPropertiesMatch)"
+    Write-ActivityLog "Overall test result: $(if($overallTestPassed){'Passed'}else{'Failed'}). (StatusCheck: $statusCheckPassed, PropertiesMatch: $allPropertiesMatched, SuccessIfAllPropsMatch: $SuccessIfAllExpectedPropertiesMatch)"
 
     $finalResult = [PSCustomObject]@{
         OverallResult          = $overallTestPassed
@@ -177,7 +175,7 @@ Function Test-OperationResult {
         ValidationDetails      = $validationDetails
         Timestamp              = Get-Date -Format o
     }
-    
-    Write-Log "Test-OperationResult script finished."
+
+    Write-ActivityLog "Test-OperationResult script finished."
     return $finalResult
 }

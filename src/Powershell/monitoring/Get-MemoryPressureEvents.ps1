@@ -40,12 +40,12 @@ try {
 
     # Define queries for events that *might* indicate memory pressure
     $queries = @(
-        @{ 
-            LogName='System'; 
-            ProviderName='Microsoft-Windows-Resource-Exhaustion-Detector'; 
-            Id=2004; 
+        @{
+            LogName='System';
+            ProviderName='Microsoft-Windows-Resource-Exhaustion-Detector';
+            Id=2004;
             KeywordsFilter = "memory", "virtual memory"; # Check if message specifically mentions memory
-            Label="Resource Exhaustion (System - Memory Related)" 
+            Label="Resource Exhaustion (System - Memory Related)"
         },
         @{
             LogName='System';
@@ -63,7 +63,7 @@ try {
     )
 
     Write-Log "Querying event logs for potential memory pressure indicators..."
-    
+
     foreach ($query in $queries) {
         Write-Log "Executing query: LogName='$($query.LogName)', ProviderName='$($query.ProviderName)', ID='$($query.Id)', Label='$($query.Label)', Keywords='$($query.KeywordsFilter)' on '$ServerName' since '$StartTime'."
         try {
@@ -76,21 +76,21 @@ try {
 
             $getWinEventParams = @{
                 FilterHashtable = $filterHashtable
-                MaxEvents = $MaxEventsPerQuery 
+                MaxEvents = $MaxEventsPerQuery
                 ErrorAction = 'Stop'
             }
 
             if ($ServerName -ne $env:COMPUTERNAME -and -not ([string]::IsNullOrWhiteSpace($ServerName))) {
                 $getWinEventParams.ComputerName = $ServerName
             }
-            
+
             $events = Get-WinEvent @getWinEventParams
 
             if ($events) {
                 $eventCount = 0
-                foreach ($event in $events) {
-                    $message = $event.Message
-                    $match = $true 
+                foreach ($inputEvent in $events) {
+                    $message = $inputEvent.Message
+                    $match = $true
 
                     if ($query.KeywordsFilter) {
                         $match = $false
@@ -101,16 +101,16 @@ try {
                             }
                         }
                     }
-                    
+
                     if($match){
                         $eventCount++
                         $allMemoryPressureEvents.Add([PSCustomObject]@{
-                            Timestamp   = $event.TimeCreated
-                            SourceLog   = $event.LogName
-                            EventId     = $event.Id
-                            ProviderName= $event.ProviderName
-                            Message     = $message 
-                            MachineName = $event.MachineName
+                            Timestamp   = $inputEvent.TimeCreated
+                            SourceLog   = $inputEvent.LogName
+                            EventId     = $inputEvent.Id
+                            ProviderName= $inputEvent.ProviderName
+                            Message     = $message
+                            MachineName = $inputEvent.MachineName
                             QueryLabel  = $query.Label
                         }) | Out-Null
                     }
@@ -120,16 +120,16 @@ try {
                 Write-Log "No events found for query [Label: $($query.Label)] before keyword filtering."
             }
         }
-        catch [System.Diagnostics.Eventing.Reader.EventLogNotFoundException],[System.UnauthorizedAccessException] { 
+        catch [System.Diagnostics.Eventing.Reader.EventLogNotFoundException],[System.UnauthorizedAccessException] {
             Write-Log "Failed to execute query [Label: $($query.Label)]. Log '$($query.LogName)' might not exist or is inaccessible on '$ServerName'. Error: $($_.Exception.Message)" -Level "WARNING"
         }
-        catch { 
+        catch {
             Write-Log "An error occurred while executing query [Label: $($query.Label)] on '$ServerName'. Error: $($_.Exception.Message)" -Level "ERROR"
         }
     }
 
     $sortedEvents = $allMemoryPressureEvents | Sort-Object Timestamp -Descending
-    
+
     Write-Log "Get-MemoryPressureEvents script finished. Total potentially relevant events retrieved: $($sortedEvents.Count)."
     return $sortedEvents
 
@@ -139,5 +139,5 @@ catch {
     if ($_.ScriptStackTrace) {
         Write-Log "Stack Trace: $($_.ScriptStackTrace)" -Level "FATAL"
     }
-    return @() 
+    return @()
 }

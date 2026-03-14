@@ -40,7 +40,7 @@ function Get-SystemPerformanceMetrics {
             }
 
             $metrics.Samples += $sample
-            
+
             if ($i -lt $SampleCount) {
                 Start-Sleep -Seconds $SampleInterval
             }
@@ -53,7 +53,7 @@ function Get-SystemPerformanceMetrics {
         $metrics.Recommendations = Get-PerformanceRecommendations -Metrics $metrics.Summary
     }
     catch {
-        Write-Error "Failed to collect performance metrics: $_"
+        Write-Warning "Failed to collect performance metrics: $($_.Exception.Message)"
         $metrics.Error = $_.Exception.Message
     }
     finally {

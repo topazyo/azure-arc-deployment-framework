@@ -1,3 +1,30 @@
+<#
+.SYNOPSIS
+Tests server reachability and required endpoint connectivity.
+
+.DESCRIPTION
+Checks whether the target server is reachable, tests connectivity to the configured
+Arc and monitoring endpoints, optionally gathers detailed network data, and
+returns an overall connectivity result.
+
+.PARAMETER ServerName
+Target server to test.
+
+.PARAMETER Endpoints
+Optional endpoint map to use instead of the built-in defaults.
+
+.PARAMETER TimeoutSeconds
+Timeout value used by downstream connectivity checks.
+
+.PARAMETER DetailedOutput
+Includes IP configuration, proxy settings, firewall rules, and route data.
+
+.OUTPUTS
+PSCustomObject
+
+.EXAMPLE
+Test-Connectivity -ServerName 'SERVER01' -DetailedOutput
+#>
 function Test-Connectivity {
     [CmdletBinding()]
     param (
@@ -65,7 +92,7 @@ function Test-Connectivity {
                 }
 
                 # TCP Test
-                $tcpTest = New-RetryBlock -ScriptBlock {
+                    $tcpTest = New-RetryBlock -Action {
                     Test-NetConnection -ComputerName $endpoint.Value.Host -Port $endpoint.Value.Port -WarningAction SilentlyContinue
                 } -RetryCount 2 -RetryDelaySeconds 5
 
@@ -93,7 +120,7 @@ function Test-Connectivity {
 
             # Calculate overall status
             $requiredEndpoints = $results.EndPoints.Values | Where-Object { $_.Required }
-            $failedRequired = $requiredEndpoints | 
+            $failedRequired = $requiredEndpoints |
                 Where-Object { -not ($_.TestResults | Where-Object { $_.Type -eq 'TCP' -and $_.Success }) }
 
             $results.OverallStatus = if ($failedRequired) {
@@ -116,7 +143,7 @@ function Test-Connectivity {
         catch {
             $results.OverallStatus = 'Error'
             $results.Error = Convert-ErrorToObject -ErrorRecord $_
-            Write-Error "Connectivity test failed: $_"
+            Write-Warning "Connectivity test failed: $($_.Exception.Message)"
         }
     }
 

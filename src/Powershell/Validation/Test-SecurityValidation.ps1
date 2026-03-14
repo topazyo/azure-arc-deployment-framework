@@ -173,7 +173,7 @@ function Test-SecurityValidation {
             if ($Remediate) {
                 foreach ($check in $securityResults.Checks | Where-Object { -not $_.Status }) {
                     Write-Log -Message "Attempting remediation for $($check.Category)" -Level Warning
-                    
+
                     $remediationResult = switch ($check.Category) {
                         "TLS" { Set-TLSConfiguration -ServerName $ServerName -Configuration $check.Baseline }
                         "Certificates" { Repair-CertificateIssues -ServerName $ServerName -Issues $check.Details }
@@ -252,7 +252,7 @@ function Test-TLSConfiguration {
                 "HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.2\Client",
                 "HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.2\Server"
             )
-            
+
             $results = @{}
             foreach ($path in $paths) {
                 if (Test-Path $path) {
@@ -275,12 +275,12 @@ function Test-TLSConfiguration {
             foreach ($protocol in $disabledProtocols) {
                 $clientPath = "$protocol\Client"
                 $serverPath = "$protocol\Server"
-                
+
                 if (Test-Path $clientPath) {
                     $enabled = (Get-ItemProperty -Path $clientPath -Name "Enabled" -ErrorAction SilentlyContinue).Enabled
                     $results[$clientPath] = $enabled
                 }
-                
+
                 if (Test-Path $serverPath) {
                     $enabled = (Get-ItemProperty -Path $serverPath -Name "Enabled" -ErrorAction SilentlyContinue).Enabled
                     $results[$serverPath] = $enabled
@@ -297,7 +297,7 @@ function Test-TLSConfiguration {
                 if (Test-Path $path) {
                     $systemDefaultTlsVersions = (Get-ItemProperty -Path $path -Name "SystemDefaultTlsVersions" -ErrorAction SilentlyContinue).SystemDefaultTlsVersions
                     $schUseStrongCrypto = (Get-ItemProperty -Path $path -Name "SchUseStrongCrypto" -ErrorAction SilentlyContinue).SchUseStrongCrypto
-                    
+
                     $results["$path\SystemDefaultTlsVersions"] = $systemDefaultTlsVersions
                     $results["$path\SchUseStrongCrypto"] = $schUseStrongCrypto
                 }
@@ -336,7 +336,7 @@ function Test-TLSConfiguration {
             if ($tlsSettings.ContainsKey($protocol) -and $tlsSettings[$protocol] -ne 0) {
                 $protocolName = $protocol -replace "HKLM:\\SYSTEM\\CurrentControlSet\\Control\\SecurityProviders\\SCHANNEL\\Protocols\\", "" -replace "\\(Client|Server)", ""
                 $endpointType = if ($protocol -match "Client$") { "Client" } else { "Server" }
-                
+
                 $results.Details += "$protocolName $endpointType is not disabled"
                 $results.Remediation += "Disable $protocolName $endpointType in registry"
             }
@@ -351,13 +351,13 @@ function Test-TLSConfiguration {
         foreach ($path in $netFrameworkPaths) {
             $systemDefaultTlsVersions = $tlsSettings["$path\SystemDefaultTlsVersions"]
             $schUseStrongCrypto = $tlsSettings["$path\SchUseStrongCrypto"]
-            
+
             if ($systemDefaultTlsVersions -ne 1) {
                 $pathName = $path -replace "HKLM:\\", ""
                 $results.Details += "SystemDefaultTlsVersions not enabled in $pathName"
                 $results.Remediation += "Enable SystemDefaultTlsVersions in $pathName"
             }
-            
+
             if ($schUseStrongCrypto -ne 1) {
                 $pathName = $path -replace "HKLM:\\", ""
                 $results.Details += "SchUseStrongCrypto not enabled in $pathName"
@@ -391,26 +391,26 @@ function Test-CertificateValidation {
         # Check Machine Certificates
         $certificates = Invoke-Command -ComputerName $ServerName -ScriptBlock {
             $certs = @{
-                MachineCerts = Get-ChildItem -Path 'Cert:\LocalMachine\My' | 
-                    Where-Object { 
-                        $_.Subject -match 'Azure|Arc|Monitor' -or 
-                        $_.Issuer -match 'Microsoft|Azure' 
-                    } | 
+                MachineCerts = Get-ChildItem -Path 'Cert:\LocalMachine\My' |
+                    Where-Object {
+                        $_.Subject -match 'Azure|Arc|Monitor' -or
+                        $_.Issuer -match 'Microsoft|Azure'
+                    } |
                     Select-Object -Property Subject, Thumbprint, NotBefore, NotAfter, Issuer, HasPrivateKey
-                
-                RootCerts = Get-ChildItem -Path 'Cert:\LocalMachine\Root' | 
-                    Where-Object { 
-                        $_.Subject -match 'Microsoft|DigiCert|Baltimore|Verisign' 
-                    } | 
+
+                RootCerts = Get-ChildItem -Path 'Cert:\LocalMachine\Root' |
+                    Where-Object {
+                        $_.Subject -match 'Microsoft|DigiCert|Baltimore|Verisign'
+                    } |
                     Select-Object -Property Subject, Thumbprint, NotBefore, NotAfter, Issuer
-                
-                IntermediateCerts = Get-ChildItem -Path 'Cert:\LocalMachine\CA' | 
-                    Where-Object { 
-                        $_.Subject -match 'Microsoft|DigiCert|Baltimore|Verisign' 
-                    } | 
+
+                IntermediateCerts = Get-ChildItem -Path 'Cert:\LocalMachine\CA' |
+                    Where-Object {
+                        $_.Subject -match 'Microsoft|DigiCert|Baltimore|Verisign'
+                    } |
                     Select-Object -Property Subject, Thumbprint, NotBefore, NotAfter, Issuer
             }
-            
+
             return $certs
         }
 
@@ -462,25 +462,25 @@ function Test-CertificateValidation {
 
         # Check certificate chain
         $chainCheck = Invoke-Command -ComputerName $ServerName -ScriptBlock {
-            $arcCerts = Get-ChildItem -Path 'Cert:\LocalMachine\My' | 
+            $arcCerts = Get-ChildItem -Path 'Cert:\LocalMachine\My' |
                 Where-Object { $_.Subject -match 'Azure|Arc|Monitor' }
-            
+
             $chainResults = @()
             foreach ($cert in $arcCerts) {
                 $chain = New-Object -TypeName System.Security.Cryptography.X509Certificates.X509Chain
                 $chain.ChainPolicy.RevocationMode = [System.Security.Cryptography.X509Certificates.X509RevocationMode]::Online
                 $chain.ChainPolicy.RevocationFlag = [System.Security.Cryptography.X509Certificates.X509RevocationFlag]::EntireChain
-                
+
                 $isValid = $chain.Build($cert)
                 $chainStatus = $chain.ChainStatus | ForEach-Object { $_.Status }
-                
+
                 $chainResults += @{
                     Subject = $cert.Subject
                     IsValid = $isValid
                     ChainStatus = $chainStatus
                 }
             }
-            
+
             return $chainResults
         }
 
@@ -522,12 +522,12 @@ function Test-FirewallConfiguration {
                 Private = $fw.FirewallEnabled($fw.CurrentProfileTypes -band 2)
                 Public = $fw.FirewallEnabled($fw.CurrentProfileTypes -band 4)
             }
-            
+
             # Get Arc-related rules
-            $arcRules = Get-NetFirewallRule | Where-Object { 
-                $_.DisplayName -like "*Azure*" -or 
-                $_.DisplayName -like "*Arc*" -or 
-                $_.DisplayName -like "*Monitor*" 
+            $arcRules = Get-NetFirewallRule | Where-Object {
+                $_.DisplayName -like "*Azure*" -or
+                $_.DisplayName -like "*Arc*" -or
+                $_.DisplayName -like "*Monitor*"
             } | Select-Object -Property DisplayName, Enabled, Direction, Action
 
             return @{
@@ -537,10 +537,10 @@ function Test-FirewallConfiguration {
         }
 
         # Check if firewall is enabled
-        foreach ($profile in $firewallStatus.Profiles.GetEnumerator()) {
-            if (-not $profile.Value) {
-                $results.Details += "Firewall is disabled for $($profile.Key) profile"
-                $results.Remediation += "Enable firewall for $($profile.Key) profile"
+        foreach ($firewallState in $firewallStatus.Profiles.GetEnumerator()) {
+            if (-not $firewallState.Value) {
+                $results.Details += "Firewall is disabled for $($firewallState.Key) profile"
+                $results.Remediation += "Enable firewall for $($firewallState.Key) profile"
             }
         }
 
@@ -555,9 +555,9 @@ function Test-FirewallConfiguration {
         foreach ($rule in $requiredOutboundRules) {
             $found = $false
             foreach ($arcRule in $firewallStatus.ArcRules) {
-                if ($arcRule.DisplayName -like $rule -and 
-                    $arcRule.Direction -eq "Outbound" -and 
-                    $arcRule.Action -eq "Allow" -and 
+                if ($arcRule.DisplayName -like $rule -and
+                    $arcRule.Direction -eq "Outbound" -and
+                    $arcRule.Action -eq "Allow" -and
                     $arcRule.Enabled) {
                     $found = $true
                     break
@@ -577,15 +577,13 @@ function Test-FirewallConfiguration {
         )
 
         $portCheck = Invoke-Command -ComputerName $ServerName -ScriptBlock {
-            param ($ports)
-            
             $results = @()
-            foreach ($port in $ports) {
+            foreach ($port in $using:requiredPorts) {
                 $rules = Get-NetFirewallRule -Direction Outbound -Action Allow -Enabled True |
-                    Get-NetFirewallPortFilter | 
+                    Get-NetFirewallPortFilter |
                     Where-Object { $_.RemotePort -contains $port.Port -or $_.RemotePort -contains "Any" } |
                     Where-Object { $_.Protocol -eq $port.Protocol }
-                
+
                 $results += @{
                     Port = $port.Port
                     Protocol = $port.Protocol
@@ -593,9 +591,9 @@ function Test-FirewallConfiguration {
                     HasRule = $rules.Count -gt 0
                 }
             }
-            
+
             return $results
-        } -ArgumentList $requiredPorts
+        }
 
         foreach ($port in $portCheck) {
             if (-not $port.HasRule) {
@@ -634,7 +632,7 @@ function Test-ServiceAccountSecurity {
                 "GCArcService",
                 "AzureMonitorAgent"
             )
-            
+
             $results = @()
             foreach ($service in $services) {
                 $svc = Get-WmiObject -Class Win32_Service -Filter "Name='$service'" -ErrorAction SilentlyContinue
@@ -647,7 +645,7 @@ function Test-ServiceAccountSecurity {
                     }
                 }
             }
-            
+
             return $results
         }
 
@@ -679,13 +677,13 @@ function Test-ServiceAccountSecurity {
                 "GCArcService",
                 "AzureMonitorAgent"
             )
-            
+
             $results = @()
             foreach ($service in $services) {
                 $svc = Get-WmiObject -Class Win32_Service -Filter "Name='$service'" -ErrorAction SilentlyContinue
                 if ($svc) {
                     $sd = $svc.GetSecurityDescriptor().Descriptor
-                    
+
                     $results += @{
                         Name = $service
                         DACL = $sd.DACL | ForEach-Object {
@@ -698,7 +696,7 @@ function Test-ServiceAccountSecurity {
                     }
                 }
             }
-            
+
             return $results
         }
 
@@ -706,7 +704,7 @@ function Test-ServiceAccountSecurity {
         foreach ($service in $servicePermissions) {
             foreach ($ace in $service.DACL) {
                 # Check for "Everyone" or "Users" with modify permissions
-                if (($ace.Trustee -eq "Everyone" -or $ace.Trustee -eq "Users") -and 
+                if (($ace.Trustee -eq "Everyone" -or $ace.Trustee -eq "Users") -and
                     ($ace.AccessMask -band 0x40000) -eq 0x40000) {
                     $results.Details += "Service $($service.Name) has overly permissive ACL for $($ace.Trustee)"
                     $results.Remediation += "Restrict permissions for $($ace.Trustee) on service $($service.Name)"
@@ -756,7 +754,7 @@ function Get-SecurityScore {
 
     # Calculate percentage
     $percentage = if ($maxScore -gt 0) { ($actualScore / $maxScore) * 100 } else { 0 }
-    
+
     return [math]::Round($percentage, 2)
 }
 

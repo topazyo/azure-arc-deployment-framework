@@ -7,8 +7,8 @@ param (
 
     [Parameter(Mandatory = $false)]
     [string[]]$RequiredResourceProviders = @(
-        'Microsoft.HybridCompute', 
-        'Microsoft.GuestConfiguration', 
+        'Microsoft.HybridCompute',
+        'Microsoft.GuestConfiguration',
         'Microsoft.AzureArcData', # For Arc-enabled Data Services
         'Microsoft.Insights',     # For Azure Monitor
         'Microsoft.Security'      # For Microsoft Defender for Cloud / Security Center
@@ -21,7 +21,7 @@ param (
 
 # --- Logging Function ---
 if (-not (Get-Command Write-Log -ErrorAction SilentlyContinue)) {
-    function Write-Log {
+    function Write-ActivityLog {
         param (
             [string]$Message,
             [string]$Level = "INFO", # INFO, WARNING, ERROR, DEBUG
@@ -29,7 +29,7 @@ if (-not (Get-Command Write-Log -ErrorAction SilentlyContinue)) {
         )
         $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
         $logEntry = "[$timestamp] [$Level] $Message"
-        
+
         try {
             if (-not (Test-Path (Split-Path $Path -Parent))) {
                 New-Item -ItemType Directory -Path (Split-Path $Path -Parent) -Force -ErrorAction Stop | Out-Null
@@ -38,8 +38,18 @@ if (-not (Get-Command Write-Log -ErrorAction SilentlyContinue)) {
         }
         catch {
             Write-Warning "Failed to write to log file $Path. Error: $($_.Exception.Message). Logging to console instead."
-            Write-Host $logEntry
+            Write-Verbose $logEntry
         }
+    }
+} else {
+    function Write-ActivityLog {
+        param (
+            [string]$Message,
+            [string]$Level = "INFO",
+            [string]$Path = $LogPath
+        )
+
+        Write-Log -Message $Message -Level $Level -Path $Path
     }
 }
 
@@ -58,68 +68,68 @@ function Add-ProviderDetail {
         RegisteredLocations = $Locations # Could be useful info
         Status            = $status
     }) | Out-Null
-    Write-Log "Check: Provider '$ProviderNamespace', Expected State: 'Registered', Current State: '$RegistrationState', Status: $status"
+    Write-ActivityLog "Check: Provider '$ProviderNamespace', Expected State: 'Registered', Current State: '$RegistrationState', Status: $status"
 }
 
 # --- Main Script Logic ---
 try {
-    Write-Log "Starting Azure Resource Provider status check script."
+    Write-ActivityLog "Starting Azure Resource Provider status check script."
 
     # 1. Check for Az.Resources module
-    Write-Log "Checking for Az.Resources PowerShell module..."
+    Write-ActivityLog "Checking for Az.Resources PowerShell module..."
     $azResourcesModule = Get-Module -Name Az.Resources -ListAvailable
     if (-not $azResourcesModule) {
-        Write-Log "Az.Resources PowerShell module is not installed. This script cannot continue." -Level "ERROR"
+        Write-ActivityLog "Az.Resources PowerShell module is not installed. This script cannot continue." -Level "ERROR"
         throw "Az.Resources module not found."
     }
-    Write-Log "Az.Resources module found."
+    Write-ActivityLog "Az.Resources module found."
 
     # 2. Check for Azure Authentication Context
-    Write-Log "Checking for active Azure context..."
+    Write-ActivityLog "Checking for active Azure context..."
     $azContext = Get-AzContext -ErrorAction SilentlyContinue
     if (-not $azContext) {
-        Write-Log "No active Azure context found. Please connect using Connect-AzAccount. This script cannot continue." -Level "ERROR"
+        Write-ActivityLog "No active Azure context found. Please connect using Connect-AzAccount. This script cannot continue." -Level "ERROR"
         throw "Azure context not found. Please login with Connect-AzAccount."
     }
-    Write-Log "Active Azure context found for account: $($azContext.Account) in tenant: $($azContext.Tenant.Id)"
+    Write-ActivityLog "Active Azure context found for account: $($azContext.Account) in tenant: $($azContext.Tenant.Id)"
 
     # 3. Determine Subscription ID
     $effectiveSubscriptionId = $null
     if (-not [string]::IsNullOrWhiteSpace($SubscriptionId)) {
-        Write-Log "Using provided Subscription ID: $SubscriptionId"
+        Write-ActivityLog "Using provided Subscription ID: $SubscriptionId"
         $effectiveSubscriptionId = $SubscriptionId
     } else {
-        Write-Log "Subscription ID not provided. Attempting to discover from Azure Connected Machine Agent configuration..."
+        Write-ActivityLog "Subscription ID not provided. Attempting to discover from Azure Connected Machine Agent configuration..."
         $arcAgentConfigPath = "HKLM:\SOFTWARE\Microsoft\Azure Connected Machine Agent\Config"
         if (Test-Path $arcAgentConfigPath) {
             try {
                 $effectiveSubscriptionId = (Get-ItemProperty -Path $arcAgentConfigPath -Name SubscriptionId -ErrorAction Stop).SubscriptionId
                 if ($effectiveSubscriptionId) {
-                    Write-Log "Discovered Subscription ID from Arc Agent config: $effectiveSubscriptionId"
+                    Write-ActivityLog "Discovered Subscription ID from Arc Agent config: $effectiveSubscriptionId"
                 } else {
-                    Write-Log "SubscriptionId registry value not found or empty under Arc Agent config." -Level "WARNING"
+                    Write-ActivityLog "SubscriptionId registry value not found or empty under Arc Agent config." -Level "WARNING"
                 }
             } catch {
-                Write-Log "Failed to read SubscriptionId from Arc Agent registry: $($_.Exception.Message)" -Level "WARNING"
+                Write-ActivityLog "Failed to read SubscriptionId from Arc Agent registry: $($_.Exception.Message)" -Level "WARNING"
             }
         } else {
-            Write-Log "Azure Connected Machine Agent registry path not found: $arcAgentConfigPath" -Level "WARNING"
+            Write-ActivityLog "Azure Connected Machine Agent registry path not found: $arcAgentConfigPath" -Level "WARNING"
         }
 
         if (-not $effectiveSubscriptionId) {
-            Write-Log "Could not determine Subscription ID automatically. It must be provided as a parameter if not discoverable." -Level "ERROR"
+            Write-ActivityLog "Could not determine Subscription ID automatically. It must be provided as a parameter if not discoverable." -Level "ERROR"
             throw "Subscription ID could not be determined."
         }
     }
-    
+
     # Set context to the target subscription (important if logged into multiple)
     try {
-        Write-Log "Setting Az context to subscription: $effectiveSubscriptionId"
+        Write-ActivityLog "Setting Az context to subscription: $effectiveSubscriptionId"
         Set-AzContext -SubscriptionId $effectiveSubscriptionId -ErrorAction Stop | Out-Null
         $currentContext = Get-AzContext
-        Write-Log "Successfully set Az context to Subscription: $($currentContext.Subscription.Name) ($($currentContext.Subscription.Id))"
+        Write-ActivityLog "Successfully set Az context to Subscription: $($currentContext.Subscription.Name) ($($currentContext.Subscription.Id))"
     } catch {
-        Write-Log "Failed to set Az context to subscription ID '$effectiveSubscriptionId'. Error: $($_.Exception.Message)" -Level "ERROR"
+        Write-ActivityLog "Failed to set Az context to subscription ID '$effectiveSubscriptionId'. Error: $($_.Exception.Message)" -Level "ERROR"
         throw "Failed to set Azure context for subscription."
     }
 
@@ -127,20 +137,20 @@ try {
     $providerDetailsCollection = [System.Collections.ArrayList]::new()
     $overallStatus = "Success" # Assume success until a failure is detected
 
-    Write-Log "--- Checking Resource Provider Registration Status ---"
+    Write-ActivityLog "--- Checking Resource Provider Registration Status ---"
     foreach ($providerNamespace in $RequiredResourceProviders) {
-        Write-Log "Checking status for provider: $providerNamespace"
+        Write-ActivityLog "Checking status for provider: $providerNamespace"
         try {
             $provider = Get-AzResourceProvider -ProviderNamespace $providerNamespace -ErrorAction Stop
             $locations = ($provider.ResourceTypes.ResourceTypeName -join ", ") # Example of getting some more info
-            Add-ProviderDetail $providerDetailsCollection $providerNamespace $provider.RegistrationState $locations
+            Add-ProviderDetail -DetailsCollection $providerDetailsCollection -ProviderNamespace $providerNamespace -RegistrationState $provider.RegistrationState -Locations $locations
             if ($provider.RegistrationState -ne "Registered") {
                 $overallStatus = "Failed"
             }
         }
         catch {
-            Write-Log "Failed to get status for provider '$providerNamespace'. Error: $($_.Exception.Message)" -Level "ERROR"
-            Add-ProviderDetail $providerDetailsCollection $providerNamespace "ERROR_RETRIEVING_STATUS" ""
+            Write-ActivityLog "Failed to get status for provider '$providerNamespace'. Error: $($_.Exception.Message)" -Level "ERROR"
+            Add-ProviderDetail -DetailsCollection $providerDetailsCollection -ProviderNamespace $providerNamespace -RegistrationState "ERROR_RETRIEVING_STATUS" -Locations ""
             $overallStatus = "Failed"
         }
     }
@@ -152,14 +162,14 @@ try {
         ProviderDetails = $providerDetailsCollection
     }
 
-    Write-Log "Resource Provider status check completed. Overall Status: $overallStatus"
+    Write-ActivityLog "Resource Provider status check completed. Overall Status: $overallStatus"
     return $result
 
 }
 catch {
-    Write-Log "An critical error occurred: $($_.Exception.Message)" -Level "FATAL"
+    Write-ActivityLog "An critical error occurred: $($_.Exception.Message)" -Level "FATAL"
     if ($_.ScriptStackTrace) {
-        Write-Log "Stack Trace: $($_.ScriptStackTrace)" -Level "FATAL"
+        Write-ActivityLog "Stack Trace: $($_.ScriptStackTrace)" -Level "FATAL"
     }
     # Return an error object or rethrow
     return @{

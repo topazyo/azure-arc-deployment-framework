@@ -73,7 +73,7 @@ function Initialize-AIEngine {
 
 function Initialize-PredictionEngine {
     param ($Config)
-    
+
     $engine = @{
         Type = "Prediction"
         Status = "Initializing"
@@ -103,7 +103,7 @@ function Initialize-PredictionEngine {
 
 function Initialize-PatternRecognition {
     param ($Config)
-    
+
     $engine = @{
         Type = "PatternRecognition"
         Status = "Initializing"
@@ -133,7 +133,7 @@ function Initialize-PatternRecognition {
 
 function Initialize-AnomalyDetection {
     param ($Config)
-    
+
     $engine = @{
         Type = "AnomalyDetection"
         Status = "Initializing"

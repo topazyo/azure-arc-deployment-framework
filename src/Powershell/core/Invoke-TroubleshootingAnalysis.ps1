@@ -1,3 +1,21 @@
+<#
+.SYNOPSIS
+Analyzes collected troubleshooting phases into issues, patterns, and actions.
+
+.DESCRIPTION
+Consumes the staged output from system-state, diagnostics, and AMA collection,
+applies configured analysis patterns, generates recommendations, calculates
+impact scores, and returns issues prioritized for operator review.
+
+.PARAMETER Data
+Collected troubleshooting phases to analyze.
+
+.PARAMETER ConfigPath
+Pattern definition file used during analysis.
+
+.OUTPUTS
+PSCustomObject
+#>
 function Invoke-TroubleshootingAnalysis {
     [CmdletBinding()]
     param (
@@ -46,13 +64,13 @@ function Invoke-TroubleshootingAnalysis {
                 Get-IssueRecommendation -Issue $issue -Patterns $patterns
             }
 
-            # Calculate Impact Scores
+            # Calculate impact scores
             foreach ($issue in $analysisResults.Issues) {
-                $issue.ImpactScore = Calculate-ImpactScore -Issue $issue -Patterns $patterns
+                $issue.ImpactScore = Measure-ImpactScore -Issue $issue -Patterns $patterns
             }
 
             # Prioritize Issues
-            $analysisResults.Issues = $analysisResults.Issues | 
+            $analysisResults.Issues = $analysisResults.Issues |
                 Sort-Object -Property ImpactScore -Descending
         }
         catch {
@@ -66,11 +84,21 @@ function Invoke-TroubleshootingAnalysis {
     }
 }
 
+<#
+.SYNOPSIS
+Evaluates system-state data for compatibility and resource issues.
+
+.PARAMETER State
+System-state payload to inspect.
+
+.PARAMETER Patterns
+Pattern definitions available to the analysis pass.
+#>
 function Find-SystemStateIssues {
     param ($State, $Patterns)
-    
+
     $issues = @()
-    
+
     # Check OS Requirements
     if (-not (Test-OSCompatibility -Version $State.OS.Version)) {
         $issues += @{
@@ -107,11 +135,21 @@ function Find-SystemStateIssues {
     return $issues
 }
 
+<#
+.SYNOPSIS
+Extracts Arc-agent issues from diagnostics results.
+
+.PARAMETER Diagnostics
+Arc diagnostics payload to inspect.
+
+.PARAMETER Patterns
+Pattern definitions available to the analysis pass.
+#>
 function Find-ArcAgentIssues {
     param ($Diagnostics, $Patterns)
-    
+
     $issues = @()
-    
+
     # Check Service Status
     if ($Diagnostics.Service.Status -ne "Running") {
         $issues += @{
@@ -139,11 +177,21 @@ function Find-ArcAgentIssues {
     return $issues
 }
 
+<#
+.SYNOPSIS
+Extracts AMA issues from diagnostics results.
+
+.PARAMETER Diagnostics
+AMA diagnostics payload to inspect.
+
+.PARAMETER Patterns
+Pattern definitions available to the analysis pass.
+#>
 function Find-AMAIssues {
     param ($Diagnostics, $Patterns)
-    
+
     $issues = @()
-    
+
     # Check AMA Service
     if ($Diagnostics.Service.Status -ne "Running") {
         $issues += @{
@@ -178,13 +226,13 @@ function Find-CommonPatterns {
         [Parameter(Mandatory)]
         [array]$Issues
     )
-    
+
     $patterns = @()
-    
+
     if ($null -eq $Issues -or $Issues.Count -eq 0) {
         return $patterns
     }
-    
+
     # Group issues by type
     $byType = $Issues | Group-Object -Property Type
     foreach ($group in $byType) {
@@ -198,7 +246,7 @@ function Find-CommonPatterns {
             }
         }
     }
-    
+
     # Group issues by component
     $byComponent = $Issues | Group-Object -Property Component
     foreach ($group in $byComponent) {
@@ -211,7 +259,7 @@ function Find-CommonPatterns {
             }
         }
     }
-    
+
     # Check for cascading failures
     $serviceIssues = $Issues | Where-Object { $_.Type -eq 'Service' }
     $connectivityIssues = $Issues | Where-Object { $_.Type -eq 'Connectivity' }
@@ -222,7 +270,7 @@ function Find-CommonPatterns {
             Severity = "Critical"
         }
     }
-    
+
     return $patterns
 }
 
@@ -234,11 +282,11 @@ function Get-IssueRecommendation {
     param (
         [Parameter(Mandatory)]
         [object]$Issue,
-        
+
         [Parameter()]
         [object]$Patterns
     )
-    
+
     $recommendation = @{
         IssueType = $Issue.Type
         Component = $Issue.Component
@@ -253,7 +301,7 @@ function Get-IssueRecommendation {
             default { 3 }
         }
     }
-    
+
     # Generate recommendations based on issue type
     switch ($Issue.Type) {
         'Service' {
@@ -295,23 +343,23 @@ function Get-IssueRecommendation {
             $recommendation.Actions += "Check relevant logs"
         }
     }
-    
+
     return [PSCustomObject]$recommendation
 }
 
-function Calculate-ImpactScore {
+function Measure-ImpactScore {
     <#
     .SYNOPSIS
-        Calculates impact score for an issue based on severity and patterns.
+        Measures impact score for an issue based on severity and patterns.
     #>
     param (
         [Parameter(Mandatory)]
         [object]$Issue,
-        
+
         [Parameter()]
         [object]$Patterns
     )
-    
+
     # Base score from severity
     $baseScore = switch ($Issue.Severity) {
         'Critical' { 100 }
@@ -322,7 +370,7 @@ function Calculate-ImpactScore {
         'Information' { 10 }
         default { 25 }
     }
-    
+
     # Component multiplier
     $componentMultiplier = switch ($Issue.Component) {
         'ArcAgent' { 1.5 }
@@ -332,7 +380,7 @@ function Calculate-ImpactScore {
         'DiskSpace' { 1.1 }
         default { 1.0 }
     }
-    
+
     # Type multiplier
     $typeMultiplier = switch ($Issue.Type) {
         'Service' { 1.4 }
@@ -342,9 +390,9 @@ function Calculate-ImpactScore {
         'DataCollection' { 1.2 }
         default { 1.0 }
     }
-    
+
     $score = [math]::Round($baseScore * $componentMultiplier * $typeMultiplier, 2)
-    
+
     # Cap at 200
     return [math]::Min($score, 200)
 }
@@ -358,17 +406,17 @@ function Test-OSCompatibility {
         [Parameter()]
         [string]$Version
     )
-    
+
     if ([string]::IsNullOrEmpty($Version)) {
         return $false
     }
-    
+
     # Extract major version
     if ($Version -match '^(\d+)\.') {
         $majorVersion = [int]$Matches[1]
         # Windows Server 2012 R2 (6.3) and later, or Windows 10 (10.0) and later
         return ($majorVersion -ge 10) -or ($majorVersion -eq 6 -and $Version -match '^6\.[23]')
     }
-    
+
     return $false
 }

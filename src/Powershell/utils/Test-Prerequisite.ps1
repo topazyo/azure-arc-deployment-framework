@@ -59,9 +59,9 @@ function Test-Prerequisite {
             }
 
             # Determine overall success
-            $failedRequired = $results.Checks | 
+            $failedRequired = $results.Checks |
                 Where-Object { $_.Required -and $_.Status -notin @('Success', 'Remediated') }
-            
+
             $results.Success = $failedRequired.Count -eq 0
 
             if (-not $results.Success -and -not $Force) {

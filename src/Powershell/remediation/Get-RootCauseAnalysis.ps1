@@ -20,7 +20,7 @@ Function Get-RootCauseAnalysis {
     )
 
     # --- Logging Function (for script activity) ---
-    function Write-Log {
+    function Write-ActivityLog {
         param (
             [string]$Message,
             [string]$Level = "INFO", # INFO, WARNING, ERROR, DEBUG
@@ -28,7 +28,7 @@ Function Get-RootCauseAnalysis {
         )
         $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
         $logEntry = "[$timestamp] [$Level] $Message"
-        
+
         try {
             if (-not (Test-Path (Split-Path $Path -Parent) -PathType Container)) {
                 New-Item -ItemType Directory -Path (Split-Path $Path -Parent) -Force -ErrorAction Stop | Out-Null
@@ -37,35 +37,35 @@ Function Get-RootCauseAnalysis {
         }
         catch {
             Write-Warning "ACTIVITY_LOG_FAIL: Failed to write to activity log file $Path. Error: $($_.Exception.Message). Logging to console instead."
-            Write-Host $logEntry 
+            Write-Verbose $logEntry
         }
     }
 
-    Write-Log "Starting Get-RootCauseAnalysis script. MatchedIssues count: $($MatchedIssues.Count)."
+    Write-ActivityLog "Starting Get-RootCauseAnalysis script. MatchedIssues count: $($MatchedIssues.Count)."
 
     $rcaRules = @()
 
     if (-not [string]::IsNullOrWhiteSpace($RCARulesPath)) {
-        Write-Log "Loading RCA rules from: $RCARulesPath"
+        Write-ActivityLog "Loading RCA rules from: $RCARulesPath"
         if (Test-Path $RCARulesPath -PathType Leaf) {
             try {
                 $jsonContent = Get-Content -Path $RCARulesPath -Raw | ConvertFrom-Json -ErrorAction Stop
                 if ($jsonContent.rcaRules) {
                     $rcaRules = $jsonContent.rcaRules
-                    Write-Log "Successfully loaded $($rcaRules.Count) RCA rules from JSON file."
+                    Write-ActivityLog "Successfully loaded $($rcaRules.Count) RCA rules from JSON file."
                 } else {
-                    Write-Log "RCA rules file '$RCARulesPath' does not contain an 'rcaRules' array at the root." -Level "WARNING"
+                    Write-ActivityLog "RCA rules file '$RCARulesPath' does not contain an 'rcaRules' array at the root." -Level "WARNING"
                 }
             } catch {
-                Write-Log "Failed to load or parse RCA rules file '$RCARulesPath'. Error: $($_.Exception.Message)" -Level "ERROR"
+                Write-ActivityLog "Failed to load or parse RCA rules file '$RCARulesPath'. Error: $($_.Exception.Message)" -Level "ERROR"
             }
         } else {
-            Write-Log "RCA rules file not found at: $RCARulesPath" -Level "WARNING"
+            Write-ActivityLog "RCA rules file not found at: $RCARulesPath" -Level "WARNING"
         }
     }
 
     if ($rcaRules.Count -eq 0) {
-        Write-Log "Using hardcoded RCA rule definitions."
+        Write-ActivityLog "Using hardcoded RCA rule definitions."
         $rcaRules = @(
             @{
                 RuleId = "RCA_ServiceCrash_CorruptBinary"
@@ -79,8 +79,8 @@ Function Get-RootCauseAnalysis {
                 AppliesToIssueId = "ServiceCrashUnexpected"
                 RootCauseDescription = "A critical dependency service for this service might not be running or failed to start."
                 Confidence = 0.7
-                SupportingEvidenceKeywords = @{ 
-                    Message = @("dependency", "service cannot be started", "failed to start", "is not running") 
+                SupportingEvidenceKeywords = @{
+                    Message = @("dependency", "service cannot be started", "failed to start", "is not running")
                 }
             },
             @{
@@ -110,17 +110,17 @@ Function Get-RootCauseAnalysis {
                 Confidence = 0.8
             }
         )
-        Write-Log "Loaded $($rcaRules.Count) hardcoded RCA rules."
+        Write-ActivityLog "Loaded $($rcaRules.Count) hardcoded RCA rules."
     }
 
     $analysisResults = [System.Collections.ArrayList]::new()
 
     foreach ($issue in $MatchedIssues) {
-        Write-Log "Analyzing issue: '$($issue.MatchedIssueId)' - $($issue.MatchedIssueDescription)" -Level "DEBUG"
+        Write-ActivityLog "Analyzing issue: '$($issue.MatchedIssueId)' - $($issue.MatchedIssueDescription)" -Level "DEBUG"
         $potentialRCAsForThisIssue = [System.Collections.ArrayList]::new()
 
         $applicableRules = $rcaRules | Where-Object { $_.AppliesToIssueId -eq $issue.MatchedIssueId }
-        Write-Log "Found $($applicableRules.Count) RCA rules applicable to IssueId '$($issue.MatchedIssueId)'." -Level "DEBUG"
+        Write-ActivityLog "Found $($applicableRules.Count) RCA rules applicable to IssueId '$($issue.MatchedIssueId)'." -Level "DEBUG"
 
         foreach ($rule in $applicableRules) {
             $evidenceFound = $true # Assume true unless keywords are specified and not found
@@ -130,14 +130,14 @@ Function Get-RootCauseAnalysis {
                 $allKeywordPropertiesFound = $true
                 foreach ($propName in $rule.SupportingEvidenceKeywords.Keys) {
                     if (-not ($issue.MatchedItem.PSObject.Properties[$propName])) {
-                        Write-Log "Keyword check: Property '$propName' not found in MatchedItem for rule '$($rule.RuleId)'." -Level "DEBUG"
+                        Write-ActivityLog "Keyword check: Property '$propName' not found in MatchedItem for rule '$($rule.RuleId)'." -Level "DEBUG"
                         $allKeywordPropertiesFound = $false
-                        break 
+                        break
                     }
-                    
+
                     $itemValue = $issue.MatchedItem.$($propName)
                     if (-not ($itemValue -is [string])) {
-                        Write-Log "Keyword check: Property '$propName' is not a string in MatchedItem for rule '$($rule.RuleId)'." -Level "DEBUG"
+                        Write-ActivityLog "Keyword check: Property '$propName' is not a string in MatchedItem for rule '$($rule.RuleId)'." -Level "DEBUG"
                         $allKeywordPropertiesFound = $false
                         break
                     }
@@ -153,18 +153,18 @@ Function Get-RootCauseAnalysis {
                         }
                     }
                     if (-not $anyKeywordFoundInProperty) {
-                        Write-Log "Keyword check: No specified keywords for '$propName' found in item for rule '$($rule.RuleId)'." -Level "DEBUG"
+                        Write-ActivityLog "Keyword check: No specified keywords for '$propName' found in item for rule '$($rule.RuleId)'." -Level "DEBUG"
                         $allKeywordPropertiesFound = $false
-                        break 
+                        break
                     }
                 }
                 $evidenceFound = $allKeywordPropertiesFound
             }
-            
+
             # If SupportingEvidenceKeywords were defined, but not found, we might lower confidence or exclude.
             # For this version, we'll just note if evidence was found.
             if ($rule.SupportingEvidenceKeywords -and (-not $evidenceFound)) {
-                 Write-Log "Rule '$($rule.RuleId)' specified SupportingEvidenceKeywords, but they were not all found in the MatchedItem. This RCA is considered less likely for this specific item." -Level "INFO"
+                 Write-ActivityLog "Rule '$($rule.RuleId)' specified SupportingEvidenceKeywords, but they were not all found in the MatchedItem. This RCA is considered less likely for this specific item." -Level "INFO"
                  # Optionally skip this rule: continue
             }
 
@@ -173,22 +173,22 @@ Function Get-RootCauseAnalysis {
                 Description = $rule.RootCauseDescription
                 Confidence = $rule.Confidence # Original confidence from the rule
                 EvidenceFoundDetails = if($matchingKeywordsSummary.Count -gt 0) { $matchingKeywordsSummary -join "; " } else {$null}
-                RequiresFurtherDiagnostics = ($rule.DiagnosticChecks -ne $null -and $rule.DiagnosticChecks.Count -gt 0) # Placeholder
+                RequiresFurtherDiagnostics = ($null -ne $rule.DiagnosticChecks -and $rule.DiagnosticChecks.Count -gt 0) # Placeholder
             }
             $potentialRCAsForThisIssue.Add([PSCustomObject]$rcaEntry) | Out-Null
         } # End foreach rule
 
         # Sort by confidence and take top N
         $sortedRCAs = $potentialRCAsForThisIssue | Sort-Object Confidence -Descending | Select-Object -First $MaxRCAsPerIssue
-        
+
         $analysisResults.Add([PSCustomObject]@{
             OriginalIssue       = $issue
             PotentialRootCauses = $sortedRCAs
             Timestamp           = (Get-Date -Format o)
         }) | Out-Null
-        Write-Log "Added $($sortedRCAs.Count) potential RCA(s) for issue '$($issue.MatchedIssueId)'."
+        Write-ActivityLog "Added $($sortedRCAs.Count) potential RCA(s) for issue '$($issue.MatchedIssueId)'."
     } # End foreach issue
 
-    Write-Log "Get-RootCauseAnalysis script finished. Processed $($MatchedIssues.Count) issues, generated analysis for $($analysisResults.Count) of them."
+    Write-ActivityLog "Get-RootCauseAnalysis script finished. Processed $($MatchedIssues.Count) issues, generated analysis for $($analysisResults.Count) of them."
     return $analysisResults
 }

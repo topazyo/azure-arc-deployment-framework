@@ -20,7 +20,7 @@ Function Get-RemediationApproval {
     )
 
     # --- Logging Function (for script activity) ---
-    function Write-Log {
+    function Write-ActivityLog {
         param (
             [string]$Message,
             [string]$Level = "INFO", # INFO, WARNING, ERROR, DEBUG
@@ -28,7 +28,7 @@ Function Get-RemediationApproval {
         )
         $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
         $logEntry = "[$timestamp] [$Level] $Message"
-        
+
         try {
             if (-not (Test-Path (Split-Path $Path -Parent) -PathType Container)) {
                 New-Item -ItemType Directory -Path (Split-Path $Path -Parent) -Force -ErrorAction Stop | Out-Null
@@ -37,14 +37,68 @@ Function Get-RemediationApproval {
         }
         catch {
             Write-Warning "ACTIVITY_LOG_FAIL: Failed to write to activity log file $Path. Error: $($_.Exception.Message). Logging to console instead."
-            Write-Host $logEntry 
+            Write-Verbose $logEntry
         }
     }
 
-    Write-Log "Starting Get-RemediationApproval script."
+    function Write-ApprovalDisplay {
+        param(
+            [string]$Message = "",
+            [System.ConsoleColor]$ForegroundColor
+        )
+
+        if (-not $Host -or -not $Host.UI) {
+            Write-Information $Message -InformationAction Continue
+            return
+        }
+
+        if (-not $PSBoundParameters.ContainsKey('ForegroundColor')) {
+            $Host.UI.WriteLine($Message)
+            return
+        }
+
+        $rawUi = $Host.UI.RawUI
+        $originalColor = $rawUi.ForegroundColor
+        try {
+            $rawUi.ForegroundColor = $ForegroundColor
+            $Host.UI.WriteLine($Message)
+        }
+        finally {
+            $rawUi.ForegroundColor = $originalColor
+        }
+    }
+
+    function Show-ApprovalSummary {
+        param(
+            [Parameter(Mandatory = $true)]
+            [PSCustomObject]$Action,
+
+            [Parameter(Mandatory = $true)]
+            [string]$PromptMessage
+        )
+
+        Write-ApprovalDisplay ""
+        Write-ApprovalDisplay $PromptMessage -ForegroundColor Yellow
+        Write-ApprovalDisplay ("-" * $PromptMessage.Length) -ForegroundColor Yellow
+        Write-ApprovalDisplay "Action ID: $($Action.RemediationActionId)"
+        Write-ApprovalDisplay "Title: $($Action.Title)"
+        Write-ApprovalDisplay "Description: $($Action.Description)"
+        Write-ApprovalDisplay "Implementation Type: $($Action.ImplementationType)"
+        if ($Action.TargetScriptPath) { Write-ApprovalDisplay "Target Script: $($Action.TargetScriptPath)" }
+        if ($Action.TargetFunction) { Write-ApprovalDisplay "Target Function: $($Action.TargetFunction)" }
+        if ($Action.ResolvedParameters -and $Action.ResolvedParameters.Count -gt 0) {
+            Write-ApprovalDisplay "Parameters:"
+            $Action.ResolvedParameters.GetEnumerator() | ForEach-Object { Write-ApprovalDisplay "  $($_.Name) = $($_.Value)" }
+        }
+        if ($Action.Impact) { Write-ApprovalDisplay "Potential Impact: $($Action.Impact)" -ForegroundColor Magenta }
+        Write-ApprovalDisplay "Success Criteria: $($Action.SuccessCriteria)"
+        Write-ApprovalDisplay ("-" * $PromptMessage.Length) -ForegroundColor Yellow
+    }
+
+    Write-ActivityLog "Starting Get-RemediationApproval script."
 
     if (-not $RemediationAction -or -not $RemediationAction.PSObject.Properties['RemediationActionId']) {
-        Write-Log "Input RemediationAction is null or invalid (missing RemediationActionId). Cannot proceed." -Level "ERROR"
+        Write-ActivityLog "Input RemediationAction is null or invalid (missing RemediationActionId). Cannot proceed." -Level "ERROR"
         return [PSCustomObject]@{
             RemediationActionTitle = $RemediationAction.Title # Or "Unknown"
             ApprovalStatus         = "ErrorInvalidInput"
@@ -53,29 +107,14 @@ Function Get-RemediationApproval {
             Comments               = "Invalid input RemediationAction object."
         }
     }
-    Write-Log "Seeking approval for RemediationActionId: '$($RemediationAction.RemediationActionId)', Title: '$($RemediationAction.Title)'."
+    Write-ActivityLog "Seeking approval for RemediationActionId: '$($RemediationAction.RemediationActionId)', Title: '$($RemediationAction.Title)'."
 
     # --- Display Action Details ---
-    Write-Host "`n" # Newline for better readability
-    Write-Host $ApprovalPromptMessage -ForegroundColor Yellow
-    Write-Host ("-" * $ApprovalPromptMessage.Length) -ForegroundColor Yellow
-    Write-Host "Action ID: $($RemediationAction.RemediationActionId)"
-    Write-Host "Title: $($RemediationAction.Title)"
-    Write-Host "Description: $($RemediationAction.Description)"
-    Write-Host "Implementation Type: $($RemediationAction.ImplementationType)"
-    if ($RemediationAction.TargetScriptPath) { Write-Host "Target Script: $($RemediationAction.TargetScriptPath)"}
-    if ($RemediationAction.TargetFunction) { Write-Host "Target Function: $($RemediationAction.TargetFunction)"}
-    if ($RemediationAction.ResolvedParameters -and $RemediationAction.ResolvedParameters.Count -gt 0) {
-        Write-Host "Parameters:"
-        $RemediationAction.ResolvedParameters.GetEnumerator() | ForEach-Object { Write-Host "  $($_.Name) = $($_.Value)" }
-    }
-    if ($RemediationAction.Impact) { Write-Host "Potential Impact: $($RemediationAction.Impact)" -ForegroundColor Magenta }
-    Write-Host "Success Criteria: $($RemediationAction.SuccessCriteria)"
-    Write-Host ("-" * $ApprovalPromptMessage.Length) -ForegroundColor Yellow
-    
+    Show-ApprovalSummary -Action $RemediationAction -PromptMessage $ApprovalPromptMessage
+
     if ($TimeoutSeconds -gt 0) {
-        Write-Host "Please respond within $TimeoutSeconds seconds." -ForegroundColor Cyan
-        Write-Log "User informed of $TimeoutSeconds second response window (timeout not strictly enforced by Read-Host)."
+        Write-ApprovalDisplay "Please respond within $TimeoutSeconds seconds." -ForegroundColor Cyan
+        Write-ActivityLog "User informed of $TimeoutSeconds second response window (timeout not strictly enforced by Read-Host)."
         # Actual timeout enforcement with Read-Host is complex and not implemented here.
     }
 
@@ -87,37 +126,35 @@ Function Get-RemediationApproval {
         try {
             $prompt = "Approve this action? (Yes/No/Details/Quit) [Y/N/D/Q] (Default: N): "
             $userResponse = Read-Host -Prompt $prompt
-            Write-Log "User prompt: '$prompt', User response: '$userResponse'."
+            Write-ActivityLog "User prompt: '$prompt', User response: '$userResponse'."
 
             switch -Regex ($userResponse.Trim().ToUpper()) {
                 "^(Y|YES)$" { $approvalStatus = "Approved"; break }
                 "^(N|NO)$"  { $approvalStatus = "Denied"; break }
-                ""          { $approvalStatus = "Denied"; Write-Log "Empty response, defaulted to Denied."; break } # Default on Enter
-                "D"         { 
-                    Write-Log "User requested more details."
-                    Write-Host "`n--- Detailed Remediation Action Information ---"
-                    Write-Host ($RemediationAction | Format-List * | Out-String)
-                    Write-Host "--- End of Details ---`n"
+                ""          { $approvalStatus = "Denied"; Write-ActivityLog "Empty response, defaulted to Denied."; break } # Default on Enter
+                "D"         {
+                    Write-ActivityLog "User requested more details."
+                    Write-ApprovalDisplay ""
+                    Write-ApprovalDisplay "--- Detailed Remediation Action Information ---"
+                    Write-ApprovalDisplay ($RemediationAction | Format-List * | Out-String)
+                    Write-ApprovalDisplay "--- End of Details ---"
                     # Re-display initial summary too for context before re-prompting
-                    Write-Host $ApprovalPromptMessage -ForegroundColor Yellow
-                    Write-Host ("-" * $ApprovalPromptMessage.Length) -ForegroundColor Yellow
-                    Write-Host "Action ID: $($RemediationAction.RemediationActionId)"; Write-Host "Title: $($RemediationAction.Title)" 
-                    # (Could re-display all summary info from above)
+                    Show-ApprovalSummary -Action $RemediationAction -PromptMessage $ApprovalPromptMessage
                     continue # Re-loop to prompt again
-                } 
+                }
                 "Q"         { $approvalStatus = "UserQuit"; break }
-                default     { Write-Host "Invalid input. Please enter Y, N, D, or Q." -ForegroundColor Red }
+                default     { Write-ApprovalDisplay "Invalid input. Please enter Y, N, D, or Q." -ForegroundColor Red }
             }
             if ($approvalStatus -ne 'Pending') { break }
         } catch {
-             Write-Log "Error during user prompt: $($_.Exception.Message)" -Level "ERROR"
+             Write-ActivityLog "Error during user prompt: $($_.Exception.Message)" -Level "ERROR"
              $approvalStatus = "ErrorPromptFailed" # Or handle as Denied
              break
         }
     }
 
     $resultTimestamp = Get-Date -Format o
-    Write-Log "Approval process completed. Status: '$approvalStatus'."
+    Write-ActivityLog "Approval process completed. Status: '$approvalStatus'."
 
     $output = [PSCustomObject]@{
         RemediationActionTitle = $RemediationAction.Title
@@ -127,7 +164,7 @@ Function Get-RemediationApproval {
         Approver               = $env:USERNAME # Or (Get-CimInstance Win32_ComputerSystem).Username if script runs as system
         Comments               = "" # Placeholder
     }
-    
-    Write-Log "Get-RemediationApproval script finished."
+
+    Write-ActivityLog "Get-RemediationApproval script finished."
     return $output
 }

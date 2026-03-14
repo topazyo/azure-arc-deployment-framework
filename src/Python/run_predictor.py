@@ -38,6 +38,190 @@ DEFAULT_MODEL_DIR = os.path.join(
     PROJECT_ROOT_ASSUMED, "data", "models", "latest")
 
 
+def build_parser():
+    """Build the CLI parser for direct predictor execution."""
+    parser = argparse.ArgumentParser(
+        description="ArcPredictor AI Engine Interface"
+    )
+    parser.add_argument(
+        "--server-name", type=str, required=True,
+        help="Name of the server for prediction."
+    )
+    parser.add_argument(
+        "--analysis-type", type=str, default="Full",
+        choices=["Full", "Health", "Failure", "Anomaly"],
+        help="Type of analysis to perform."
+    )
+    parser.add_argument(
+        "--model-dir", type=str, default=DEFAULT_MODEL_DIR,
+        help="Directory where models are stored."
+    )
+    parser.add_argument(
+        "--config-path", type=str,
+        default=os.path.join(
+            PROJECT_ROOT_ASSUMED, "src", "config", "ai_config.json"
+        ),
+        help="Path to AI configuration file."
+    )
+    parser.add_argument(
+        "--telemetrydatajson", type=str, required=True,
+        help="JSON string containing the telemetry data for prediction."
+    )
+    return parser
+
+
+def build_error_emitter(args, debug_indent):
+    """Create a stdout-only structured error emitter for this CLI."""
+    def emit_structured_error(error_type: str, message: str, details: dict = None):
+        response = create_error_response(
+            error_type=error_type,
+            message=message,
+            details=details,
+            server_name=args.server_name,
+            analysis_type=args.analysis_type
+        )
+        print(json.dumps(response, indent=debug_indent), flush=True)
+
+    return emit_structured_error
+
+
+def validate_cli_args(args, emit_structured_error):
+    """Validate CLI arguments and emit structured errors on failure."""
+    is_valid, error_msg = validate_server_name(args.server_name)
+    if not is_valid:
+        emit_structured_error(
+            error_type=ErrorCategory.VALIDATION,
+            message=error_msg,
+            details={
+                "param_name": "--server-name",
+                "value_length": len(args.server_name) if args.server_name else 0,
+            }
+        )
+        return False
+
+    is_valid, error_msg = validate_analysis_type(args.analysis_type)
+    if not is_valid:
+        emit_structured_error(
+            error_type=ErrorCategory.VALIDATION,
+            message=error_msg,
+            details={
+                "param_name": "--analysis-type",
+                "value": args.analysis_type,
+            }
+        )
+        return False
+
+    return True
+
+
+def validate_model_dir(args, emit_structured_error):
+    """Canonicalize and validate the model directory."""
+    model_dir = os.path.realpath(os.path.abspath(args.model_dir))
+    model_exists = os.path.exists(model_dir)
+    model_has_files = model_exists and os.listdir(model_dir)
+    if not model_exists or not model_has_files:
+        emit_structured_error(
+            error_type=ErrorCategory.MODEL_ERROR,
+            message="Model directory is empty or does not exist",
+            details={"model_dir": model_dir}
+        )
+        return None
+    return model_dir
+
+
+@retry_with_backoff(max_retries=2, initial_delay=0.5)
+def load_predictor(model_dir: str) -> ArcPredictor:
+    """Load ArcPredictor with retry for transient failures."""
+    return ArcPredictor(model_dir=model_dir)
+
+
+def get_predictor(model_dir, args, emit_structured_error):
+    """Create a predictor and verify that models loaded successfully."""
+    predictor = load_predictor(model_dir)
+    if not predictor.models:
+        emit_structured_error(
+            error_type=ErrorCategory.MODEL_ERROR,
+            message="No models loaded successfully by ArcPredictor",
+            details={"model_dir": args.model_dir}
+        )
+        return None
+    return predictor
+
+
+def parse_telemetry_payload(args, emit_structured_error):
+    """Parse and schema-validate the telemetry payload."""
+    try:
+        telemetry_data = parse_json_safely(
+            args.telemetrydatajson,
+            param_name="--telemetrydatajson"
+        )
+    except InputValidationError as error:
+        emit_structured_error(
+            error_type=ErrorCategory.VALIDATION,
+            message=error.message,
+            details=error.details
+        )
+        return None
+    except json.JSONDecodeError as error:
+        emit_structured_error(
+            error_type=ErrorCategory.JSON_PARSE,
+            message=f"Invalid JSON in --telemetrydatajson: {str(error)}",
+            details={
+                "param_name": "--telemetrydatajson",
+                "error_position": error.pos,
+                "error_line": error.lineno,
+                "error_column": error.colno,
+            }
+        )
+        return None
+
+    telemetry_schema = load_cli_contracts_schema_definition(
+        'telemetryDataInput'
+    )
+    if telemetry_schema is not None:
+        is_valid, error_message = validate_json_against_schema(
+            telemetry_data,
+            telemetry_schema,
+            param_name="--telemetrydatajson"
+        )
+        if not is_valid:
+            emit_structured_error(
+                error_type=ErrorCategory.VALIDATION,
+                message=error_message,
+                details={"param_name": "--telemetrydatajson"}
+            )
+            return None
+
+    return telemetry_data
+
+
+def build_output_results(args):
+    """Create the base output payload for predictor results."""
+    return {
+        "server_name": args.server_name,
+        "analysis_type": args.analysis_type,
+        "timestamp": datetime.now().isoformat()
+    }
+
+
+def add_prediction_results(output_results, predictor, telemetry_data, analysis_type):
+    """Populate the output payload with the requested prediction types."""
+    if analysis_type in ["Full", "Health"]:
+        output_results["health_prediction"] = predictor.predict_health(
+            telemetry_data
+        )
+
+    if analysis_type in ["Full", "Anomaly"]:
+        output_results["anomaly_detection"] = predictor.detect_anomalies(
+            telemetry_data
+        )
+
+    if analysis_type in ["Full", "Failure"]:
+        output_results["failure_prediction"] = predictor.predict_failures(
+            telemetry_data
+        )
+
+
 def main():
     """
     Main entry point for ArcPredictor. Processes telemetry data from a
@@ -56,155 +240,33 @@ def main():
     # This script is designed for direct interaction with ArcPredictor
     # using specific models. For a more holistic analysis (risk scoring,
     # pattern analysis), use invoke_ai_engine.py.
-    parser = argparse.ArgumentParser(
-        description="ArcPredictor AI Engine Interface")
-    parser.add_argument(
-        "--server-name", type=str, required=True,
-        help="Name of the server for prediction.")
-    parser.add_argument(
-        "--analysis-type", type=str, default="Full",
-        choices=["Full", "Health", "Failure", "Anomaly"],
-        help="Type of analysis to perform.")
-    parser.add_argument(
-        "--model-dir", type=str, default=DEFAULT_MODEL_DIR,
-        help="Directory where models are stored.")
-    parser.add_argument(
-        "--config-path", type=str,
-        default=os.path.join(PROJECT_ROOT_ASSUMED, "src", "config", "ai_config.json"),
-        help="Path to AI configuration file.")
-    parser.add_argument(
-        "--telemetrydatajson", type=str, required=True,
-        help="JSON string containing the telemetry data for prediction.")
-
-    args = parser.parse_args()
+    args = build_parser().parse_args()
     debug_indent = 4 if os.environ.get('DEBUG_PYTHON_WRAPPER') else None
+    emit_structured_error = build_error_emitter(args, debug_indent)
 
-    # Helper to emit structured errors (this CLI returns errors on stdout)
-    def emit_structured_error(
-        error_type: str,
-        message: str,
-        details: dict = None
-    ):
-        """Emit error JSON to stdout and return."""
-        response = create_error_response(
-            error_type=error_type,
-            message=message,
-            details=details,
-            server_name=args.server_name,
-            analysis_type=args.analysis_type
-        )
-        print(json.dumps(response, indent=debug_indent), flush=True)
-
-    # SEC-002: Validate CLI inputs before processing
-    is_valid, error_msg = validate_server_name(args.server_name)
-    if not is_valid:
-        emit_structured_error(
-            error_type=ErrorCategory.VALIDATION,
-            message=error_msg,
-            details={"param_name": "--server-name", "value_length": len(args.server_name) if args.server_name else 0}
-        )
-        return
-
-    is_valid, error_msg = validate_analysis_type(args.analysis_type)
-    if not is_valid:
-        emit_structured_error(
-            error_type=ErrorCategory.VALIDATION,
-            message=error_msg,
-            details={"param_name": "--analysis-type", "value": args.analysis_type}
-        )
+    if not validate_cli_args(args, emit_structured_error):
         return
 
     try:
-        # Validate model directory
-        model_dir = os.path.realpath(os.path.abspath(args.model_dir))
-        model_exists = os.path.exists(model_dir)
-        model_has_files = model_exists and os.listdir(model_dir)
-        if not model_exists or not model_has_files:
-            emit_structured_error(
-                error_type=ErrorCategory.MODEL_ERROR,
-                message="Model directory is empty or does not exist",
-                details={"model_dir": model_dir}
-            )
+        model_dir = validate_model_dir(args, emit_structured_error)
+        if model_dir is None:
             return
 
-        # Load predictor with retry for transient failures
-        @retry_with_backoff(max_retries=2, initial_delay=0.5)
-        def load_predictor(model_dir: str) -> ArcPredictor:
-            return ArcPredictor(model_dir=model_dir)
-
-        predictor = load_predictor(model_dir)
-
-        # Check if models were loaded
-        if not predictor.models:
-            emit_structured_error(
-                error_type=ErrorCategory.MODEL_ERROR,
-                message="No models loaded successfully by ArcPredictor",
-                details={"model_dir": args.model_dir}
-            )
+        predictor = get_predictor(model_dir, args, emit_structured_error)
+        if predictor is None:
             return
 
-        # Parse telemetry data with security validation
-        # SEC-002: Use secure JSON parsing with size/depth limits
-        try:
-            telemetry_data = parse_json_safely(
-                args.telemetrydatajson,
-                param_name="--telemetrydatajson"
-            )
-        except InputValidationError as e:
-            emit_structured_error(
-                error_type=ErrorCategory.VALIDATION,
-                message=e.message,
-                details=e.details
-            )
-            return
-        except json.JSONDecodeError as e:
-            emit_structured_error(
-                error_type=ErrorCategory.JSON_PARSE,
-                message=f"Invalid JSON in --telemetrydatajson: {str(e)}",
-                details={
-                    "param_name": "--telemetrydatajson",
-                    "error_position": e.pos,
-                    "error_line": e.lineno,
-                    "error_column": e.colno
-                }
-            )
+        telemetry_data = parse_telemetry_payload(args, emit_structured_error)
+        if telemetry_data is None:
             return
 
-        # SEC-001: Validate telemetry payload against CLI contracts schema
-        _telem_schema = load_cli_contracts_schema_definition(
-            'telemetryDataInput'
+        output_results = build_output_results(args)
+        add_prediction_results(
+            output_results,
+            predictor,
+            telemetry_data,
+            args.analysis_type,
         )
-        if _telem_schema is not None:
-            _valid, _err = validate_json_against_schema(
-                telemetry_data, _telem_schema,
-                param_name="--telemetrydatajson"
-            )
-            if not _valid:
-                emit_structured_error(
-                    error_type=ErrorCategory.VALIDATION,
-                    message=_err,
-                    details={"param_name": "--telemetrydatajson"}
-                )
-                return
-
-        # Build output results
-        output_results = {
-            "server_name": args.server_name,
-            "analysis_type": args.analysis_type,
-            "timestamp": datetime.now().isoformat()
-        }
-
-        if args.analysis_type in ["Full", "Health"]:
-            health_pred = predictor.predict_health(telemetry_data)
-            output_results["health_prediction"] = health_pred
-
-        if args.analysis_type in ["Full", "Anomaly"]:
-            anomaly_pred = predictor.detect_anomalies(telemetry_data)
-            output_results["anomaly_detection"] = anomaly_pred
-
-        if args.analysis_type in ["Full", "Failure"]:
-            failure_pred = predictor.predict_failures(telemetry_data)
-            output_results["failure_prediction"] = failure_pred
 
         print(json.dumps(output_results, indent=debug_indent), flush=True)
 

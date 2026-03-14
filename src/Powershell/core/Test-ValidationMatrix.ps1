@@ -4,13 +4,15 @@ function Test-ValidationMatrix {
         [Parameter(Mandatory)]
         [string]$ServerName,
         [Parameter()]
+        [string]$WorkspaceId,
+        [Parameter()]
         [string]$ConfigPath = ".\Config\validation-matrix.json",
         [Parameter()]
         [switch]$DetailedOutput
     )
 
     begin {
-        $validationMatrix = Get-Content $ConfigPath | ConvertFrom-Json
+        [void](Get-Content $ConfigPath | ConvertFrom-Json)
         $results = @{
             ServerName = $ServerName
             Timestamp = Get-Date
@@ -22,6 +24,8 @@ function Test-ValidationMatrix {
 
     process {
         try {
+            $azureManagementEndpoint = 'management.azure.com'
+            $azureIdentityEndpoint = 'login.microsoftonline.com'
             # Connectivity Tests
             $connectivityTests = @{
                 Category = 'Connectivity'
@@ -29,13 +33,13 @@ function Test-ValidationMatrix {
                 Tests = @(
                     @{
                         Name = 'Azure Management Endpoint'
-                        Test = { Test-NetConnection -ComputerName "management.azure.com" -Port 443 }
+                        Test = { Test-NetConnection -ComputerName $azureManagementEndpoint -Port 443 }
                         ExpectedResult = { param($result) $result.TcpTestSucceeded }
                         Critical = $true
                     },
                     @{
                         Name = 'Azure Identity Endpoint'
-                        Test = { Test-NetConnection -ComputerName "login.microsoftonline.com" -Port 443 }
+                        Test = { Test-NetConnection -ComputerName $azureIdentityEndpoint -Port 443 }
                         ExpectedResult = { param($result) $result.TcpTestSucceeded }
                         Critical = $true
                     },
@@ -131,14 +135,18 @@ function Test-ValidationMatrix {
                 }
 
                 # Calculate category score
-                $categoryResults.Score = ($categoryResults.TestResults | 
+                $categoryResults.Score = ($categoryResults.TestResults |
                     Where-Object Status -eq $true).Count / $category.Tests.Count
 
                 $results.Tests += $categoryResults
             }
 
+            if ($WorkspaceId) {
+                $results.AgentValidation = Test-AgentValidation -ServerName $ServerName -WorkspaceId $WorkspaceId
+            }
+
             # Calculate overall score
-            $results.Score = ($results.Tests | 
+            $results.Score = ($results.Tests |
                 Measure-Object -Property Score -Average).Average
 
             # Determine overall status
@@ -179,8 +187,8 @@ function Test-AgentValidation {
 
     $validation = @{
         Arc = Test-ArcValidation -ServerName $ServerName
-        AMA = if ($WorkspaceId) { 
-            Test-AMAValidation -ServerName $ServerName -WorkspaceId $WorkspaceId 
+        AMA = if ($WorkspaceId) {
+            Test-AMAValidation -ServerName $ServerName -WorkspaceId $WorkspaceId
         }
     }
 

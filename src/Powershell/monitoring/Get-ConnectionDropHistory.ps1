@@ -20,10 +20,10 @@ param (
 
 # --- Helper to Extract Interface Alias ---
 function Get-InterfaceAliasFromEvent {
-    param($Event)
+    param($InputEvent)
     # For Microsoft-Windows-NetworkProfile/Operational, Event ID 10000, 10001
-    if ($Event.ProviderName -eq "Microsoft-Windows-NetworkProfile" -and $Event.Id -in @(10000, 10001)) {
-        $xml = [xml]$Event.ToXml()
+    if ($InputEvent.ProviderName -eq "Microsoft-Windows-NetworkProfile" -and $InputEvent.Id -in @(10000, 10001)) {
+        $xml = [xml]$InputEvent.ToXml()
         $interfaceAlias = $xml.Event.EventData.Data | Where-Object { $_.Name -eq "InterfaceAlias" } | Select-Object -ExpandProperty '#text'
         return $interfaceAlias
     }
@@ -45,7 +45,7 @@ try {
     $allNetworkEvents = [System.Collections.ArrayList]::new()
 
     # Define queries
-    # Note: NIC driver events (link up/down) are very hardware specific. 
+    # Note: NIC driver events (link up/down) are very hardware specific.
     # Examples: Intel (e1iexpress, ixgbe) IDs 27/32. Broadcom (b57nd60a). vmxnet3 IDs 1,4.
     # These would need to be added specifically if known for the target environment.
     $queries = @(
@@ -61,7 +61,7 @@ try {
     )
 
     Write-Log "Querying event logs for potential connection drop indicators..."
-    
+
     foreach ($query in $queries) {
         Write-Log "Executing query: LogName='$($query.LogName)', ProviderName='$($query.ProviderName)', ID='$($query.Id)', Label='$($query.Label)' on '$ServerName' since '$StartTime'."
         try {
@@ -75,28 +75,28 @@ try {
 
             $getWinEventParams = @{
                 FilterHashtable = $filterHashtable
-                MaxEvents = $MaxEventsPerQuery 
+                MaxEvents = $MaxEventsPerQuery
                 ErrorAction = 'Stop'
             }
 
             if ($ServerName -ne $env:COMPUTERNAME -and -not ([string]::IsNullOrWhiteSpace($ServerName))) {
                 $getWinEventParams.ComputerName = $ServerName
             }
-            
+
             $events = Get-WinEvent @getWinEventParams
 
             if ($events) {
                 Write-Log "Found $($events.Count) events for query [Label: $($query.Label)]."
-                foreach ($event in $events) {
-                    $interface = Get-InterfaceAliasFromEvent -Event $event
+                foreach ($inputEvent in $events) {
+                    $interface = Get-InterfaceAliasFromEvent -InputEvent $inputEvent
                     $allNetworkEvents.Add([PSCustomObject]@{
-                        Timestamp   = $event.TimeCreated
-                        EventId     = $event.Id
-                        LogName     = $event.LogName
-                        Source      = $event.ProviderName
+                        Timestamp   = $inputEvent.TimeCreated
+                        EventId     = $inputEvent.Id
+                        LogName     = $inputEvent.LogName
+                        Source      = $inputEvent.ProviderName
                         Interface   = $interface
-                        Message     = $event.Message 
-                        MachineName = $event.MachineName
+                        Message     = $inputEvent.Message
+                        MachineName = $inputEvent.MachineName
                         QueryLabel  = $query.Label # To know which query found this event
                     }) | Out-Null
                 }
@@ -104,17 +104,17 @@ try {
                 Write-Log "No events found for query [Label: $($query.Label)]."
             }
         }
-        catch [System.Diagnostics.Eventing.Reader.EventLogNotFoundException],[System.UnauthorizedAccessException] { 
+        catch [System.Diagnostics.Eventing.Reader.EventLogNotFoundException],[System.UnauthorizedAccessException] {
             Write-Log "Failed to execute query [Label: $($query.Label)]. Log '$($query.LogName)' might not exist or is inaccessible on '$ServerName'. Error: $($_.Exception.Message)" -Level "WARNING"
         }
-        catch { 
+        catch {
             Write-Log "An error occurred while executing query [Label: $($query.Label)] on '$ServerName'. Error: $($_.Exception.Message)" -Level "ERROR"
         }
     }
 
     # Sort all collected events by Timestamp
     $sortedEvents = $allNetworkEvents | Sort-Object Timestamp -Descending
-    
+
     # If MaxEvents was meant to be an overall limit, truncate here.
     # For now, MaxEventsPerQuery applies to each query.
     # if ($sortedEvents.Count -gt $OverallMaxEvents) { $sortedEvents = $sortedEvents[0..($OverallMaxEvents-1)]}
@@ -129,5 +129,5 @@ catch {
     if ($_.ScriptStackTrace) {
         Write-Log "Stack Trace: $($_.ScriptStackTrace)" -Level "FATAL"
     }
-    return @() 
+    return @()
 }

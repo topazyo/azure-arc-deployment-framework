@@ -1,3 +1,27 @@
+<#
+.SYNOPSIS
+Validates whether a server meets Azure Arc deployment prerequisites.
+
+.DESCRIPTION
+Runs prerequisite checks for operating system support, PowerShell version, TLS
+configuration, and required network connectivity, then returns a structured result
+showing each prerequisite component and whether the overall gate passed.
+
+.PARAMETER ServerName
+Target server to validate.
+
+.PARAMETER Environment
+Optional environment label used by calling workflows.
+
+.PARAMETER WorkspaceId
+Optional workspace identifier used by prerequisite checks that need monitoring context.
+
+.OUTPUTS
+PSCustomObject
+
+.EXAMPLE
+Test-ArcPrerequisites -ServerName 'SERVER01' -WorkspaceId '<workspace-id>'
+#>
 function Test-ArcPrerequisites {
     [CmdletBinding()]
     param (
@@ -8,7 +32,7 @@ function Test-ArcPrerequisites {
         [Parameter()]
         [string]$WorkspaceId
     )
-    
+
     begin {
         Write-Verbose "Starting prerequisite checks for $ServerName"
         $results = @{
@@ -187,7 +211,7 @@ function Test-ArcPrerequisites {
                     }
                     $debugPayload | ConvertTo-Json -Depth 6 | Out-File -FilePath $debugPath -Encoding utf8
                 } catch {
-                    # Best-effort debug logging; ignore failures
+                    Write-Verbose "Failed to write prerequisite debug payload to '$debugPath'."
                 }
             }
 

@@ -1,3 +1,33 @@
+<#
+.SYNOPSIS
+Prepares the Azure-side deployment context for Azure Arc onboarding.
+
+.DESCRIPTION
+Validates Azure login state, ensures the requested subscription context is active,
+and creates or updates the target resource group before server onboarding begins.
+Use -WhatIf before live production changes.
+
+.PARAMETER SubscriptionId
+Target Azure subscription identifier.
+
+.PARAMETER ResourceGroupName
+Resource group that will contain Arc resources.
+
+.PARAMETER Location
+Azure region for the resource group.
+
+.PARAMETER TenantId
+Optional tenant identifier used when switching Azure context.
+
+.PARAMETER Tags
+Tags to apply when creating or updating the resource group.
+
+.OUTPUTS
+PSCustomObject
+
+.EXAMPLE
+Initialize-ArcDeployment -SubscriptionId '<subscription-id>' -ResourceGroupName 'arc-rg' -Location 'eastus' -WhatIf
+#>
 function Initialize-ArcDeployment {
     [CmdletBinding(SupportsShouldProcess = $true, ConfirmImpact = 'Medium')]
     param (
@@ -74,7 +104,7 @@ function Initialize-ArcDeployment {
                  }
             }
         } catch {
-            # Error implies RG doesn't exist or other access issue, handled by $rgExists logic
+            Write-Verbose "Resource group lookup failed for '$ResourceGroupName'; continuing with create-if-missing logic."
         }
 
         if (-not $rgExists) {

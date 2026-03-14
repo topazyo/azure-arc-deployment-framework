@@ -128,7 +128,7 @@ try {
             # Ensure the path is compatible with Get-ChildItem -Path Cert:\
             if ($_ -notlike "Cert:\*") { "Cert:\$_" } else { $_ }
         }
-        
+
         if (-not $storesToValidate) {
             Write-Log "No certificateStoresToValidate defined in configuration. Using default stores." -Level "WARNING"
             $storesToValidate = @("Cert:\LocalMachine\My", "Cert:\LocalMachine\Root", "Cert:\LocalMachine\CA")

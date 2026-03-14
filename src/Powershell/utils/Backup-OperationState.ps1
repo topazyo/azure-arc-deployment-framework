@@ -29,7 +29,7 @@ Function Backup-OperationState {
     )
 
     # --- Logging Function (for script activity) ---
-    function Write-Log {
+    function Write-ActivityLog {
         param (
             [string]$Message,
             [string]$Level = "INFO", # INFO, WARNING, ERROR, DEBUG
@@ -37,7 +37,7 @@ Function Backup-OperationState {
         )
         $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
         $logEntry = "[$timestamp] [$Level] $Message"
-        
+
         try {
             if (-not (Test-Path (Split-Path $Path -Parent) -PathType Container)) {
                 New-Item -ItemType Directory -Path (Split-Path $Path -Parent) -Force -ErrorAction Stop | Out-Null
@@ -46,7 +46,7 @@ Function Backup-OperationState {
         }
         catch {
             Write-Warning "ACTIVITY_LOG_FAIL: Failed to write to activity log file $Path. Error: $($_.Exception.Message). Logging to console instead."
-            Write-Host $logEntry 
+            Write-Verbose $logEntry
         }
     }
 
@@ -59,17 +59,31 @@ Function Backup-OperationState {
         if ($PsPath -match "^HKCR:") { return $PsPath -replace "HKCR:", "HKEY_CLASSES_ROOT\" }
         if ($PsPath -match "^HKU:") { return $PsPath -replace "HKU:", "HKEY_USERS\" }
         if ($PsPath -match "^HKCC:") { return $PsPath -replace "HKCC:", "HKEY_CURRENT_CONFIG\" }
-        Write-Log "Unrecognized registry hive in path: $PsPath" -Level "WARNING"
+        Write-ActivityLog "Unrecognized registry hive in path: $PsPath" -Level "WARNING"
         return $PsPath # Return as is if no match, reg.exe will likely fail
     }
 
-    Write-Log "Starting Backup-OperationState for OperationId: '$OperationId'."
+    if (-not (Get-Command Export-RegistryKeyBackup -ErrorAction SilentlyContinue)) {
+        function Export-RegistryKeyBackup {
+            param(
+                [Parameter(Mandatory)]
+                [string]$RegistryKey,
+
+                [Parameter(Mandatory)]
+                [string]$DestinationPath
+            )
+
+            & reg.exe export $RegistryKey $DestinationPath /y | Out-Null
+        }
+    }
+
+    Write-ActivityLog "Starting Backup-OperationState for OperationId: '$OperationId'."
 
     $overallStatus = "Success"
     $backedUpItemsResults = [System.Collections.ArrayList]::new()
     $errorsEncountered = [System.Collections.ArrayList]::new()
     $versionsCleaned = [System.Collections.ArrayList]::new()
-    
+
     $targetOperationBackupDir = Join-Path -Path $BackupPathBase -ChildPath ($OperationId -replace '[^a-zA-Z0-9_-]', '_') # Sanitize OperationId for path
     $currentTimestampForDir = Get-Date -Format "yyyyMMdd_HHmmss"
     $currentVersionBackupDir = Join-Path -Path $targetOperationBackupDir -ChildPath $currentTimestampForDir
@@ -77,12 +91,12 @@ Function Backup-OperationState {
     try {
         # --- Create Backup Directories ---
         if (-not (Test-Path -Path $targetOperationBackupDir -PathType Container)) {
-            Write-Log "Creating base backup directory for OperationId: $targetOperationBackupDir"
+            Write-ActivityLog "Creating base backup directory for OperationId: $targetOperationBackupDir"
             if ($PSCmdlet.ShouldProcess($targetOperationBackupDir, "Create Directory")) {
                 New-Item -ItemType Directory -Path $targetOperationBackupDir -Force -ErrorAction Stop | Out-Null
             }
         }
-        Write-Log "Creating timestamped backup directory: $currentVersionBackupDir"
+        Write-ActivityLog "Creating timestamped backup directory: $currentVersionBackupDir"
         if ($PSCmdlet.ShouldProcess($currentVersionBackupDir, "Create Timestamped Directory")) {
             New-Item -ItemType Directory -Path $currentVersionBackupDir -Force -ErrorAction Stop | Out-Null
         }
@@ -96,10 +110,10 @@ Function Backup-OperationState {
             $itemBackupStatus = "Pending"
             $backupFileName = $null # For reg/service config
 
-            Write-Log "Processing item: Type='$itemType', Path='$itemPath', Name='$itemName'."
+            Write-ActivityLog "Processing item: Type='$itemType', Path='$itemPath', Name='$itemName'."
             try {
                 if (-not $PSCmdlet.ShouldProcess($itemPath, "Backup Item (Type: $itemType)")) {
-                    Write-Log "Backup for item '$itemPath' skipped due to -WhatIf." -Level "INFO"
+                    Write-ActivityLog "Backup for item '$itemPath' skipped due to -WhatIf." -Level "INFO"
                     $itemBackupStatus = "SkippedWhatIf"
                     $backedUpItemsResults.Add([PSCustomObject]@{ ItemType=$itemType; SourcePath=$itemPath; BackupName=$itemName; Status=$itemBackupStatus }) | Out-Null
                     continue
@@ -110,7 +124,7 @@ Function Backup-OperationState {
                         if (Test-Path $itemPath -PathType Leaf) {
                             Copy-Item -Path $itemPath -Destination $currentVersionBackupDir -Force -ErrorAction Stop
                             $itemBackupStatus = "Success"
-                            Write-Log "File '$itemPath' backed up successfully."
+                            Write-ActivityLog "File '$itemPath' backed up successfully."
                         } else { throw "File not found at '$itemPath'." }
                     }
                     "Directory" {
@@ -118,21 +132,21 @@ Function Backup-OperationState {
                             $destinationDir = Join-Path $currentVersionBackupDir (Split-Path $itemPath -Leaf)
                             Copy-Item -Path $itemPath -Destination $destinationDir -Recurse -Force -ErrorAction Stop
                             $itemBackupStatus = "Success"
-                            Write-Log "Directory '$itemPath' backed up successfully to '$destinationDir'."
+                            Write-ActivityLog "Directory '$itemPath' backed up successfully to '$destinationDir'."
                         } else { throw "Directory not found at '$itemPath'." }
                     }
                     "RegistryKey" {
                         $regExePath = ConvertTo-RegExePath -PsPath $itemPath
                         $backupFileName = ($itemPath -split '\\')[-1] + ".reg" # Use last part of key name for filename
                         $backupRegFilePath = Join-Path $currentVersionBackupDir $backupFileName
-                        
-                        Write-Log "Exporting registry key '$regExePath' to '$backupRegFilePath'."
-                        Invoke-Expression -Command "reg.exe export `"$regExePath`" `"$backupRegFilePath`" /y" # `reg.exe` handles Test-Path internally
+
+                        Write-ActivityLog "Exporting registry key '$regExePath' to '$backupRegFilePath'."
+                        Export-RegistryKeyBackup -RegistryKey $regExePath -DestinationPath $backupRegFilePath
                         # Check $LASTEXITCODE for reg.exe success, though it might not always be reliable for export success.
                         # A more robust check would be if the file was created and not empty.
                         if (Test-Path $backupRegFilePath -PathType Leaf -ErrorAction SilentlyContinue) {
                              $itemBackupStatus = "Success"
-                             Write-Log "Registry key '$itemPath' exported successfully."
+                                Write-ActivityLog "Registry key '$itemPath' exported successfully."
                         } else {
                             throw "Registry export failed or file not created for '$itemPath'."
                         }
@@ -140,14 +154,14 @@ Function Backup-OperationState {
                     "ServiceConfiguration" {
                         $serviceName = $item.Name
                         if ([string]::IsNullOrWhiteSpace($serviceName)) { throw "Service 'Name' not provided for ServiceConfiguration backup." }
-                        
+
                         $serviceConfig = Get-CimInstance Win32_Service -Filter "Name='$serviceName'" -ErrorAction Stop
                         if ($serviceConfig) {
                             $backupFileName = "$($serviceName)_service_config.json"
                             $backupServiceConfigPath = Join-Path $currentVersionBackupDir $backupFileName
                             $serviceConfig | ConvertTo-Json -Depth 3 | Out-File -FilePath $backupServiceConfigPath -Encoding UTF8 -Force -ErrorAction Stop
                             $itemBackupStatus = "Success"
-                            Write-Log "Service configuration for '$serviceName' backed up successfully."
+                            Write-ActivityLog "Service configuration for '$serviceName' backed up successfully."
                         } else { throw "Service '$serviceName' not found." }
                     }
                     default {
@@ -157,45 +171,45 @@ Function Backup-OperationState {
             } catch {
                 $itemBackupStatus = "Failed"
                 $errorMessage = "Failed to backup item: Type='$itemType', Path='$itemPath', Name='$itemName'. Error: $($_.Exception.Message)"
-                Write-Log $errorMessage -Level "ERROR"
+                Write-ActivityLog $errorMessage -Level "ERROR"
                 $errorsEncountered.Add($errorMessage) | Out-Null
                 $overallStatus = "PartialSuccess" # Mark overall as partial if any item fails
             }
-            $backedUpItemsResults.Add([PSCustomObject]@{ 
+            $backedUpItemsResults.Add([PSCustomObject]@{
                 ItemType   = $itemType
                 SourcePath = $itemPath
-                BackupName = if($backupFileName){$backupFileName}else{(Split-Path $itemPath -Leaf)} 
+                BackupName = if($backupFileName){$backupFileName}else{(Split-Path $itemPath -Leaf)}
                 Status     = $itemBackupStatus
             }) | Out-Null
         } # End foreach item
 
         # --- Manage Backup Versions ---
         if ($MaxBackupVersions -gt 0) {
-            Write-Log "Managing backup versions for OperationId '$OperationId'. Max versions: $MaxBackupVersions."
+            Write-ActivityLog "Managing backup versions for OperationId '$OperationId'. Max versions: $MaxBackupVersions."
             $existingVersions = Get-ChildItem -Path $targetOperationBackupDir -Directory | Sort-Object Name # Name is YYYYMMDD_HHMMSS
             $versionsToDeleteCount = $existingVersions.Count - $MaxBackupVersions
-            
+
             if ($versionsToDeleteCount -gt 0) {
                 $versionsToDelete = $existingVersions | Select-Object -First $versionsToDeleteCount
                 foreach ($oldVersion in $versionsToDelete) {
-                    Write-Log "Max versions exceeded. Deleting oldest backup version: $($oldVersion.FullName)" -Level "INFO"
+                    Write-ActivityLog "Max versions exceeded. Deleting oldest backup version: $($oldVersion.FullName)" -Level "INFO"
                     if ($PSCmdlet.ShouldProcess($oldVersion.FullName, "Delete Old Backup Version")) {
                         try {
                             Remove-Item -Path $oldVersion.FullName -Recurse -Force -ErrorAction Stop
                             $versionsCleaned.Add($oldVersion.FullName) | Out-Null
-                            Write-Log "Successfully deleted old backup version: $($oldVersion.FullName)."
+                            Write-ActivityLog "Successfully deleted old backup version: $($oldVersion.FullName)."
                         } catch {
                             $errorMessage = "Failed to delete old backup version '$($oldVersion.FullName)'. Error: $($_.Exception.Message)"
-                            Write-Log $errorMessage -Level "ERROR"
+                            Write-ActivityLog $errorMessage -Level "ERROR"
                             $errorsEncountered.Add($errorMessage) | Out-Null
                             if ($overallStatus -ne "Failed") {$overallStatus = "PartialSuccess"}
                         }
                     } else {
-                         Write-Log "Deletion of old backup version '$($oldVersion.FullName)' skipped due to -WhatIf." -Level "INFO"
+                         Write-ActivityLog "Deletion of old backup version '$($oldVersion.FullName)' skipped due to -WhatIf." -Level "INFO"
                     }
                 }
             } else {
-                 Write-Log "Backup version count ($($existingVersions.Count)) is within limit ($MaxBackupVersions). No cleanup needed."
+                 Write-ActivityLog "Backup version count ($($existingVersions.Count)) is within limit ($MaxBackupVersions). No cleanup needed."
             }
         }
 
@@ -203,37 +217,37 @@ Function Backup-OperationState {
         $backupArchivePath = $null
         if ($Compress) {
             $backupArchivePath = "$currentVersionBackupDir.zip"
-            Write-Log "Compressing backup to '$backupArchivePath'." -Level "INFO"
+            Write-ActivityLog "Compressing backup to '$backupArchivePath'." -Level "INFO"
             try {
                 if ($PSCmdlet.ShouldProcess($backupArchivePath, "Create compressed archive")) {
                     Compress-Archive -Path (Join-Path $currentVersionBackupDir '*') -DestinationPath $backupArchivePath -Force -ErrorAction Stop
-                    Write-Log "Backup compressed successfully to '$backupArchivePath'."
+                    Write-ActivityLog "Backup compressed successfully to '$backupArchivePath'."
                     if (-not $KeepUncompressed) {
                         if ($PSCmdlet.ShouldProcess($currentVersionBackupDir, "Remove uncompressed backup directory")) {
                             Remove-Item -Path $currentVersionBackupDir -Recurse -Force -ErrorAction Stop
-                            Write-Log "Removed uncompressed backup directory '$currentVersionBackupDir'." -Level "INFO"
+                            Write-ActivityLog "Removed uncompressed backup directory '$currentVersionBackupDir'." -Level "INFO"
                         }
                     }
                 }
             } catch {
                 $errorMessage = "Compression failed for '$currentVersionBackupDir': $($_.Exception.Message)"
-                Write-Log $errorMessage -Level "ERROR"
+                Write-ActivityLog $errorMessage -Level "ERROR"
                 $errorsEncountered.Add($errorMessage) | Out-Null
                 if ($overallStatus -ne "Failed") { $overallStatus = "PartialSuccess" }
             }
         }
 
     } catch {
-        Write-Log "A critical error occurred during backup operation setup or version management: $($_.Exception.Message)" -Level "FATAL"
-        Write-Log "Stack Trace: $($_.ScriptStackTrace)" -Level "DEBUG"
+        Write-ActivityLog "A critical error occurred during backup operation setup or version management: $($_.Exception.Message)" -Level "FATAL"
+        Write-ActivityLog "Stack Trace: $($_.ScriptStackTrace)" -Level "DEBUG"
         $overallStatus = "Failed"
         $errorsEncountered.Add("Critical failure: $($_.Exception.Message)") | Out-Null
     } finally {
         if ($errorsEncountered.Count -gt 0 -and $overallStatus -ne "Failed") { $overallStatus = "PartialSuccess" }
-        
+
         $operationEndTime = Get-Date
-        Write-Log "Backup-OperationState finished for OperationId: '$OperationId'. Overall Status: $overallStatus."
-        
+        Write-ActivityLog "Backup-OperationState finished for OperationId: '$OperationId'. Overall Status: $overallStatus."
+
         $summary = [PSCustomObject]@{
             OperationId         = $OperationId
             BackupTimestamp     = $currentTimestampForDir # The YYYYMMDD_HHMMSS string for this run

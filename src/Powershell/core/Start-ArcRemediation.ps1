@@ -1,3 +1,33 @@
+<#
+.SYNOPSIS
+Runs remediation actions for Arc analysis findings.
+
+.DESCRIPTION
+Takes analysis results, creates a backup, determines remediation strategy,
+requests approval when needed, executes remediation actions, validates results,
+and finishes with a deployment-health check and rollback attempt on failure paths.
+
+.PARAMETER AnalysisResults
+Analysis findings to remediate.
+
+.PARAMETER ServerName
+Target server for remediation.
+
+.PARAMETER WorkspaceId
+Optional workspace identifier used by AMA-related remediation actions.
+
+.PARAMETER AutoApprove
+Skips interactive approval requests for remediation actions.
+
+.PARAMETER LogPath
+Directory used for remediation transcripts and logs.
+
+.OUTPUTS
+PSCustomObject
+
+.EXAMPLE
+Start-ArcRemediation -AnalysisResults $analysis.Findings -ServerName 'SERVER01' -WorkspaceId '<workspace-id>' -AutoApprove
+#>
 function Start-ArcRemediation {
     [CmdletBinding(SupportsShouldProcess)]
     param (
@@ -156,7 +186,7 @@ function Repair-ArcService {
         $dependencies = Get-ServiceDependencies -ServerName $ServerName -ServiceName "himds"
         foreach ($dep in $dependencies) {
             if ($dep.Status -ne "Running") {
-                $startDep = Start-Service -InputObject $dep
+                [void](Start-Service -InputObject $dep)
                 $result.Actions += "Started dependent service: $($dep.Name)"
             }
         }
@@ -200,7 +230,7 @@ function Repair-AMAService {
         $config = Get-AMAConfig -ServerName $ServerName
         if (-not $config -or $config.workspaceId -ne $WorkspaceId) {
             # Reconfigure AMA
-            $configResult = Set-AMAConfiguration -ServerName $ServerName -WorkspaceId $WorkspaceId
+            [void](Set-AMAConfiguration -ServerName $ServerName -WorkspaceId $WorkspaceId)
             $result.Actions += "Reconfigured AMA workspace settings"
         }
 

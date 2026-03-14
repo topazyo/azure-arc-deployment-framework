@@ -1,3 +1,27 @@
+<#
+.SYNOPSIS
+Gets the current Azure Arc health state for a server.
+
+.DESCRIPTION
+Collects Arc agent service status, connection status, resource-provider status,
+and optional performance metrics, then computes an overall health result and can
+export a report when requested.
+
+.PARAMETER ServerName
+Target server to inspect.
+
+.PARAMETER DetailedReport
+Includes performance metrics in the returned component list.
+
+.PARAMETER ExportResults
+Exports the health report to the default reports directory.
+
+.OUTPUTS
+PSCustomObject
+
+.EXAMPLE
+Get-ArcHealthStatus -ServerName 'SERVER01' -DetailedReport
+#>
 function Get-ArcHealthStatus {
     [CmdletBinding()]
     param (

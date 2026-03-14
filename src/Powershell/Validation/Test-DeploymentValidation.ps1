@@ -1,3 +1,30 @@
+<#
+.SYNOPSIS
+Runs post-deployment validation across Arc, AMA, network, security, and related checks.
+
+.DESCRIPTION
+Loads the validation configuration, executes the validation stack appropriate to
+the selected level, and returns an aggregated component-by-component validation
+result for the target server.
+
+.PARAMETER ServerName
+Target server to validate.
+
+.PARAMETER WorkspaceId
+Optional Log Analytics workspace identifier used for AMA validation.
+
+.PARAMETER ValidationLevel
+Validation depth to execute.
+
+.PARAMETER ConfigPath
+Path to the validation-matrix configuration file.
+
+.OUTPUTS
+PSCustomObject
+
+.EXAMPLE
+Test-DeploymentValidation -ServerName 'SERVER01' -WorkspaceId '<workspace-id>' -ValidationLevel Comprehensive
+#>
 function Test-DeploymentValidation {
     [CmdletBinding()]
     param (
@@ -23,7 +50,7 @@ function Test-DeploymentValidation {
 
         # Load validation configuration
         try {
-            $validationConfig = Get-Content $ConfigPath | ConvertFrom-Json
+            [void](Get-Content $ConfigPath | ConvertFrom-Json)
         }
         catch {
             Write-Error "Failed to load validation configuration: $_"

@@ -37,7 +37,7 @@ Function Repair-MachineCertificates {
     )
 
     # --- Logging Function (for script activity) ---
-    function Write-Log {
+    function Write-ActivityLog {
         param (
             [string]$Message,
             [string]$Level = "INFO", # INFO, WARNING, ERROR, DEBUG
@@ -45,7 +45,7 @@ Function Repair-MachineCertificates {
         )
         $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
         $logEntry = "[$timestamp] [$Level] $Message"
-        
+
         try {
             if (-not (Test-Path (Split-Path $Path -Parent) -PathType Container)) {
                 New-Item -ItemType Directory -Path (Split-Path $Path -Parent) -Force -ErrorAction Stop | Out-Null
@@ -54,43 +54,43 @@ Function Repair-MachineCertificates {
         }
         catch {
             Write-Warning "ACTIVITY_LOG_FAIL: Failed to write to activity log file $Path. Error: $($_.Exception.Message). Logging to console instead."
-            Write-Host $logEntry 
+            Write-Verbose $logEntry
         }
     }
 
-    Write-Log "Starting Repair-MachineCertificates script."
-    Write-Log "Parameters: HostName='$HostName', ExpiryWarningDays='$ExpiryWarningDays', CheckPrivateKey='$CheckPrivateKey', StoreLocation='$StoreLocation', StoreName='$StoreName', AttemptRenewal='$AttemptRenewal'."
+    Write-ActivityLog "Starting Repair-MachineCertificates script."
+    Write-ActivityLog "Parameters: HostName='$HostName', ExpiryWarningDays='$ExpiryWarningDays', CheckPrivateKey='$CheckPrivateKey', StoreLocation='$StoreLocation', StoreName='$StoreName', AttemptRenewal='$AttemptRenewal'."
 
     # --- Administrator Privilege Check ---
     if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-        Write-Log "Administrator privileges are required to access LocalMachine certificate store and private keys. Script cannot proceed." -Level "ERROR"
+        Write-ActivityLog "Administrator privileges are required to access LocalMachine certificate store and private keys. Script cannot proceed." -Level "ERROR"
         # For robust error reporting, return an object indicating failure.
-        return [PSCustomObject]@{ 
-            Error = "Administrator privileges required."; 
-            CertificatesProcessed = @() 
-        } 
+        return [PSCustomObject]@{
+            Error = "Administrator privileges required.";
+            CertificatesProcessed = @()
+        }
     } else {
-        Write-Log "Running with Administrator privileges."
+        Write-ActivityLog "Running with Administrator privileges."
     }
 
     $fullStorePath = "Cert:\$StoreLocation\$StoreName"
     $certificatesToProcess = @()
     try {
         $certificatesToProcess = Get-ChildItem -Path $fullStorePath -ErrorAction Stop
-        Write-Log "Found $($certificatesToProcess.Count) certificates in '$fullStorePath'."
+        Write-ActivityLog "Found $($certificatesToProcess.Count) certificates in '$fullStorePath'."
     } catch {
-        Write-Log "Failed to access certificate store '$fullStorePath'. Error: $($_.Exception.Message)" -Level "ERROR"
-        return [PSCustomObject]@{ 
-            Error = "Failed to access certificate store: $($_.Exception.Message)"; 
-            CertificatesProcessed = @() 
+        Write-ActivityLog "Failed to access certificate store '$fullStorePath'. Error: $($_.Exception.Message)" -Level "ERROR"
+        return [PSCustomObject]@{
+            Error = "Failed to access certificate store: $($_.Exception.Message)";
+            CertificatesProcessed = @()
         }
     }
-    
+
     $results = [System.Collections.ArrayList]::new()
     $ServerAuthOid = "1.3.6.1.5.5.7.3.1" # Server Authentication EKU OID
 
     foreach ($cert in $certificatesToProcess) {
-        Write-Log "Inspecting certificate: Subject='$($cert.Subject)', Thumbprint='$($cert.Thumbprint)'." -Level "DEBUG"
+        Write-ActivityLog "Inspecting certificate: Subject='$($cert.Subject)', Thumbprint='$($cert.Thumbprint)'." -Level "DEBUG"
         $issuesFound = [System.Collections.ArrayList]::new()
         $suggestedActionsForCert = [System.Collections.ArrayList]::new()
 
@@ -169,10 +169,9 @@ Function Repair-MachineCertificates {
             }
         } else { $ekuStatus = "NoEKUPresent" }
 
-
         # Overall Status
         $overallCertStatus = if ($issuesFound.Count -gt 0) { "Problematic" } else { "Valid" }
-        
+
         $results.Add([PSCustomObject]@{
             Subject             = $cert.Subject
             Thumbprint          = $cert.Thumbprint
@@ -189,11 +188,11 @@ Function Repair-MachineCertificates {
         }) | Out-Null
 
         if ($AttemptRenewal -and $overallCertStatus -eq "Problematic") {
-            Write-Log "RENEWAL_PLACEHOLDER: Automatic renewal attempt for certificate '$($cert.Subject)' (Thumbprint: $($cert.Thumbprint)) would occur here if implemented." -Level "INFO"
+            Write-ActivityLog "RENEWAL_PLACEHOLDER: Automatic renewal attempt for certificate '$($cert.Subject)' (Thumbprint: $($cert.Thumbprint)) would occur here if implemented." -Level "INFO"
             # Future: Call renewal logic
         }
     }
-    
+
     $filteredResults = if ($OnlyProblematic) { $results | Where-Object { $_.OverallCertStatus -eq "Problematic" } } else { $results }
 
     $summary = [PSCustomObject]@{
@@ -210,12 +209,12 @@ Function Repair-MachineCertificates {
         try {
             $reportPayload = [PSCustomObject]@{ Summary = $summary; Certificates = $filteredResults }
             $reportPayload | ConvertTo-Json -Depth 5 | Out-File -FilePath $ReportPath -Encoding UTF8 -Force -ErrorAction Stop
-            Write-Log "Report written to '$ReportPath'."
+            Write-ActivityLog "Report written to '$ReportPath'."
         } catch {
-            Write-Log "Failed to write report to '$ReportPath': $($_.Exception.Message)" -Level "WARNING"
+            Write-ActivityLog "Failed to write report to '$ReportPath': $($_.Exception.Message)" -Level "WARNING"
         }
     }
 
-    Write-Log "Repair-MachineCertificates script finished. Inspected $($certificatesToProcess.Count) certificates. Problematic=$($summary.Problematic)."
+    Write-ActivityLog "Repair-MachineCertificates script finished. Inspected $($certificatesToProcess.Count) certificates. Problematic=$($summary.Problematic)."
     return [PSCustomObject]@{ Summary = $summary; Certificates = $filteredResults }
 }

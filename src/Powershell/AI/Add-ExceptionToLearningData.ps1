@@ -10,8 +10,8 @@ param(
     [Parameter()] [string]$LogPath = "C:\ProgramData\AzureArcFramework\Logs\AddExceptionToLearningData_Activity.log"
 )
 
-if (-not (Get-Command -Name Write-Log -ErrorAction SilentlyContinue)) {
-    function Write-Log {
+if (-not (Get-Command -Name Write-ActivityLog -ErrorAction SilentlyContinue)) {
+    function Write-ActivityLog {
         param (
             [string]$Message,
             [string]$Level = "INFO",
@@ -26,7 +26,7 @@ if (-not (Get-Command -Name Write-Log -ErrorAction SilentlyContinue)) {
             Add-Content -Path $Path -Value $logEntry -ErrorAction Stop
         } catch {
             Write-Warning "ACTIVITY_LOG_FAIL: Failed to write to activity log file $Path. Error: $($_.Exception.Message). Logging to console instead."
-            Write-Host $logEntry
+            Write-Verbose $logEntry
         }
     }
 }
@@ -47,10 +47,10 @@ Function Add-ExceptionToLearningData {
         [string]$LogPath = "C:\ProgramData\AzureArcFramework\Logs\AddExceptionToLearningData_Activity.log"
     )
 
-    Write-Log -Message "Starting Add-ExceptionToLearningData script." -Path $LogPath
+    Write-ActivityLog -Message "Starting Add-ExceptionToLearningData script." -Path $LogPath
 
     if (-not $ExceptionObject) {
-        Write-Log -Message "ExceptionObject parameter is null. Script cannot proceed." -Level "ERROR" -Path $LogPath
+        Write-ActivityLog -Message "ExceptionObject parameter is null. Script cannot proceed." -Level "ERROR" -Path $LogPath
         return $false # Or throw
     }
 
@@ -63,7 +63,7 @@ Function Add-ExceptionToLearningData {
             try {
                 $result = & $customGetType.Value
                 if ($result -and $result.FullName) { return $result.FullName }
-            } catch {}
+            } catch { Write-Verbose "Direct GetType scriptblock invocation failed; trying closure-based invocation." }
             try {
                 $result = & ($customGetType.Value.GetNewClosure())
                 if ($result -and $result.FullName) { return $result.FullName }
@@ -82,7 +82,7 @@ Function Add-ExceptionToLearningData {
             try {
                 $result = & $customToString.Value
                 if ($null -ne $result) { return $result }
-            } catch {}
+            } catch { Write-Verbose "Direct ToString scriptblock invocation failed; trying closure-based invocation." }
             try { return & ($customToString.Value.GetNewClosure()) } catch { return $null }
         }
 
@@ -109,30 +109,30 @@ Function Add-ExceptionToLearningData {
     if ($ExceptionObject -is [System.Management.Automation.ErrorRecord]) {
         $errorRecord = $ExceptionObject
         $actualException = $errorRecord.Exception
-        Write-Log -Message "Processing System.Management.Automation.ErrorRecord." -Path $LogPath
+        Write-ActivityLog -Message "Processing System.Management.Automation.ErrorRecord." -Path $LogPath
     } elseif ($ExceptionObject -is [System.Exception]) {
         $actualException = $ExceptionObject
-        Write-Log -Message "Processing System.Exception." -Path $LogPath
+        Write-ActivityLog -Message "Processing System.Exception." -Path $LogPath
     } elseif ($ExceptionObject.PSObject.Properties.Name -contains 'Exception') {
         # Accept objects that look like ErrorRecords for testing and custom callers
         $errorRecord = $ExceptionObject
         $actualException = $ExceptionObject.Exception
-        Write-Log -Message ("DEBUG ErrorRecord-like input: " + ($ExceptionObject | ConvertTo-Json -Depth 4)) -Level "DEBUG" -Path $LogPath
-        Write-Log -Message "Processing object with ErrorRecord-like shape." -Path $LogPath
+        Write-ActivityLog -Message ("DEBUG ErrorRecord-like input: " + ($ExceptionObject | ConvertTo-Json -Depth 4)) -Level "DEBUG" -Path $LogPath
+        Write-ActivityLog -Message "Processing object with ErrorRecord-like shape." -Path $LogPath
     } else {
-        Write-Log -Message "ExceptionObject is not of type ErrorRecord or Exception. Type: $($ExceptionObject.GetType().FullName)" -Level "ERROR" -Path $LogPath
+        Write-ActivityLog -Message "ExceptionObject is not of type ErrorRecord or Exception. Type: $($ExceptionObject.GetType().FullName)" -Level "ERROR" -Path $LogPath
         return $false # Or throw
     }
 
     # --- Extract Features from Exception ---
     $features = [ordered]@{} # Use ordered dictionary to maintain some column order in CSV
     $features.Add("CaptureTimestamp", (Get-Date -Format o))
-    
+
     if ($actualException) {
         $features.Add("ExceptionType", (Get-TypeNameSafe $actualException))
         $features.Add("ExceptionMessage", $actualException.Message)
         # StackTrace can be multi-line; ensure it's handled well by CSV (Export-Csv usually quotes it)
-        $features.Add("StackTrace", $actualException.StackTrace) 
+        $features.Add("StackTrace", $actualException.StackTrace)
         if ($actualException.InnerException) {
             $features.Add("InnerExceptionType", (Get-TypeNameSafe $actualException.InnerException))
             $features.Add("InnerExceptionMessage", $actualException.InnerException.Message)
@@ -189,11 +189,11 @@ Function Add-ExceptionToLearningData {
 
     # --- Combine with AssociatedData ---
     if ($AssociatedData) {
-        Write-Log -Message "Adding $($AssociatedData.Count) associated data items." -Path $LogPath
+        Write-ActivityLog -Message "Adding $($AssociatedData.Count) associated data items." -Path $LogPath
         foreach ($key in $AssociatedData.Keys) {
             $prefixedKey = "Assoc_$key" # Prefix to avoid collision with exception fields
             if ($features.Keys -contains $prefixedKey) {
-                Write-Log -Message "AssociatedData key '$key' (prefixed to '$prefixedKey') collides with an existing feature key. It will be overwritten by AssociatedData." -Level "WARNING" -Path $LogPath
+                Write-ActivityLog -Message "AssociatedData key '$key' (prefixed to '$prefixedKey') collides with an existing feature key. It will be overwritten by AssociatedData." -Level "WARNING" -Path $LogPath
             }
             $features.Add($prefixedKey, $AssociatedData[$key])
         }
@@ -201,33 +201,33 @@ Function Add-ExceptionToLearningData {
 
     # --- Append to CSV ---
     $learningDataFileExists = Test-Path -Path $LearningDataPath -PathType Leaf
-    
+
     try {
-        Write-Log -Message "Preparing to append data to $LearningDataPath. File exists: $learningDataFileExists" -Path $LogPath
+        Write-ActivityLog -Message "Preparing to append data to $LearningDataPath. File exists: $learningDataFileExists" -Path $LogPath
         $dataToExport = [PSCustomObject]$features
 
         if ($learningDataFileExists) {
-            Write-Log -Message "File exists. Appending data. Note: Header consistency is not deeply checked by this version." -Level "WARNING" -Path $LogPath
+            Write-ActivityLog -Message "File exists. Appending data. Note: Header consistency is not deeply checked by this version." -Level "WARNING" -Path $LogPath
             $dataToExport | Export-Csv -Path $LearningDataPath -Append -NoTypeInformation -Encoding ([System.Text.Encoding]::UTF8) -ErrorAction Stop
         } else {
-            Write-Log -Message "File does not exist. Creating new CSV with headers." -Path $LogPath
+            Write-ActivityLog -Message "File does not exist. Creating new CSV with headers." -Path $LogPath
             $DirectoryPath = Split-Path -Path $LearningDataPath -Parent
             if (-not (Test-Path -Path $DirectoryPath -PathType Container)) {
-                Write-Log -Message "Creating directory for learning data: $DirectoryPath" -Path $LogPath
+                Write-ActivityLog -Message "Creating directory for learning data: $DirectoryPath" -Path $LogPath
                 New-Item -ItemType Directory -Path $DirectoryPath -Force | Out-Null
             }
             $dataToExport | Export-Csv -Path $LearningDataPath -NoTypeInformation -Encoding ([System.Text.Encoding]::UTF8) -ErrorAction Stop
         }
-        
-        Write-Log -Message "Successfully appended data to $LearningDataPath." -Path $LogPath
+
+        Write-ActivityLog -Message "Successfully appended data to $LearningDataPath." -Path $LogPath
         return $true
     } catch {
-        Write-Log -Message "Failed to write to CSV file '$LearningDataPath'. Error: $($_.Exception.Message)" -Level "ERROR" -Path $LogPath
-        Write-Log -Message "Data that was not saved: $($features | Out-String)" -Level "DEBUG" -Path $LogPath # Log the data if it failed
+        Write-ActivityLog -Message "Failed to write to CSV file '$LearningDataPath'. Error: $($_.Exception.Message)" -Level "ERROR" -Path $LogPath
+        Write-ActivityLog -Message "Data that was not saved: $($features | Out-String)" -Level "DEBUG" -Path $LogPath # Log the data if it failed
         return $false
     }
     finally {
-        Write-Log -Message "Add-ExceptionToLearningData script finished." -Path $LogPath
+        Write-ActivityLog -Message "Add-ExceptionToLearningData script finished." -Path $LogPath
     }
 }
 

@@ -105,7 +105,7 @@ function Test-ArcConnectivity {
             # Test each endpoint
             foreach ($endpoint in $arcEndpoints.GetEnumerator()) {
                 Write-Verbose "Testing connectivity to $($endpoint.Key) ($($endpoint.Value.Url):$($endpoint.Value.Port))"
-                
+
                 # Test DNS resolution
                 try {
                     $dns = Resolve-DnsName -Name $endpoint.Value.Url -ErrorAction Stop
@@ -123,7 +123,7 @@ function Test-ArcConnectivity {
                 }
 
                 # Test TCP connectivity
-                $tcpTest = New-RetryBlock -ScriptBlock {
+                    $tcpTest = New-RetryBlock -Action {
                     Test-NetConnection -ComputerName $endpoint.Value.Url -Port $endpoint.Value.Port -WarningAction SilentlyContinue
                 } -RetryCount 2 -RetryDelaySeconds 5
 
@@ -170,10 +170,10 @@ function Test-ArcConnectivity {
             }
 
             # Determine overall success
-            $requiredEndpoints = $connectivityResults.Endpoints.GetEnumerator() | 
+            $requiredEndpoints = $connectivityResults.Endpoints.GetEnumerator() |
                 Where-Object { $_.Value.Required }
-            
-            $failedRequired = $requiredEndpoints | 
+
+            $failedRequired = $requiredEndpoints |
                 Where-Object { -not $_.Value.TCP.Success }
 
             $connectivityResults.Success = $failedRequired.Count -eq 0
@@ -210,7 +210,7 @@ function Test-ArcConnectivity {
 function Get-ServerIPConfiguration {
     [CmdletBinding()]
     param ([string]$ServerName)
-    
+
     try {
         $ipConfig = Invoke-Command -ComputerName $ServerName -ScriptBlock {
             Get-NetIPConfiguration | Select-Object -Property InterfaceAlias, IPv4Address, IPv4DefaultGateway, DNSServer
@@ -226,7 +226,7 @@ function Get-ServerIPConfiguration {
 function Get-RelevantFirewallRules {
     [CmdletBinding()]
     param ([string]$ServerName)
-    
+
     try {
         $firewallRules = Invoke-Command -ComputerName $ServerName -ScriptBlock {
             Get-NetFirewallRule | Where-Object {
@@ -249,11 +249,11 @@ function Get-RelevantFirewallRules {
 function Get-NetworkAdapterConfiguration {
     [CmdletBinding()]
     param ([string]$ServerName)
-    
+
     try {
         $adapters = Invoke-Command -ComputerName $ServerName -ScriptBlock {
-            Get-WmiObject Win32_NetworkAdapterConfiguration | 
-                Where-Object { $_.IPEnabled } | 
+            Get-WmiObject -Class Win32_NetworkAdapterConfiguration |
+                Where-Object { $_.IPEnabled } |
                 Select-Object -Property Description, IPAddress, IPSubnet, DefaultIPGateway, DNSServerSearchOrder, DHCPEnabled
         }
         return $adapters
@@ -301,7 +301,7 @@ function Test-SslConnection {
 
         # Create SSL stream
         $sslStream = New-Object System.Net.Security.SslStream($client.GetStream(), $false, {
-            param($sender, $certificate, $chain, $sslPolicyErrors)
+            param($callbackSender, $certificate, $chain, $sslPolicyErrors)
             return $true  # Accept all certificates for testing
         })
 
@@ -346,9 +346,9 @@ function Get-ConnectivityRecommendations {
     $recommendations = @()
 
     # Check for DNS issues
-    $dnsIssues = $Results.Endpoints.GetEnumerator() | 
+    $dnsIssues = $Results.Endpoints.GetEnumerator() |
         Where-Object { -not $_.Value.DNS.Success }
-    
+
     if ($dnsIssues.Count -gt 0) {
         $recommendations += @{
             Issue = "DNS Resolution"
@@ -360,9 +360,9 @@ function Get-ConnectivityRecommendations {
     }
 
     # Check for TCP connectivity issues
-    $tcpIssues = $Results.Endpoints.GetEnumerator() | 
+    $tcpIssues = $Results.Endpoints.GetEnumerator() |
         Where-Object { -not $_.Value.TCP.Success }
-    
+
     if ($tcpIssues.Count -gt 0) {
         $recommendations += @{
             Issue = "TCP Connectivity"
@@ -374,9 +374,9 @@ function Get-ConnectivityRecommendations {
     }
 
     # Check for SSL/TLS issues
-    $sslIssues = $Results.Endpoints.GetEnumerator() | 
+    $sslIssues = $Results.Endpoints.GetEnumerator() |
         Where-Object { $_.Value.TCP.Success -and $_.Value.SSL -and -not $_.Value.SSL.Success }
-    
+
     if ($sslIssues.Count -gt 0) {
         $recommendations += @{
             Issue = "SSL/TLS"
@@ -389,9 +389,9 @@ function Get-ConnectivityRecommendations {
 
     # Check for proxy issues
     if ($Results.ProxyConfiguration.ProxyEnabled) {
-        $proxyIssues = $Results.Endpoints.GetEnumerator() | 
+        $proxyIssues = $Results.Endpoints.GetEnumerator() |
             Where-Object { -not $_.Value.TCP.Success }
-        
+
         if ($proxyIssues.Count -gt 0) {
             $recommendations += @{
                 Issue = "Proxy Configuration"
@@ -403,9 +403,9 @@ function Get-ConnectivityRecommendations {
     }
 
     # Check for TLS configuration issues
-    $tlsIssues = $Results.TLSConfiguration | 
+    $tlsIssues = $Results.TLSConfiguration |
         Where-Object { $_.Protocol -eq "TLS 1.2" -and -not $_.Enabled }
-    
+
     if ($tlsIssues) {
         $recommendations += @{
             Issue = "TLS Configuration"

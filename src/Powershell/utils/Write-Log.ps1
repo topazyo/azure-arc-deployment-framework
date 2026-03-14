@@ -1,4 +1,34 @@
-function Write-Log {
+<#
+.SYNOPSIS
+Writes framework log entries to disk and the appropriate PowerShell output stream.
+
+.DESCRIPTION
+Normalizes log levels, resolves the effective log path, ensures the log directory
+exists, writes a formatted log entry, and optionally returns the entry to the
+caller. This is the standard logging helper used throughout the framework.
+
+.PARAMETER Message
+Message text to record.
+
+.PARAMETER Level
+Log severity level.
+
+.PARAMETER Component
+Component name associated with the log entry.
+
+.PARAMETER LogPath
+Target log file path.
+
+.PARAMETER PassThru
+Returns the formatted log entry string.
+
+.OUTPUTS
+String
+
+.EXAMPLE
+Write-Log -Message 'Deployment started' -Level Information -Component 'Deploy-ArcAgent'
+#>
+function Write-FrameworkLog {
     [CmdletBinding()]
     param (
         [Parameter(Mandatory)]
@@ -59,14 +89,14 @@ function Write-Log {
 
             # Write to appropriate output stream
             switch ($Level) {
-                'Error' { 
+                'Error' {
                     Write-Error $Message
                     $host.UI.WriteErrorLine($logEntry)
                 }
                 'Warning' { Write-Warning $Message }
                 'Debug' { Write-Debug $Message }
                 'Verbose' { Write-Verbose $Message }
-                default { Write-Host $logEntry }
+                default { Write-Information $logEntry -InformationAction Continue }
             }
 
             if ($PassThru) {
@@ -79,18 +109,18 @@ function Write-Log {
     }
 }
 
-if (-not (Get-Command Write-LogSink -CommandType Function -ErrorAction SilentlyContinue)) {
-    function Write-LogSink {
-        [CmdletBinding()]
-        param(
-            [Parameter(Mandatory)]
-            [string]$Path,
-            [Parameter(Mandatory)]
-            [string]$Value
-        )
+Set-Item -Path Function:Write-Log -Value ${function:Write-FrameworkLog}
 
-        Add-Content -Path $Path -Value $Value
-    }
+function Write-LogSink {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Path,
+        [Parameter(Mandatory)]
+        [string]$Value
+    )
+
+    Add-Content -Path $Path -Value $Value
 }
 
 function Write-StructuredLog {
@@ -129,13 +159,13 @@ function Write-StructuredLog {
         return $true
     }
     catch {
-        Write-Error "Failed to write structured log: $_"
+        Write-Warning "Failed to write structured log: $($_.Exception.Message)"
         return $false
     }
 }
 
 function Start-LogRotation {
-    [CmdletBinding()]
+    [CmdletBinding(SupportsShouldProcess)]
     param (
         [Parameter()]
         [string]$LogPath = ".\Logs",

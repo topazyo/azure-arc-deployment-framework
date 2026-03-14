@@ -1,3 +1,27 @@
+<#
+.SYNOPSIS
+Analyzes Arc diagnostic data and produces findings, recommendations, and a risk score.
+
+.DESCRIPTION
+Consumes diagnostic data from Arc and optional AMA sources, applies analysis
+patterns when available, and returns stable findings and remediation-oriented
+recommendations for downstream workflows.
+
+.PARAMETER DiagnosticData
+Diagnostic data object produced by Arc diagnostics collection.
+
+.PARAMETER IncludeAMA
+Includes AMA-related analysis when AMA status data is present.
+
+.PARAMETER ConfigPath
+Optional path to the analysis-patterns configuration file.
+
+.OUTPUTS
+PSCustomObject
+
+.EXAMPLE
+Invoke-ArcAnalysis -DiagnosticData $diagnostics -IncludeAMA
+#>
 function Invoke-ArcAnalysis {
     [CmdletBinding()]
     param (
@@ -18,15 +42,13 @@ function Invoke-ArcAnalysis {
             RiskScore = 0.0
         }
 
-        # Load analysis patterns (optional; analysis still works without them)
-        $patterns = $null
+        # Validate analysis-patterns configuration when present.
         if (-not [string]::IsNullOrWhiteSpace($ConfigPath) -and (Test-Path -LiteralPath $ConfigPath)) {
             try {
-                $patterns = Get-Content -LiteralPath $ConfigPath -Raw | ConvertFrom-Json
+                [void](Get-Content -LiteralPath $ConfigPath -Raw | ConvertFrom-Json)
             }
             catch {
                 Write-Warning "Failed to load analysis patterns from '$ConfigPath': $($_.Exception.Message)"
-                $patterns = $null
             }
         }
     }
@@ -91,7 +113,7 @@ function Invoke-ArcAnalysis {
 
 function Analyze-ArcHealth {
     param ($Status, $Patterns)
-    
+
     $findings = @()
 
     # Service Status Analysis
@@ -142,7 +164,7 @@ function Analyze-ArcHealth {
 
 function Analyze-AMAHealth {
     param ($Status, $Patterns)
-    
+
     $findings = @()
 
     # Service Status Analysis

@@ -10,6 +10,116 @@ param (
     [switch]$Force
 )
 
+function Resolve-RepositoryRoot {
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory)]
+        [string]$Path
+    )
+
+    $candidate = $Path
+    try {
+        $resolved = Resolve-Path -Path $candidate -ErrorAction Stop
+        $candidate = $resolved.Path
+    }
+    catch {
+        $candidate = [System.IO.Path]::GetFullPath($candidate)
+    }
+
+    if (Test-Path $candidate -PathType Leaf) {
+        $candidate = Split-Path -Path $candidate -Parent
+    }
+
+    while (-not [string]::IsNullOrWhiteSpace($candidate)) {
+        if (Test-Path (Join-Path $candidate "setup.py") -PathType Leaf) {
+            return $candidate
+        }
+
+        $parent = Split-Path -Path $candidate -Parent
+        if ([string]::IsNullOrWhiteSpace($parent) -or $parent -eq $candidate) {
+            break
+        }
+
+        $candidate = $parent
+    }
+
+    throw "Invalid working directory. Could not locate repository root from '$Path'."
+}
+
+function Get-VirtualEnvironmentPythonPath {
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory)]
+        [string]$VirtualEnvironmentPath
+    )
+
+    $candidates = @(
+        (Join-Path $VirtualEnvironmentPath "Scripts\python.exe"),
+        (Join-Path $VirtualEnvironmentPath "Scripts\python"),
+        (Join-Path $VirtualEnvironmentPath "bin\python")
+    )
+
+    foreach ($candidate in $candidates) {
+        if (Test-Path $candidate -PathType Leaf) {
+            return $candidate
+        }
+    }
+
+    throw "Virtual environment Python executable was not found under '$VirtualEnvironmentPath'."
+}
+
+function Set-ManagedProfileBlock {
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory)]
+        [string]$ProfilePath,
+        [Parameter(Mandatory)]
+        [string]$WorkingDirectory
+    )
+
+    $profileDirectory = Split-Path -Path $ProfilePath -Parent
+    if (-not (Test-Path $profileDirectory -PathType Container)) {
+        New-Item -Path $profileDirectory -ItemType Directory -Force | Out-Null
+    }
+
+    if (-not (Test-Path $ProfilePath -PathType Leaf)) {
+        New-Item -Path $ProfilePath -ItemType File -Force | Out-Null
+    }
+
+    $startMarker = '# >>> Azure Arc Framework Development Profile >>>'
+    $endMarker = '# <<< Azure Arc Framework Development Profile <<<'
+    $moduleManifestPath = Join-Path $WorkingDirectory 'src\PowerShell\AzureArcFramework.psd1'
+    $moduleRootPath = Join-Path $WorkingDirectory 'src\PowerShell'
+
+    $managedBlock = @"
+$startMarker
+`$env:ArcDevRoot = '$WorkingDirectory'
+if (`$env:PSModulePath -notlike '$moduleRootPath*') {
+    `$env:PSModulePath = '$moduleRootPath$([System.IO.Path]::PathSeparator)' + `$env:PSModulePath
+}
+Import-Module '$moduleManifestPath' -Force
+$endMarker
+"@
+
+    $existingContent = Get-Content -Path $ProfilePath -Raw -ErrorAction SilentlyContinue
+    if ($null -eq $existingContent) {
+        $existingContent = ''
+    }
+
+    $pattern = "(?s)$([regex]::Escape($startMarker)).*?$([regex]::Escape($endMarker))"
+    if ($existingContent -match $pattern) {
+        $updatedContent = [regex]::Replace($existingContent, $pattern, [System.Text.RegularExpressions.MatchEvaluator]{ param($m) $managedBlock })
+    }
+    elseif ([string]::IsNullOrWhiteSpace($existingContent)) {
+        $updatedContent = $managedBlock
+    }
+    else {
+        $updatedContent = $existingContent.TrimEnd("`r", "`n") + "`r`n`r`n" + $managedBlock
+    }
+
+    Set-Content -Path $ProfilePath -Value $updatedContent -Encoding UTF8
+}
+
 function Initialize-PythonEnvironment {
     [CmdletBinding()]
     param (
@@ -44,15 +154,13 @@ function Initialize-PythonEnvironment {
         if ($LASTEXITCODE -ne 0) { throw "python -m venv failed with exit code $LASTEXITCODE" }
         Write-Information "Created virtual environment at: $venvPath"
 
-        # Activate virtual environment
-        $activateScript = Join-Path $venvPath "Scripts\Activate.ps1"
-        . $activateScript
-        Write-Information "Activated virtual environment"
+        $venvPython = Get-VirtualEnvironmentPythonPath -VirtualEnvironmentPath $venvPath
+        Write-Information "Using virtual environment interpreter at: $venvPython"
 
         # Install dependencies
-        pip install -r (Join-Path $WorkingDirectory "requirements.txt")
+        & $venvPython -m pip install -r (Join-Path $WorkingDirectory "requirements.txt")
         if ($LASTEXITCODE -ne 0) { throw "pip install requirements.txt failed with exit code $LASTEXITCODE" }
-        pip install -e $WorkingDirectory
+        & $venvPython -m pip install -e $WorkingDirectory
         if ($LASTEXITCODE -ne 0) { throw "pip install -e failed with exit code $LASTEXITCODE" }
         Write-Information "Installed Python dependencies"
     }
@@ -91,19 +199,8 @@ function Initialize-PowerShellEnvironment {
             }
         }
 
-        # Set up PowerShell profile for development
-        $profileContent = @'
-# Azure Arc Framework Development Profile
-$env:ArcDevRoot = '{0}'
-$env:PSModulePath = "{0}\src\PowerShell;$env:PSModulePath"
-Import-Module AzureArcFramework -Force
-'@ -f $WorkingDirectory
-
         $profilePath = $PROFILE.CurrentUserAllHosts
-        if (-not (Test-Path $profilePath)) {
-            New-Item -Path $profilePath -ItemType File -Force | Out-Null
-        }
-        Add-Content -Path $profilePath -Value $profileContent
+        Set-ManagedProfileBlock -ProfilePath $profilePath -WorkingDirectory $WorkingDirectory
         Write-Information "Updated PowerShell profile"
     }
     catch {
@@ -128,35 +225,51 @@ function Initialize-GitHooks {
 
         # Create pre-commit hook
         $preCommitPath = Join-Path $hooksDir "pre-commit"
+        $preCommitPowerShellPath = Join-Path $hooksDir "pre-commit.ps1"
+
+        @'
+param(
+    [Parameter(Mandatory)]
+    [string]$RepositoryRoot
+)
+
+$ErrorActionPreference = 'Stop'
+$resolvedRoot = (Resolve-Path -Path $RepositoryRoot).Path
+Set-Location $resolvedRoot
+
+Write-Host 'Running PowerShell tests...'
+Invoke-Pester -Path './tests/PowerShell' -CI | Out-Null
+
+Write-Host 'Running Python tests...'
+python -m pytest tests/Python
+if ($LASTEXITCODE -ne 0) {
+    throw "Python tests failed with exit code $LASTEXITCODE"
+}
+
+Write-Host 'Running PSScriptAnalyzer...'
+$findings = Invoke-ScriptAnalyzer -Path './src/PowerShell' -Recurse
+if ($findings) {
+    $findings | Format-Table Severity, RuleName, ScriptName, Line, Message -AutoSize | Out-String | Write-Host
+    throw 'PSScriptAnalyzer found issues'
+}
+
+Write-Host 'Running Python linting...'
+python -m flake8 src/Python
+if ($LASTEXITCODE -ne 0) {
+    throw "Python linting failed with exit code $LASTEXITCODE"
+}
+'@ | Set-Content $preCommitPowerShellPath -Encoding UTF8
+
         @'
 #!/bin/sh
-# Run PowerShell tests
-pwsh -Command "Invoke-Pester -Path ./tests/PowerShell -CI"
-if [ $? -ne 0 ]; then
-    echo "PowerShell tests failed"
-    exit 1
+set -eu
+
+repo_root="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+if [ -z "${repo_root:-}" ]; then
+    repo_root="$(cd "$(dirname "$0")/../.." && pwd)"
 fi
 
-# Run Python tests
-python -m pytest tests/Python
-if [ $? -ne 0 ]; then
-    echo "Python tests failed"
-    exit 1
-fi
-
-# Run PSScriptAnalyzer
-pwsh -Command "Invoke-ScriptAnalyzer -Path ./src/PowerShell -Recurse"
-if [ $? -ne 0 ]; then
-    echo "PSScriptAnalyzer found issues"
-    exit 1
-fi
-
-# Run Python linting
-python -m flake8 src/Python
-if [ $? -ne 0 ]; then
-    echo "Python linting failed"
-    exit 1
-fi
+pwsh -NoProfile -File "$repo_root/.git/hooks/pre-commit.ps1" -RepositoryRoot "$repo_root"
 '@ | Set-Content $preCommitPath -Encoding UTF8
 
         # Make hook executable
@@ -173,6 +286,8 @@ fi
 }
 
 try {
+    $WorkingDirectory = Resolve-RepositoryRoot -Path $WorkingDirectory
+
     # Validate working directory
     if (-not (Test-Path (Join-Path $WorkingDirectory "setup.py"))) {
         throw "Invalid working directory. Please run from repository root."

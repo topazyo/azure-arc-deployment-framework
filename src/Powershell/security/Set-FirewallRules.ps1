@@ -36,6 +36,17 @@ if (-not (Get-Command Invoke-GetNetFirewallRule -ErrorAction SilentlyContinue)) 
     . (Join-Path $ScriptRoot '..\utils\Invoke-NetFirewallRule.ps1')
 }
 
+if (-not (Get-Command Export-FirewallPolicy -ErrorAction SilentlyContinue)) {
+    function Export-FirewallPolicy {
+        param(
+            [Parameter(Mandatory)]
+            [string]$BackupFilePath
+        )
+
+        & netsh advfirewall export $BackupFilePath | Out-Null
+    }
+}
+
 # --- Backup Function ---
 function Backup-FirewallPolicy {
     param(
@@ -46,7 +57,7 @@ function Backup-FirewallPolicy {
         if (-not (Test-Path (Split-Path $BackupFilePath -Parent))) {
             New-Item -ItemType Directory -Path (Split-Path $BackupFilePath -Parent) -Force -ErrorAction Stop | Out-Null
         }
-        Invoke-Expression "netsh advfirewall export `"$BackupFilePath`"" | Out-Null
+        Export-FirewallPolicy -BackupFilePath $BackupFilePath
         Write-Log "Firewall policy successfully backed up to $BackupFilePath."
     }
     catch {
@@ -126,15 +137,15 @@ try {
                     } elseif ($direction -eq "inbound" -and $ruleDef.source) {
                         $params.RemoteAddress = $ruleDef.source # 'source' in JSON maps to RemoteAddress for inbound
                     }
-                    
+
                     if ($ruleDef.program) { $params.Program = $ruleDef.program }
                     if ($ruleDef.service) { $params.Service = $ruleDef.service }
                     if ($ruleDef.interfacealias) { $params.InterfaceAlias = $ruleDef.interfacealias } # e.g., "Ethernet", "Wi-Fi"
-                    if ($ruleDef.profile) { 
+                    if ($ruleDef.profile) {
                         # Ensure profile is one of Domain, Private, Public, Any
                         $validProfiles = @("Domain", "Private", "Public", "Any")
                         if ($validProfiles -contains $ruleDef.profile) {
-                             $params.Profile = $ruleDef.profile 
+                             $params.Profile = $ruleDef.profile
                         } else {
                             Write-Log "Invalid profile '$($ruleDef.profile)' for rule '$ruleName'. Defaulting to 'Any'." -Level "WARNING"
                             $params.Profile = "Any"

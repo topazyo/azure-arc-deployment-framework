@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, Tuple
 from datetime import datetime, timedelta
 import logging
 from sklearn.preprocessing import StandardScaler
@@ -838,103 +838,19 @@ class TelemetryProcessor:
         """Detect periodic patterns in numerical columns of telemetry data using FFT."""
         try:
             self.logger.info("Detecting periodic patterns...")
-            patterns = {}
-            if df.empty:
-                self.logger.warning(
-                    "DataFrame is empty for periodic pattern detection.")
-                return patterns
-            if 'timestamp' not in df.columns:
-                self.logger.warning(
-                    "Timestamp column is missing for periodic pattern detection. Skipping FFT analysis.")
-                return patterns
+            df_sorted, median_time_diff_seconds = self._prepare_fft_frame(df)
+            if df_sorted is None:
+                return {}
 
-            df_sorted = df.sort_values(by='timestamp').reset_index(drop=True)
-            time_diffs = df_sorted['timestamp'].diff().dt.total_seconds()
-
-            if len(time_diffs) < 2:  # Need at least 2 points to get a diff
-                self.logger.warning(
-                    "Not enough data points to determine sampling rate for FFT.")
-                return patterns
-
-            # Use median diff for more robust sampling rate against outliers,
-            # ignore NaNs from first diff
-            median_time_diff_seconds = time_diffs.iloc[1:].median()
-
-            # Avoid zero or too small sampling interval
-            if pd.isna(
-                    median_time_diff_seconds) or median_time_diff_seconds <= 1e-6:
-                self.logger.warning(
-                    f"Invalid or zero median sampling interval ({median_time_diff_seconds}s) for FFT. Skipping.")
-                return patterns
-
-            # Hz (samples per second)
             sampling_rate = 1.0 / median_time_diff_seconds
-
-            fft_feature_list = self.config.get('fft_features', [])
-            if not fft_feature_list:  # If empty, use all numerical columns
-                fft_feature_list = df_sorted.select_dtypes(
-                    include=np.number).columns.tolist()
-
-            for col_name in fft_feature_list:
-                if col_name not in df_sorted.columns or not pd.api.types.is_numeric_dtype(
-                        df_sorted[col_name]):
-                    self.logger.debug(
-                        f"Skipping FFT for non-numeric or missing column: {col_name}")
-                    continue
-
-                series_data = df_sorted[col_name].fillna(
-                    df_sorted[col_name].mean()).values
-
-                if len(series_data) < 3:  # Meaningful FFT needs at least a few points
-                    self.logger.debug(
-                        f"Skipping FFT for column '{col_name}' due to insufficient data points ({
-                            len(series_data)}).")
-                    continue
-
-                N = len(series_data)
-                # Remove DC component
-                yf = rfft(series_data - np.mean(series_data))
-                xf = rfftfreq(N, 1 / sampling_rate)  # Frequencies
-
-                idx_start = 1 if (len(xf) > 0 and xf[0] == 0) else 0
-                if len(xf) <= idx_start or len(yf) <= idx_start:
-                    continue
-
-                magnitudes = np.abs(yf[idx_start:])
-                frequencies = xf[idx_start:]
-
-                if len(magnitudes) == 0:
-                    continue
-
-                # Configurable number of top frequencies
-                num_top_frequencies = self.config.get(
-                    'fft_num_top_frequencies', 3)
-                dominant_indices = np.argsort(
-                    magnitudes)[-min(num_top_frequencies, len(magnitudes)):][::-1]
-
-                top_periods_for_col = []
-                min_amplitude_threshold = self.config.get(
-                    'fft_min_amplitude_threshold', 0.1)
-
-                for i in dominant_indices:
-                    freq = frequencies[i]
-                    amplitude = magnitudes[i] / (N / 2)  # Normalize amplitude
-                    if freq > 1e-9:
-                        period_seconds = 1 / freq
-                        # Define min/max period based on sampling rate and data
-                        # length
-                        min_meaningful_period = 2 * median_time_diff_seconds
-                        max_meaningful_period = (
-                            N / 2) * median_time_diff_seconds
-
-                        if period_seconds >= min_meaningful_period and \
-                                period_seconds <= max_meaningful_period and \
-                                amplitude >= min_amplitude_threshold:
-                            top_periods_for_col.append({
-                                "period_seconds": round(period_seconds, 2),
-                                "amplitude": round(amplitude, 2),
-                                "frequency_hz": round(freq, 4)
-                            })
+            patterns = {}
+            for col_name in self._get_fft_feature_list(df_sorted):
+                top_periods_for_col = self._analyze_fft_periods_for_column(
+                    df_sorted,
+                    col_name,
+                    sampling_rate,
+                    median_time_diff_seconds,
+                )
                 if top_periods_for_col:
                     patterns[col_name] = top_periods_for_col
                     self.logger.debug(
@@ -945,6 +861,143 @@ class TelemetryProcessor:
                 f"Periodic pattern detection failed: {
                     str(e)}", exc_info=True)
             return {}
+
+    def _prepare_fft_frame(
+            self, df: pd.DataFrame) -> Tuple[Optional[pd.DataFrame], Optional[float]]:
+        """Prepare sorted telemetry data and sampling interval for FFT analysis."""
+        if df.empty:
+            self.logger.warning(
+                "DataFrame is empty for periodic pattern detection.")
+            return None, None
+        if 'timestamp' not in df.columns:
+            self.logger.warning(
+                "Timestamp column is missing for periodic pattern detection. Skipping FFT analysis.")
+            return None, None
+
+        df_sorted = df.sort_values(by='timestamp').reset_index(drop=True)
+        time_diffs = df_sorted['timestamp'].diff().dt.total_seconds()
+        if len(time_diffs) < 2:
+            self.logger.warning(
+                "Not enough data points to determine sampling rate for FFT.")
+            return None, None
+
+        median_time_diff_seconds = time_diffs.iloc[1:].median()
+        if pd.isna(median_time_diff_seconds) or median_time_diff_seconds <= 1e-6:
+            self.logger.warning(
+                f"Invalid or zero median sampling interval ({median_time_diff_seconds}s) for FFT. Skipping.")
+            return None, None
+
+        return df_sorted, float(median_time_diff_seconds)
+
+    def _get_fft_feature_list(self, df_sorted: pd.DataFrame) -> List[str]:
+        """Resolve the list of numeric columns to analyze with FFT."""
+        fft_feature_list = self.config.get('fft_features', [])
+        if fft_feature_list:
+            return fft_feature_list
+        return df_sorted.select_dtypes(include=np.number).columns.tolist()
+
+    def _analyze_fft_periods_for_column(
+            self,
+            df_sorted: pd.DataFrame,
+            col_name: str,
+            sampling_rate: float,
+            median_time_diff_seconds: float) -> List[Dict[str, Any]]:
+        """Analyze a single numeric column for dominant FFT periods."""
+        if col_name not in df_sorted.columns or not pd.api.types.is_numeric_dtype(
+                df_sorted[col_name]):
+            self.logger.debug(
+                f"Skipping FFT for non-numeric or missing column: {col_name}")
+            return []
+
+        series_data = df_sorted[col_name].fillna(df_sorted[col_name].mean()).values
+        if len(series_data) < 3:
+            self.logger.debug(
+                f"Skipping FFT for column '{col_name}' due to insufficient data points ({len(series_data)}).")
+            return []
+
+        frequencies, magnitudes, sample_count = self._compute_fft_spectrum(
+            series_data,
+            sampling_rate,
+        )
+        if len(magnitudes) == 0:
+            return []
+
+        return self._extract_dominant_periods(
+            frequencies,
+            magnitudes,
+            sample_count,
+            median_time_diff_seconds,
+        )
+
+    @staticmethod
+    def _compute_fft_spectrum(
+            series_data: np.ndarray,
+            sampling_rate: float) -> Tuple[np.ndarray, np.ndarray, int]:
+        """Compute the usable FFT frequency and magnitude arrays for a series."""
+        sample_count = len(series_data)
+        yf = rfft(series_data - np.mean(series_data))
+        xf = rfftfreq(sample_count, 1 / sampling_rate)
+        idx_start = 1 if (len(xf) > 0 and xf[0] == 0) else 0
+        if len(xf) <= idx_start or len(yf) <= idx_start:
+            return np.array([]), np.array([]), sample_count
+        return xf[idx_start:], np.abs(yf[idx_start:]), sample_count
+
+    def _extract_dominant_periods(
+            self,
+            frequencies: np.ndarray,
+            magnitudes: np.ndarray,
+            sample_count: int,
+            median_time_diff_seconds: float) -> List[Dict[str, Any]]:
+        """Extract dominant periods from FFT magnitudes using configured thresholds."""
+        num_top_frequencies = self.config.get('fft_num_top_frequencies', 3)
+        dominant_indices = np.argsort(
+            magnitudes
+        )[-min(num_top_frequencies, len(magnitudes)):][::-1]
+
+        min_amplitude_threshold = self.config.get(
+            'fft_min_amplitude_threshold', 0.1)
+        min_meaningful_period = 2 * median_time_diff_seconds
+        max_meaningful_period = (sample_count / 2) * median_time_diff_seconds
+
+        top_periods_for_col = []
+        for index in dominant_indices:
+            dominant_period = self._build_periodic_pattern_entry(
+                frequencies[index],
+                magnitudes[index],
+                sample_count,
+                min_meaningful_period,
+                max_meaningful_period,
+                min_amplitude_threshold,
+            )
+            if dominant_period is not None:
+                top_periods_for_col.append(dominant_period)
+        return top_periods_for_col
+
+    @staticmethod
+    def _build_periodic_pattern_entry(
+            frequency: float,
+            magnitude: float,
+            sample_count: int,
+            min_meaningful_period: float,
+            max_meaningful_period: float,
+            min_amplitude_threshold: float) -> Optional[Dict[str, Any]]:
+        """Build a periodic pattern entry when a dominant FFT component is meaningful."""
+        if frequency <= 1e-9:
+            return None
+
+        period_seconds = 1 / frequency
+        amplitude = magnitude / (sample_count / 2)
+        if not (
+                period_seconds >= min_meaningful_period and
+                period_seconds <= max_meaningful_period and
+                amplitude >= min_amplitude_threshold):
+            return None
+
+        return {
+            "period_seconds": round(period_seconds, 2),
+            "amplitude": round(amplitude, 2),
+            "frequency_hz": round(frequency, 4)
+        }
 
     def _detect_correlations(self, df: pd.DataFrame) -> Dict[str, Any]:
         """Detect correlations between specified numerical columns in telemetry data."""
@@ -1016,101 +1069,124 @@ class TelemetryProcessor:
         """Detect anomalous patterns based on multi-metric rules defined in config."""
         try:
             self.logger.info("Detecting multi-metric anomalous patterns...")
-            detected_patterns = {}
             if df.empty:
                 self.logger.warning(
                     "DataFrame is empty for anomalous pattern detection.")
-                return detected_patterns
+                return {}
 
             rules = self.config.get('multi_metric_anomaly_rules', [])
             if not rules:
                 self.logger.info(
                     "No multi-metric anomaly rules defined in config.")
-                return detected_patterns
+                return {}
 
+            detected_patterns = {}
             for rule in rules:
-                rule_name = rule.get('name', 'UnnamedRule')
-                conditions = rule.get('conditions', [])
-                if not conditions:
-                    self.logger.warning(
-                        f"Rule '{rule_name}' has no conditions. Skipping.")
+                rule_name, combined_condition = self._evaluate_anomalous_rule(
+                    df,
+                    rule,
+                )
+                if combined_condition is None:
                     continue
 
-                # Start with a boolean Series of all True, then AND conditions
-                combined_condition = pd.Series(
-                    [True] * len(df), index=df.index)
-
-                for cond in conditions:
-                    metric = cond.get('metric')
-                    operator = cond.get('operator')
-                    threshold = cond.get('threshold')
-
-                    if not all([metric, operator, threshold is not None]
-                               ):  # threshold can be 0
-                        self.logger.warning(
-                            f"Invalid condition in rule '{rule_name}': {cond}. Skipping condition.")
-                        continue
-                    if metric not in df.columns:
-                        self.logger.warning(
-                            f"Metric '{metric}' in rule '{rule_name}' not found in DataFrame. Skipping condition.")
-                        combined_condition = pd.Series(
-                            [False] * len(df), index=df.index)  # Rule cannot be met
-                        break  # No need to check other conditions for this rule
-
-                    series_metric = df[metric]
-                    if operator == '>':
-                        condition_met = series_metric > threshold
-                    elif operator == '<':
-                        condition_met = series_metric < threshold
-                    elif operator == '>=':
-                        condition_met = series_metric >= threshold
-                    elif operator == '<=':
-                        condition_met = series_metric <= threshold
-                    elif operator == '==':
-                        condition_met = series_metric == threshold
-                    elif operator == '!=':
-                        condition_met = series_metric != threshold
-                    else:
-                        self.logger.warning(
-                            f"Unsupported operator '{operator}' in rule '{rule_name}'. Skipping condition.")
-                        continue
-
-                    combined_condition &= condition_met
-
                 if combined_condition.any():
-                    # Get rows where pattern occurred
-                    occurrences = df[combined_condition].copy()
-                    if 'timestamp' in occurrences.columns:
-                        # Store timestamps or row indices
-                        detected_patterns[rule_name] = {
-                            "description": rule.get(
-                                'description',
-                                f"Pattern '{rule_name}' detected."
-                            ),
-                            "severity": rule.get('severity', 'medium'),
-                            "count": int(combined_condition.sum()),
-                            "occurrences_timestamps": (
-                                occurrences['timestamp'].apply(
-                                    lambda dt: dt.isoformat()
-                                ).tolist()
-                            )
-                        }
-                        self.logger.info(
-                            f"Detected pattern '{rule_name}' at "
-                            f"{len(occurrences)} locations."
-                        )
-                    else:  # No timestamp, just count
-                        detected_patterns[rule_name] = {
-                            "description": rule.get(
-                                'description', f"Pattern '{rule_name}' detected."), "severity": rule.get(
-                                'severity', 'medium'), "count": int(
-                                combined_condition.sum())}
+                    detected_patterns[rule_name] = self._build_anomalous_pattern_result(
+                        df,
+                        rule,
+                        rule_name,
+                        combined_condition,
+                    )
             return detected_patterns
         except Exception as e:
             self.logger.error(
                 f"Anomalous pattern detection failed: {
                     str(e)}", exc_info=True)
             return {}
+
+    def _evaluate_anomalous_rule(
+            self,
+            df: pd.DataFrame,
+            rule: Dict[str, Any]) -> Tuple[str, Optional[pd.Series]]:
+        """Evaluate a configured multi-metric anomaly rule against the dataframe."""
+        rule_name = rule.get('name', 'UnnamedRule')
+        conditions = rule.get('conditions', [])
+        if not conditions:
+            self.logger.warning(
+                f"Rule '{rule_name}' has no conditions. Skipping.")
+            return rule_name, None
+
+        combined_condition = pd.Series([True] * len(df), index=df.index)
+        for condition in conditions:
+            condition_met = self._evaluate_anomalous_condition(
+                df,
+                rule_name,
+                condition,
+            )
+            if condition_met is None:
+                continue
+            if condition_met is False:
+                return rule_name, pd.Series([False] * len(df), index=df.index)
+            combined_condition &= condition_met
+
+        return rule_name, combined_condition
+
+    def _evaluate_anomalous_condition(
+            self,
+            df: pd.DataFrame,
+            rule_name: str,
+            condition: Dict[str, Any]) -> Optional[pd.Series]:
+        """Evaluate one anomaly-rule condition and return a boolean mask."""
+        metric = condition.get('metric')
+        operator = condition.get('operator')
+        threshold = condition.get('threshold')
+
+        if not all([metric, operator, threshold is not None]):
+            self.logger.warning(
+                f"Invalid condition in rule '{rule_name}': {condition}. Skipping condition.")
+            return None
+        if metric not in df.columns:
+            self.logger.warning(
+                f"Metric '{metric}' in rule '{rule_name}' not found in DataFrame. Skipping condition.")
+            return False
+
+        series_metric = df[metric]
+        operators = {
+            '>': series_metric > threshold,
+            '<': series_metric < threshold,
+            '>=': series_metric >= threshold,
+            '<=': series_metric <= threshold,
+            '==': series_metric == threshold,
+            '!=': series_metric != threshold,
+        }
+        if operator not in operators:
+            self.logger.warning(
+                f"Unsupported operator '{operator}' in rule '{rule_name}'. Skipping condition.")
+            return None
+        return operators[operator]
+
+    def _build_anomalous_pattern_result(
+            self,
+            df: pd.DataFrame,
+            rule: Dict[str, Any],
+            rule_name: str,
+            combined_condition: pd.Series) -> Dict[str, Any]:
+        """Build the output payload for a detected anomalous pattern."""
+        occurrences = df[combined_condition].copy()
+        result = {
+            "description": rule.get(
+                'description', f"Pattern '{rule_name}' detected."
+            ),
+            "severity": rule.get('severity', 'medium'),
+            "count": int(combined_condition.sum()),
+        }
+        if 'timestamp' in occurrences.columns:
+            result["occurrences_timestamps"] = occurrences['timestamp'].apply(
+                lambda dt: dt.isoformat()
+            ).tolist()
+            self.logger.info(
+                f"Detected pattern '{rule_name}' at {len(occurrences)} locations."
+            )
+        return result
 
     def _identify_patterns(self, df: pd.DataFrame) -> Dict[str, Any]:
         """Identify various types of patterns in telemetry data."""
@@ -1128,34 +1204,17 @@ class TelemetryProcessor:
             self.logger.info("Calculating derived features...")
             derived = {}
 
-            def _col(*names: str) -> Optional[str]:
-                for name in names:
-                    if name in df.columns:
-                        return name
-                return None
+            cpu_col = self._get_first_present_column(
+                df, 'cpu_usage', 'cpu_usage_avg'
+            )
+            mem_col = self._get_first_present_column(
+                df, 'memory_usage', 'memory_usage_avg'
+            )
+            err_col = self._get_first_present_column(
+                df, 'error_count', 'error_count_sum'
+            )
 
-            cpu_col = _col('cpu_usage', 'cpu_usage_avg')
-            mem_col = _col('memory_usage', 'memory_usage_avg')
-            err_col = _col('error_count', 'error_count_sum')
-
-            # Error Rate
-            # If request_count is present, make division-by-zero behavior
-            # explicit and stable.
-            if 'request_count' in df.columns:
-                total_requests = float(df['request_count'].sum())
-                if total_requests <= 0:
-                    derived['error_rate'] = 0.0
-                elif err_col:
-                    derived['error_rate'] = float(
-                        df[err_col].sum() / total_requests)
-                elif 'error_rate' in df.columns:
-                    derived['error_rate'] = float(df['error_rate'].mean())
-                else:
-                    derived['error_rate'] = 0.0
-            elif 'error_rate' in df.columns:
-                derived['error_rate'] = float(df['error_rate'].mean())
-            else:
-                derived['error_rate'] = 0.0
+            derived['error_rate'] = self._calculate_error_rate(df, err_col)
 
             mean_cpu = float(df[cpu_col].mean()) if cpu_col else 0.0
             mean_memory = float(df[mem_col].mean()) if mem_col else 0.0
@@ -1174,75 +1233,89 @@ class TelemetryProcessor:
             else:
                 derived['cpu_usage_volatility'] = 0.0
 
-            # Memory Usage Trend (Slope)
-            if mem_col and 'timestamp' in df.columns and len(df) > 1:
-                # Ensure timestamp is numeric (e.g., seconds since epoch) for
-                # polyfit
-                # Ensure data is sorted for trend calculation
-                df_sorted = df.sort_values(by='timestamp')
-                time_numeric = (
-                    df_sorted['timestamp'] -
-                    df_sorted['timestamp'].min()).dt.total_seconds()
-
-                # Align data in case of NaNs for memory_usage and time_numeric
-                valid_indices = time_numeric.notna(
-                ) & df_sorted[mem_col].notna()
-
-                if valid_indices.sum() > 1:  # Need at least 2 valid, aligned data points
-                    slope = np.polyfit(
-                        time_numeric[valid_indices],
-                        df_sorted[mem_col][valid_indices],
-                        1)[0]
-                    derived['memory_usage_trend_slope'] = float(slope)
-                    self.logger.debug(
-                        f"Calculated memory_usage_trend_slope: {slope}")
-                else:
-                    derived['memory_usage_trend_slope'] = 0.0
-            else:  # Not enough data or missing columns
-                derived['memory_usage_trend_slope'] = 0.0
-
-            # Request Throughput (requests per minute)
-            if 'request_count' in df.columns and 'timestamp' in df.columns and len(
-                    df) > 0:
-                if len(df) > 1:
-                    df_sorted = df.sort_values(by='timestamp')
-                    duration_seconds = (
-                        df_sorted['timestamp'].max() -
-                        df_sorted['timestamp'].min()).total_seconds()
-                    if duration_seconds > 0:
-                        total_requests = df_sorted['request_count'].sum()
-                        derived['requests_per_minute'] = (
-                            total_requests / duration_seconds) * 60
-                        self.logger.debug(
-                            f"Calculated requests_per_minute: {
-                                derived['requests_per_minute']}")
-                    # duration is zero, but requests exist (e.g. all same
-                    # timestamp)
-                    elif df_sorted['request_count'].sum() > 0:
-                        # Effectively infinite if time is zero
-                        derived['requests_per_minute'] = np.inf
-                        self.logger.debug(
-                            "Calculated requests_per_minute as Inf due to zero duration with requests.")
-                    else:  # duration is zero, no requests
-                        derived['requests_per_minute'] = 0.0
-                else:  # Single data point
-                    # For a single data point, throughput isn't well-defined over time.
-                    # Could be total requests if interval is assumed to be 1 minute, or 0, or NaN.
-                    # Let's consider it as total requests in an undefined (but implicitly short) interval.
-                    # Or, if we assume it represents a rate over a standard interval (e.g. 1 min),
-                    # it would be just its value.
-                    # For now, let's assign 0 if duration can't be calculated.
-                    derived['requests_per_minute'] = 0.0
-                    self.logger.debug(
-                        "Calculated requests_per_minute as 0 for single data point.")
-
-            if 'requests_per_minute' not in derived:
-                derived['requests_per_minute'] = 0.0
+            derived['memory_usage_trend_slope'] = self._calculate_memory_usage_trend(
+                df, mem_col
+            )
+            derived['requests_per_minute'] = self._calculate_requests_per_minute(
+                df
+            )
 
             return derived
         except Exception as e:
             self.logger.error(f"Derived feature calculation failed: {str(e)}")
             return {}  # Return empty dict on error
+
+    @staticmethod
+    def _get_first_present_column(
+            df: pd.DataFrame, *names: str) -> Optional[str]:
+        """Return the first candidate column that exists in the dataframe."""
+        for name in names:
+            if name in df.columns:
+                return name
+        return None
+
+    @staticmethod
+    def _calculate_error_rate(
+            df: pd.DataFrame, err_col: Optional[str]) -> float:
+        """Calculate a stable error-rate value from the available columns."""
+        if 'request_count' in df.columns:
+            total_requests = float(df['request_count'].sum())
+            if total_requests <= 0:
+                return 0.0
+            if err_col:
+                return float(df[err_col].sum() / total_requests)
+        if 'error_rate' in df.columns:
+            return float(df['error_rate'].mean())
+        return 0.0
+
+    def _calculate_memory_usage_trend(
+            self,
+            df: pd.DataFrame,
+            mem_col: Optional[str]) -> float:
+        """Calculate the memory-usage slope over time."""
+        if not mem_col or 'timestamp' not in df.columns or len(df) <= 1:
+            return 0.0
+
+        df_sorted = df.sort_values(by='timestamp')
+        time_numeric = (
+            df_sorted['timestamp'] - df_sorted['timestamp'].min()
+        ).dt.total_seconds()
+        valid_indices = time_numeric.notna() & df_sorted[mem_col].notna()
+        if valid_indices.sum() <= 1:
+            return 0.0
+
+        slope = np.polyfit(
+            time_numeric[valid_indices],
+            df_sorted[mem_col][valid_indices],
+            1,
+        )[0]
+        self.logger.debug(f"Calculated memory_usage_trend_slope: {slope}")
+        return float(slope)
+
+    def _calculate_requests_per_minute(self, df: pd.DataFrame) -> float:
+        """Calculate throughput in requests per minute with explicit zero-duration handling."""
+        if 'request_count' not in df.columns or 'timestamp' not in df.columns or len(df) == 0:
+            return 0.0
+        if len(df) == 1:
+            self.logger.debug(
+                "Calculated requests_per_minute as 0 for single data point.")
+            return 0.0
+
+        df_sorted = df.sort_values(by='timestamp')
+        duration_seconds = (
+            df_sorted['timestamp'].max() - df_sorted['timestamp'].min()
+        ).total_seconds()
+        total_requests = df_sorted['request_count'].sum()
+        if duration_seconds > 0:
+            requests_per_minute = (total_requests / duration_seconds) * 60
+            self.logger.debug(
+                f"Calculated requests_per_minute: {requests_per_minute}")
+            return requests_per_minute
+        if total_requests > 0:
+            self.logger.debug(
+                "Calculated requests_per_minute as Inf due to zero duration with requests.")
+            return np.inf
+        return 0.0
 
     def _generate_performance_insights(
             self, features: Dict[str, Any]) -> List[Dict[str, Any]]:

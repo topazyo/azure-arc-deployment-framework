@@ -1,3 +1,24 @@
+<#
+.SYNOPSIS
+Retrieves Azure Monitor Agent configuration and collection status.
+
+.DESCRIPTION
+Collects AMA service state, configuration files, workspace binding, data
+collection rule metadata, and optional registry, version, Azure association,
+and log-collection details for a target server.
+
+.PARAMETER ServerName
+Target server to inspect.
+
+.PARAMETER Detailed
+Includes registry, version, Azure DCR association, and log collection details.
+
+.PARAMETER IncludeSecrets
+Returns sensitive AMA configuration values without redaction.
+
+.OUTPUTS
+PSCustomObject
+#>
 function Get-AMAConfig {
     [CmdletBinding()]
     param (
@@ -42,20 +63,20 @@ function Get-AMAConfig {
                 $configPath = "C:\Program Files\Azure Monitor Agent\config"
                 if (Test-Path $configPath) {
                     $files = @{
-                        SettingsJson = if (Test-Path "$configPath\settings.json") { 
-                            Get-Content "$configPath\settings.json" -Raw | ConvertFrom-Json 
+                        SettingsJson = if (Test-Path "$configPath\settings.json") {
+                            Get-Content "$configPath\settings.json" -Raw | ConvertFrom-Json
                         } else { $null }
-                        
-                        AgentJson = if (Test-Path "$configPath\agent.json") { 
-                            Get-Content "$configPath\agent.json" -Raw | ConvertFrom-Json 
+
+                        AgentJson = if (Test-Path "$configPath\agent.json") {
+                            Get-Content "$configPath\agent.json" -Raw | ConvertFrom-Json
                         } else { $null }
-                        
-                        ConfigJson = if (Test-Path "$configPath\config.json") { 
-                            Get-Content "$configPath\config.json" -Raw | ConvertFrom-Json 
+
+                        ConfigJson = if (Test-Path "$configPath\config.json") {
+                            Get-Content "$configPath\config.json" -Raw | ConvertFrom-Json
                         } else { $null }
-                        
-                        MonitoringConfigJson = if (Test-Path "$configPath\monitoring_config.json") { 
-                            Get-Content "$configPath\monitoring_config.json" -Raw | ConvertFrom-Json 
+
+                        MonitoringConfigJson = if (Test-Path "$configPath\monitoring_config.json") {
+                            Get-Content "$configPath\monitoring_config.json" -Raw | ConvertFrom-Json
                         } else { $null }
                     }
                     return $files
@@ -71,31 +92,31 @@ function Get-AMAConfig {
             }
 
             $configResult.ConfigFound = $true
-            
+
             # Extract workspace information
             if ($configFiles.SettingsJson) {
                 $configResult.ConfigDetails.Settings = $configFiles.SettingsJson
-                
+
                 # Extract workspace ID
                 if ($configFiles.SettingsJson.workspaceId) {
                     $configResult.WorkspaceId = $configFiles.SettingsJson.workspaceId
                 }
-                
+
                 # Remove secrets if not requested
                 if (-not $IncludeSecrets -and $configFiles.SettingsJson.PSObject.Properties.Name -contains "workspaceKey") {
                     $configResult.ConfigDetails.Settings.workspaceKey = "***REDACTED***"
                 }
             }
-            
+
             # Extract agent configuration
             if ($configFiles.AgentJson) {
                 $configResult.ConfigDetails.Agent = $configFiles.AgentJson
             }
-            
+
             # Extract monitoring configuration
             if ($configFiles.MonitoringConfigJson) {
                 $configResult.ConfigDetails.MonitoringConfig = $configFiles.MonitoringConfigJson
-                
+
                 # Extract DCR information
                 if ($configFiles.MonitoringConfigJson.dataCollectionRules) {
                     foreach ($dcr in $configFiles.MonitoringConfigJson.dataCollectionRules) {
@@ -108,7 +129,7 @@ function Get-AMAConfig {
                     }
                 }
             }
-            
+
             # Get additional details if requested
             if ($Detailed) {
                 # Get registry configuration
@@ -120,7 +141,7 @@ function Get-AMAConfig {
                     }
                     return $null
                 }
-                
+
                 if ($registryConfig) {
                     $configResult.ConfigDetails.Registry = @{
                         DisplayName = $registryConfig.DisplayName
@@ -129,7 +150,7 @@ function Get-AMAConfig {
                         Type = $registryConfig.Type
                     }
                 }
-                
+
                 # Get installed version
                 $versionInfo = Invoke-Command -ComputerName $ServerName -ScriptBlock {
                     $amaPath = "C:\Program Files\Azure Monitor Agent\Agent\AzureMonitorAgent.exe"
@@ -143,12 +164,12 @@ function Get-AMAConfig {
                     }
                     return $null
                 }
-                
+
                 if ($versionInfo) {
                     $configResult.Version = $versionInfo.ProductVersion
                     $configResult.FileVersion = $versionInfo.FileVersion
                 }
-                
+
                 # Get DCR associations from Azure
                 try {
                     $arcServer = Get-AzConnectedMachine -Name $ServerName -ErrorAction SilentlyContinue
@@ -166,7 +187,7 @@ function Get-AMAConfig {
                     Write-Verbose "Could not retrieve DCR associations from Azure: $_"
                     Write-Log -Message "Could not retrieve DCR associations from Azure: $_" -Level Warning
                 }
-                
+
                 # Get log collection status
                 $logCollectionStatus = Get-AMALogCollectionStatus -ServerName $ServerName
                 if ($logCollectionStatus) {
@@ -186,26 +207,33 @@ function Get-AMAConfig {
     }
 }
 
+<#
+.SYNOPSIS
+Summarizes AMA log volume, recent errors, and buffer usage.
+
+.PARAMETER ServerName
+Target server to inspect.
+#>
 function Get-AMALogCollectionStatus {
     [CmdletBinding()]
     param ([string]$ServerName)
-    
+
     try {
         $logStatus = Invoke-Command -ComputerName $ServerName -ScriptBlock {
             # Check log directories
             $logPath = "C:\Program Files\Azure Monitor Agent\Logs"
             $logFiles = if (Test-Path $logPath) { Get-ChildItem $logPath -Recurse -File } else { @() }
-            
+
             # Check event logs
             $amaEvents = Get-WinEvent -LogName "Microsoft-Azure-Monitor-Agent/Operational" -MaxEvents 100 -ErrorAction SilentlyContinue
             $errorEvents = $amaEvents | Where-Object { $_.LevelDisplayName -eq "Error" }
             $warningEvents = $amaEvents | Where-Object { $_.LevelDisplayName -eq "Warning" }
-            
+
             # Check buffer files
             $bufferPath = "C:\Program Files\Azure Monitor Agent\Agent\Buffer"
             $bufferFiles = if (Test-Path $bufferPath) { Get-ChildItem $bufferPath -Recurse -File } else { @() }
             $bufferSize = ($bufferFiles | Measure-Object -Property Length -Sum).Sum
-            
+
             return @{
                 LogCount = $logFiles.Count
                 LogSize = ($logFiles | Measure-Object -Property Length -Sum).Sum
@@ -222,7 +250,7 @@ function Get-AMALogCollectionStatus {
                 }
             }
         }
-        
+
         return $logStatus
     }
     catch {

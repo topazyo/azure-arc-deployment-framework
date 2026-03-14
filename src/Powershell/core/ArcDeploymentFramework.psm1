@@ -14,7 +14,7 @@ try {
         "validation_matrix.json",
         "dcr-templates.json"
     )
-    
+
     foreach ($file in $configFiles) {
         $filePath = Join-Path $script:ConfigPath $file
         if (Test-Path $filePath) {
@@ -94,7 +94,30 @@ $script:DefaultConfig = @{
     DefaultWorkspaceKey = $null
 }
 
-# Module Functions
+<#
+.SYNOPSIS
+Initializes the Azure Arc deployment module state.
+
+.DESCRIPTION
+Validates the current Azure context, applies optional workspace credentials,
+merges any caller-provided configuration, and returns the resulting runtime
+configuration snapshot used by later deployment and troubleshooting commands.
+
+.PARAMETER WorkspaceId
+Optional Log Analytics workspace identifier for AMA-related operations.
+
+.PARAMETER WorkspaceKey
+Optional Log Analytics workspace key paired with WorkspaceId.
+
+.PARAMETER CustomConfig
+Optional hashtable of configuration overrides merged into the module defaults.
+
+.PARAMETER LogPathOverride
+Optional log root override applied during module initialization.
+
+.OUTPUTS
+Hashtable
+#>
 function Initialize-ArcDeployment {
     [CmdletBinding()]
     param (
@@ -157,6 +180,27 @@ function Initialize-ArcDeployment {
     }
 }
 
+<#
+.SYNOPSIS
+Deploys Azure Arc and optional AMA components to a target server.
+
+.DESCRIPTION
+Builds the deployment parameter set from module defaults and caller input,
+validates AMA prerequisites when requested, and invokes the deployment entry
+point under ShouldProcess control.
+
+.PARAMETER ServerName
+Target server to onboard to Azure Arc.
+
+.PARAMETER ConfigurationParams
+Optional deployment configuration overrides for the target server.
+
+.PARAMETER DeployAMA
+Includes Azure Monitor Agent deployment in the Arc onboarding flow.
+
+.PARAMETER Force
+Passes force semantics through to the underlying deployment implementation.
+#>
 function New-ArcDeployment {
     [CmdletBinding(SupportsShouldProcess)]
     param (
@@ -195,11 +239,41 @@ function New-ArcDeployment {
         try {
             if ($PSCmdlet.ShouldProcess($ServerName, "Deploy Azure Arc $(if ($DeployAMA) {'and AMA'})")) {
                 # Start deployment
-                $result = Deploy-ArcAgent @deploymentParams
+                if ($script:DeployArcAgentOverride) {
+                    $result = & $script:DeployArcAgentOverride @deploymentParams
+                }
+                elseif (Test-Path 'Function:global:Deploy-ArcAgent') {
+                    $result = & 'global:Deploy-ArcAgent' @deploymentParams
+                }
+                else {
+                    $deployArcAgentCommand = Get-Command -Name 'Deploy-ArcAgent' -ErrorAction SilentlyContinue
+                }
+
+                if (-not $result -and $deployArcAgentCommand) {
+                    $result = & $deployArcAgentCommand @deploymentParams
+                }
+                elseif (-not $result) {
+                    $result = Deploy-ArcAgent @deploymentParams
+                }
 
                 # Validate deployment
                 if ($result.Status -eq "Success") {
-                    $validation = Test-DeploymentHealth -ServerName $ServerName -ValidateAMA:$DeployAMA
+                    if ($script:TestDeploymentHealthOverride) {
+                        $validation = & $script:TestDeploymentHealthOverride -ServerName $ServerName -ValidateAMA:$DeployAMA
+                    }
+                    elseif (Test-Path 'Function:global:Test-DeploymentHealth') {
+                        $validation = & 'global:Test-DeploymentHealth' -ServerName $ServerName -ValidateAMA:$DeployAMA
+                    }
+                    else {
+                        $testDeploymentHealthCommand = Get-Command -Name 'Test-DeploymentHealth' -ErrorAction SilentlyContinue
+                    }
+
+                    if (-not $validation -and $testDeploymentHealthCommand) {
+                        $validation = & $testDeploymentHealthCommand -ServerName $ServerName -ValidateAMA:$DeployAMA
+                    }
+                    elseif (-not $validation) {
+                        $validation = Test-DeploymentHealth -ServerName $ServerName -ValidateAMA:$DeployAMA
+                    }
                     $result.Validation = $validation
                 }
 
@@ -213,8 +287,29 @@ function New-ArcDeployment {
     }
 }
 
+<#
+.SYNOPSIS
+Starts the framework troubleshooting workflow for a server.
+
+.DESCRIPTION
+Builds the troubleshooting request from module defaults and caller switches,
+adds AMA workspace context when requested, and dispatches the troubleshooting
+workflow for the specified server.
+
+.PARAMETER ServerName
+Target server to troubleshoot.
+
+.PARAMETER IncludeAMA
+Includes AMA-specific troubleshooting by supplying the configured workspace ID.
+
+.PARAMETER DetailedAnalysis
+Requests deeper troubleshooting analysis when supported by the workflow.
+
+.PARAMETER AutoRemediate
+Allows the troubleshooting workflow to run automated remediation steps.
+#>
 function Start-ArcTroubleshooting {
-    [CmdletBinding()]
+    [CmdletBinding(SupportsShouldProcess)]
     param (
         [Parameter(Mandatory)]
         [string]$ServerName,
@@ -238,6 +333,10 @@ function Start-ArcTroubleshooting {
                 throw "Workspace ID required for AMA troubleshooting"
             }
             $params['WorkspaceId'] = $script:DefaultConfig.DefaultWorkspaceId
+        }
+
+        if (-not $PSCmdlet.ShouldProcess($ServerName, "Start Arc troubleshooting workflow")) {
+            return $null
         }
 
         return Start-ArcTroubleshooter @params
@@ -291,7 +390,7 @@ function Initialize-Logging {
     $global:AzureArcFramework_LogLevel = $script:DefaultConfig.LogLevel
 
     # Optional: Confirmation message
-    Write-Host "Logging initialized. Path: $($global:AzureArcFramework_LogPath), Level: $($global:AzureArcFramework_LogLevel)"
+    Write-Information "Logging initialized. Path: $($global:AzureArcFramework_LogPath), Level: $($global:AzureArcFramework_LogLevel)" -InformationAction Continue
 }
 
 # Export module members

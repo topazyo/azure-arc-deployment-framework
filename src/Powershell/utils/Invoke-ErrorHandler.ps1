@@ -1,24 +1,35 @@
-#
-# Invoke-ErrorHandler — Canonical error handling utility for the Azure Arc Framework.
-#
-# STANDARD CATCH BLOCK PATTERN (use in all exported functions):
-#
-#   catch {
-#       Write-Log -Message "Operation failed: $($_.Exception.Message)" -Level Error -Component 'FunctionName'
-#       Write-Error -ErrorRecord $_
-#   }
-#
-# Use -ThrowException to re-throw after logging (for functions that must propagate terminating errors):
-#
-#   catch {
-#       Invoke-ErrorHandler -ErrorRecord $_ -Context 'FunctionName' -ThrowException
-#   }
-#
-# NEVER use:
-#   Write-Error "$_"             ← stringifies the ErrorRecord, loses category/invocation info
-#   Write-Error -Exception $_.Exception  ← loses category, ErrorId, and TargetObject
-#   throw "string message"       ← non-structured; use $PSCmdlet.ThrowTerminatingError() instead
-#
+﻿<#
+.SYNOPSIS
+Runs the framework’s canonical structured error-handling workflow.
+
+.DESCRIPTION
+Converts an ErrorRecord into a structured object, optionally matches it against
+known patterns, runs configured general handling steps, writes log output, and can
+rethrow the original error when the caller requires a terminating failure.
+
+.PARAMETER ErrorRecord
+Error record to process.
+
+.PARAMETER Context
+Context string identifying the calling function or workflow.
+
+.PARAMETER HandlerConfig
+Pattern and general-step configuration used during handling.
+
+.PARAMETER ThrowException
+Rethrows the original error after handler execution when set.
+
+.OUTPUTS
+PSCustomObject
+
+.EXAMPLE
+Invoke-ErrorHandler -ErrorRecord $_ -Context 'Start-ArcTroubleshooter' -ThrowException
+
+.NOTES
+Preferred catch-block pattern for ordinary exported functions remains:
+`Write-Log -Message "Operation failed: $($_.Exception.Message)" -Level Error -Component 'FunctionName'`
+followed by `Write-Error -ErrorRecord $_`.
+#>
 function Invoke-ErrorHandler {
     [CmdletBinding()]
     param (
@@ -33,12 +44,30 @@ function Invoke-ErrorHandler {
     )
 
     begin {
+        function Get-ErrorInfoFallback {
+            param(
+                [Parameter(Mandatory)]
+                [System.Management.Automation.ErrorRecord]$SourceError
+            )
+
+            [PSCustomObject]@{
+                Message = $SourceError.Exception.Message
+                ErrorId = $SourceError.FullyQualifiedErrorId
+                Category = if ($SourceError.CategoryInfo) { $SourceError.CategoryInfo.Category } else { 'NotSpecified' }
+                StackTrace = $SourceError.ScriptStackTrace
+            }
+        }
+
         $handlerResult = @{
             Timestamp = Get-Date
             Context = $Context
             ErrorHandled = $false
             Actions = @()
+            ErrorInfo = Get-ErrorInfoFallback -SourceError $ErrorRecord
         }
+
+        $patterns = @($HandlerConfig['Patterns'])
+        $generalSteps = @($HandlerConfig['GeneralSteps'])
 
         Write-Log -Message "Error handler invoked for context: $Context" -Level Information
     }
@@ -47,15 +76,18 @@ function Invoke-ErrorHandler {
         try {
             # Convert error to structured format
             $errorInfo = Convert-ErrorToObject -ErrorRecord $ErrorRecord -IncludeStackTrace -IncludeInnerException
+            if (-not $errorInfo -or -not $errorInfo.PSObject.Properties['Message'] -or [string]::IsNullOrWhiteSpace([string]$errorInfo.Message)) {
+                $errorInfo = Get-ErrorInfoFallback -SourceError $ErrorRecord
+            }
 
             # Add to handler result
-            $handlerResult.ErrorInfo = $errorInfo
+            $handlerResult['ErrorInfo'] = if ($errorInfo) { $errorInfo } else { $handlerResult['ErrorInfo'] }
 
             # Check for known error patterns
-            $pattern = Find-ErrorPattern -Error $errorInfo -Patterns $HandlerConfig.Patterns
+            $pattern = Find-ErrorPattern -ErrorObj $handlerResult['ErrorInfo'] -Patterns $patterns
             if ($pattern) {
-                $handlerResult.Pattern = $pattern
-                
+                $handlerResult['Pattern'] = $pattern
+
                 # Execute pattern-specific handler
                 if ($pattern.Handler) {
                     $handlerAction = & $pattern.Handler -Error $errorInfo
@@ -68,7 +100,7 @@ function Invoke-ErrorHandler {
             }
 
             # Execute general error handling steps
-            foreach ($step in $HandlerConfig.GeneralSteps) {
+            foreach ($step in $generalSteps) {
                 $stepResult = & $step -Error $errorInfo
                 $handlerResult.Actions += @{
                     Type = "GeneralHandler"
@@ -82,8 +114,8 @@ function Invoke-ErrorHandler {
             Write-Log -Message "Stack trace: $($errorInfo.StackTrace)" -Level Debug
 
             # Determine if error was handled
-            $handlerResult.ErrorHandled = $handlerResult.Actions | 
-                Where-Object { $_.Result.Success } | 
+            $handlerResult.ErrorHandled = $handlerResult.Actions |
+                Where-Object { $_.Result.Success } |
                 Select-Object -First 1
 
             if (-not $handlerResult.ErrorHandled -and $ThrowException) {
@@ -91,8 +123,10 @@ function Invoke-ErrorHandler {
             }
         }
         catch {
+            if (-not $handlerResult['ErrorInfo'] -or -not $handlerResult['ErrorInfo'].PSObject.Properties['Message'] -or [string]::IsNullOrWhiteSpace([string]$handlerResult['ErrorInfo'].Message)) {
+                $handlerResult['ErrorInfo'] = Get-ErrorInfoFallback -SourceError $ErrorRecord
+            }
             Write-Log -Message "Invoke-ErrorHandler itself failed: $($_.Exception.Message)" -Level Error -Component 'Invoke-ErrorHandler'
-            Write-Error -ErrorRecord $_
             if ($ThrowException) {
                 throw
             }
@@ -100,6 +134,9 @@ function Invoke-ErrorHandler {
     }
 
     end {
+        if (-not $handlerResult['ErrorInfo'] -or -not $handlerResult['ErrorInfo'].PSObject.Properties['Message'] -or [string]::IsNullOrWhiteSpace([string]$handlerResult['ErrorInfo'].Message)) {
+            $handlerResult['ErrorInfo'] = Get-ErrorInfoFallback -SourceError $ErrorRecord
+        }
         $handlerResult.EndTime = Get-Date
         return [PSCustomObject]$handlerResult
     }

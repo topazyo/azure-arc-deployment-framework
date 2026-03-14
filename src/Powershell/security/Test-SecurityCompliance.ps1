@@ -23,7 +23,7 @@ function Test-SecurityCompliance {
         }
 
         try {
-            $baseline = Get-Content $BaselinePath | ConvertFrom-Json
+            [void](Get-Content $BaselinePath | ConvertFrom-Json)
             Write-Verbose "Successfully loaded security baseline from $BaselinePath"
         }
         catch {
@@ -76,7 +76,7 @@ function Test-SecurityCompliance {
             foreach ($check in $checks) {
                 Write-Verbose "Running $($check.Name) compliance check..."
                 $checkResult = & $check.Function -ServerName $ServerName
-                
+
                 $complianceStatus.Checks += @{
                     Category = $check.Name
                     Status = $checkResult.Compliant
@@ -111,10 +111,10 @@ function Test-SecurityCompliance {
             $complianceStatus.Recommendations = Generate-SecurityRecommendations -Checks $complianceStatus.Checks
 
             # Set Overall Compliance Status
-            $criticalFailures = $complianceStatus.Checks | 
-                Where-Object { $_.Severity -in ('Critical', 'High') } | 
+            $criticalFailures = $complianceStatus.Checks |
+                Where-Object { $_.Severity -in ('Critical', 'High') } |
                 Where-Object { -not $_.Status }
-            
+
             $complianceStatus.CompliantStatus = $criticalFailures.Count -eq 0
         }
         catch {
@@ -149,7 +149,7 @@ function Test-SecurityCompliance {
 # Helper Functions
 function Calculate-SecurityScore {
     param ([array]$Checks)
-    
+
     $weights = @{
         'Critical' = 40
         'High' = 30
@@ -173,9 +173,9 @@ function Calculate-SecurityScore {
 
 function Generate-SecurityRecommendations {
     param ([array]$Checks)
-    
-    $failedChecks = $Checks | Where-Object { -not $_.Status } | 
-        Sort-Object { 
+
+    $failedChecks = $Checks | Where-Object { -not $_.Status } |
+        Sort-Object {
             switch ($_.Severity) {
                 'Critical' { 0 }
                 'High' { 1 }

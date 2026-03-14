@@ -1,3 +1,27 @@
+<#
+.SYNOPSIS
+Converts an ErrorRecord into a structured PowerShell object.
+
+.DESCRIPTION
+Extracts message, category, error ID, invocation details, and optional stack or
+inner-exception information from an ErrorRecord so callers can log or persist a
+consistent error shape.
+
+.PARAMETER ErrorRecord
+PowerShell error record to convert.
+
+.PARAMETER IncludeStackTrace
+Includes the exception stack trace in the output object.
+
+.PARAMETER IncludeInnerException
+Includes nested exception information when present.
+
+.OUTPUTS
+PSCustomObject
+
+.EXAMPLE
+$errorRecord | Convert-ErrorToObject -IncludeStackTrace
+#>
 function Convert-ErrorToObject {
     [CmdletBinding()]
     param (

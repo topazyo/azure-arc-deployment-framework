@@ -1,3 +1,37 @@
+<#
+.SYNOPSIS
+Deploys the Azure Arc agent and optional AMA dependencies to a server.
+
+.DESCRIPTION
+Coordinates prerequisite validation, backup handling, Arc agent installation, and
+optional AMA deployment while recording step-by-step deployment state for the
+target server.
+
+.PARAMETER ServerName
+Target server for deployment.
+
+.PARAMETER ConfigurationParams
+Deployment configuration values used by the installation workflow.
+
+.PARAMETER WorkspaceId
+Workspace identifier used when deploying AMA.
+
+.PARAMETER WorkspaceKey
+Workspace key used when deploying AMA.
+
+.PARAMETER DeployAMA
+Includes Azure Monitor Agent deployment and related configuration.
+
+.PARAMETER Force
+Forces deployment behavior where supported by downstream helpers.
+
+.OUTPUTS
+PSCustomObject
+
+.EXAMPLE
+Deploy-ArcAgent -ServerName 'SERVER01' -ConfigurationParams $config -DeployAMA -WorkspaceId '<workspace-id>' -WorkspaceKey '<workspace-key>'
+#>
+
 if (-not (Get-Command -Name Backup-ArcConfiguration -ErrorAction SilentlyContinue)) {
     function Backup-ArcConfiguration {
         param([string]$ServerName)
@@ -28,7 +62,13 @@ if (-not (Get-Command -Name Install-AMAExtension -ErrorAction SilentlyContinue))
 
 if (-not (Get-Command -Name Set-DataCollectionRules -ErrorAction SilentlyContinue)) {
     function Set-DataCollectionRules {
+        [CmdletBinding(SupportsShouldProcess)]
         param([string]$ServerName, [string]$WorkspaceId, [string]$RuleType)
+
+        if (-not $PSCmdlet.ShouldProcess($ServerName, "Apply data collection rule configuration")) {
+            return @{ Status = "Skipped" }
+        }
+
         return @{ Status = "Success" }
     }
 }
@@ -190,7 +230,7 @@ function Deploy-ArcAgent {
                     RuleType = 'Security'
                 }
                 $dcrSetup = Set-DataCollectionRules @dcrParams
-                $deploymentState.Steps += @{ 
+                $deploymentState.Steps += @{
                     Name = "DCRConfiguration"
                     Status = $dcrSetup.Status
                     Details = $dcrSetup.Changes

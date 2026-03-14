@@ -20,7 +20,7 @@ Function Find-IssuePatterns {
     )
 
     # --- Logging Function (for script activity) ---
-    function Write-Log {
+    function Write-ActivityLog {
         param (
             [string]$Message,
             [string]$Level = "INFO", # INFO, WARNING, ERROR, DEBUG
@@ -28,7 +28,7 @@ Function Find-IssuePatterns {
         )
         $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
         $logEntry = "[$timestamp] [$Level] $Message"
-        
+
         try {
             if (-not (Test-Path (Split-Path $Path -Parent) -PathType Container)) {
                 New-Item -ItemType Directory -Path (Split-Path $Path -Parent) -Force -ErrorAction Stop | Out-Null
@@ -37,35 +37,35 @@ Function Find-IssuePatterns {
         }
         catch {
             Write-Warning "ACTIVITY_LOG_FAIL: Failed to write to activity log file $Path. Error: $($_.Exception.Message). Logging to console instead."
-            Write-Host $logEntry 
+            Write-Verbose $logEntry
         }
     }
 
-    Write-Log "Starting Find-IssuePatterns script. InputData count: $($InputData.Count). MaxIssuesToFind: $MaxIssuesToFind."
+    Write-ActivityLog "Starting Find-IssuePatterns script. InputData count: $($InputData.Count). MaxIssuesToFind: $MaxIssuesToFind."
 
     $issuePatterns = @()
 
     if (-not [string]::IsNullOrWhiteSpace($IssuePatternDefinitionsPath)) {
-        Write-Log "Loading issue pattern definitions from: $IssuePatternDefinitionsPath"
+        Write-ActivityLog "Loading issue pattern definitions from: $IssuePatternDefinitionsPath"
         if (Test-Path $IssuePatternDefinitionsPath -PathType Leaf) {
             try {
                 $jsonContent = Get-Content -Path $IssuePatternDefinitionsPath -Raw | ConvertFrom-Json -ErrorAction Stop
                 if ($jsonContent.issuePatterns) {
                     $issuePatterns = $jsonContent.issuePatterns
-                    Write-Log "Successfully loaded $($issuePatterns.Count) issue patterns from JSON file."
+                    Write-ActivityLog "Successfully loaded $($issuePatterns.Count) issue patterns from JSON file."
                 } else {
-                    Write-Log "Pattern file '$IssuePatternDefinitionsPath' does not contain an 'issuePatterns' array at the root." -Level "WARNING"
+                    Write-ActivityLog "Pattern file '$IssuePatternDefinitionsPath' does not contain an 'issuePatterns' array at the root." -Level "WARNING"
                 }
             } catch {
-                Write-Log "Failed to load or parse issue pattern file '$IssuePatternDefinitionsPath'. Error: $($_.Exception.Message)" -Level "ERROR"
+                Write-ActivityLog "Failed to load or parse issue pattern file '$IssuePatternDefinitionsPath'. Error: $($_.Exception.Message)" -Level "ERROR"
             }
         } else {
-            Write-Log "Issue pattern definitions file not found at: $IssuePatternDefinitionsPath" -Level "WARNING"
+            Write-ActivityLog "Issue pattern definitions file not found at: $IssuePatternDefinitionsPath" -Level "WARNING"
         }
     }
 
     if ($issuePatterns.Count -eq 0) {
-        Write-Log "Using hardcoded issue pattern definitions."
+        Write-ActivityLog "Using hardcoded issue pattern definitions."
         $issuePatterns = @(
             @{
                 IssueId = "ServiceCrashUnexpected"
@@ -160,33 +160,33 @@ Function Find-IssuePatterns {
                 SuggestedRemediationId = "REM_CaptureTopProcesses"
             }
         )
-        Write-Log "Loaded $($issuePatterns.Count) hardcoded issue patterns."
+        Write-ActivityLog "Loaded $($issuePatterns.Count) hardcoded issue patterns."
     }
 
     $foundIssues = [System.Collections.ArrayList]::new()
 
     foreach ($item in $InputData) {
         if ($MaxIssuesToFind -gt 0 -and $foundIssues.Count -ge $MaxIssuesToFind) {
-            Write-Log "Reached MaxIssuesToFind ($MaxIssuesToFind). Stopping further processing of input items."
+            Write-ActivityLog "Reached MaxIssuesToFind ($MaxIssuesToFind). Stopping further processing of input items."
             break
         }
 
-        Write-Log "Processing input item: $($item | Out-String -Width 200)" -Level "DEBUG"
+        Write-ActivityLog "Processing input item: $($item | Out-String -Width 200)" -Level "DEBUG"
 
         foreach ($pattern in $issuePatterns) {
             $allSignaturesMatch = $true # Assume match until a signature fails
             if (-not $pattern.DataSignatures -or $pattern.DataSignatures.Count -eq 0) {
-                Write-Log "Pattern '$($pattern.IssueId)' has no DataSignatures defined. Skipping." -Level "WARNING"
+                Write-ActivityLog "Pattern '$($pattern.IssueId)' has no DataSignatures defined. Skipping." -Level "WARNING"
                 $allSignaturesMatch = $false
             }
 
             foreach ($signature in $pattern.DataSignatures) {
                 if (-not ($item.PSObject.Properties[$signature.Property])) {
-                    Write-Log "Input item does not have property '$($signature.Property)' required by pattern '$($pattern.IssueId)'. Signature does not match." -Level "DEBUG"
+                    Write-ActivityLog "Input item does not have property '$($signature.Property)' required by pattern '$($pattern.IssueId)'. Signature does not match." -Level "DEBUG"
                     $allSignaturesMatch = $false
-                    break 
+                    break
                 }
-                
+
                 $itemValue = $item.$($signature.Property)
                 $conditionValue = $signature.Value
                 $operator = $signature.Operator
@@ -195,19 +195,19 @@ Function Find-IssuePatterns {
                 switch ($operator) {
                     "Equals"             { $signatureMatched = ($itemValue -eq $conditionValue) }
                     "NotEquals"          { $signatureMatched = ($itemValue -ne $conditionValue) }
-                    "Contains"           { 
+                    "Contains"           {
                         if ($itemValue -is [string]) { $signatureMatched = ($itemValue -match [regex]::Escape($conditionValue)) }
-                        else { Write-Log "Operator 'Contains' used on non-string property '$($signature.Property)' for pattern '$($pattern.IssueId)'." -Level "DEBUG"; $signatureMatched = $false }
+                        else { Write-ActivityLog "Operator 'Contains' used on non-string property '$($signature.Property)' for pattern '$($pattern.IssueId)'." -Level "DEBUG"; $signatureMatched = $false }
                     }
                     "StartsWith"         {
                         if ($itemValue -is [string]) { $signatureMatched = $itemValue.StartsWith($conditionValue, $true, [System.Globalization.CultureInfo]::InvariantCulture) }
-                        else { Write-Log "Operator 'StartsWith' used on non-string property '$($signature.Property)' for pattern '$($pattern.IssueId)'." -Level "DEBUG"; $signatureMatched = $false }
+                        else { Write-ActivityLog "Operator 'StartsWith' used on non-string property '$($signature.Property)' for pattern '$($pattern.IssueId)'." -Level "DEBUG"; $signatureMatched = $false }
                     }
                     "EndsWith"           {
                         if ($itemValue -is [string]) { $signatureMatched = $itemValue.EndsWith($conditionValue, $true, [System.Globalization.CultureInfo]::InvariantCulture) }
-                        else { Write-Log "Operator 'EndsWith' used on non-string property '$($signature.Property)' for pattern '$($pattern.IssueId)'." -Level "DEBUG"; $signatureMatched = $false }
+                        else { Write-ActivityLog "Operator 'EndsWith' used on non-string property '$($signature.Property)' for pattern '$($pattern.IssueId)'." -Level "DEBUG"; $signatureMatched = $false }
                     }
-                    "GreaterThan"        { 
+                    "GreaterThan"        {
                         if (($itemValue -is [int] -or $itemValue -is [double] -or $itemValue -is [long]) -and `
                             ($conditionValue -is [int] -or $conditionValue -is [double] -or $conditionValue -is [long])) {
                                 $signatureMatched = ($itemValue -gt $conditionValue)
@@ -219,7 +219,7 @@ Function Find-IssuePatterns {
                                 $signatureMatched = ($itemValue -ge $conditionValue)
                         } else { $signatureMatched = $false }
                     }
-                    "LessThan"           { 
+                    "LessThan"           {
                         if (($itemValue -is [int] -or $itemValue -is [double] -or $itemValue -is [long]) -and `
                             ($conditionValue -is [int] -or $conditionValue -is [double] -or $conditionValue -is [long])) {
                                 $signatureMatched = ($itemValue -lt $conditionValue)
@@ -231,49 +231,49 @@ Function Find-IssuePatterns {
                                 $signatureMatched = ($itemValue -le $conditionValue)
                         } else { $signatureMatched = $false }
                     }
-                    "MatchesRegex"       { 
+                    "MatchesRegex"       {
                         if ($itemValue -is [string]) { $signatureMatched = ($itemValue -match $conditionValue) }
-                        else { Write-Log "Operator 'MatchesRegex' used on non-string property '$($signature.Property)' for pattern '$($pattern.IssueId)'." -Level "DEBUG"; $signatureMatched = $false }
+                        else { Write-ActivityLog "Operator 'MatchesRegex' used on non-string property '$($signature.Property)' for pattern '$($pattern.IssueId)'." -Level "DEBUG"; $signatureMatched = $false }
                     }
                     default {
-                        Write-Log "Unsupported operator '$operator' in pattern '$($pattern.IssueId)' for property '$($signature.Property)'." -Level "WARNING"
-                        $signatureMatched = $false 
+                        Write-ActivityLog "Unsupported operator '$operator' in pattern '$($pattern.IssueId)' for property '$($signature.Property)'." -Level "WARNING"
+                        $signatureMatched = $false
                     }
                 }
 
                 if (-not $signatureMatched) {
                     $allSignaturesMatch = $false
-                    Write-Log "Signature did not match for pattern '$($pattern.IssueId)': Prop='$($signature.Property)', Op='$operator', Val='$conditionValue', ItemVal='$itemValue'." -Level "DEBUG"
-                    break 
+                    Write-ActivityLog "Signature did not match for pattern '$($pattern.IssueId)': Prop='$($signature.Property)', Op='$operator', Val='$conditionValue', ItemVal='$itemValue'." -Level "DEBUG"
+                    break
                 }
             } # End foreach signature
 
             if ($allSignaturesMatch) {
-                Write-Log "Item matched all signatures for pattern '$($pattern.IssueId)' (Description: $($pattern.Description))." -Level "INFO"
+                Write-ActivityLog "Item matched all signatures for pattern '$($pattern.IssueId)' (Description: $($pattern.Description))." -Level "INFO"
                 $foundIssues.Add([PSCustomObject]@{
                     MatchedIssueId          = $pattern.IssueId
                     MatchedIssueDescription = $pattern.Description
-                    MatchedItem             = $item 
+                    MatchedItem             = $item
                     PatternSeverity         = $pattern.Severity # Will be null if not defined in pattern
                     SuggestedRemediationId  = $pattern.SuggestedRemediationId # Will be null if not defined
                     Timestamp               = (Get-Date -Format o)
                 }) | Out-Null
-                
+
                 # If MaxIssuesToFind is about distinct IssueIDs, logic would be more complex here.
                 # Current simple interpretation: stop if total found issues (items) reach the max.
                 if ($MaxIssuesToFind -gt 0 -and $foundIssues.Count -ge $MaxIssuesToFind) {
-                    Write-Log "Reached MaxIssuesToFind ($MaxIssuesToFind) based on total matched items. Halting search for this item." -Level "DEBUG"
+                    Write-ActivityLog "Reached MaxIssuesToFind ($MaxIssuesToFind) based on total matched items. Halting search for this item." -Level "DEBUG"
                     break # Stop checking more patterns for this item
                 }
             }
         } # End foreach pattern
 
         if ($MaxIssuesToFind -gt 0 -and $foundIssues.Count -ge $MaxIssuesToFind) {
-            Write-Log "Total matched items reached MaxIssuesToFind ($MaxIssuesToFind). Further input items will be skipped."
+            Write-ActivityLog "Total matched items reached MaxIssuesToFind ($MaxIssuesToFind). Further input items will be skipped."
             break # Stop processing further input items
         }
     } # End foreach item
 
-    Write-Log "Find-IssuePatterns script finished. Found $($foundIssues.Count) matching issue instances."
+    Write-ActivityLog "Find-IssuePatterns script finished. Found $($foundIssues.Count) matching issue instances."
     return $foundIssues
 }

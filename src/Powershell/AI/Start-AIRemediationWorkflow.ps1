@@ -1,7 +1,47 @@
-# Start-AIRemediationWorkflow.ps1
-# This script orchestrates an AI-driven diagnostic and remediation workflow.
-# TODO: Implement actual remediation action execution and verification steps.
-# TODO: Add more robust error handling and decision logic based on script outputs.
+<#
+.SYNOPSIS
+Runs the AI-driven remediation workflow for diagnostics input.
+
+.DESCRIPTION
+Transforms diagnostics input into features, resolves recommendations and
+remediation actions, optionally executes actions, and validates results using the
+configured rule packs. The workflow supports Assisted and Automatic modes and can
+export remediation telemetry for later retraining flows.
+
+.PARAMETER InputData
+Diagnostics or telemetry records to analyze.
+
+.PARAMETER RemediationMode
+Workflow mode. Assisted avoids unapproved automatic execution for new rule packs.
+
+.PARAMETER ValidationRulesPath
+Path to validation rules used to verify remediation outcomes.
+
+.PARAMETER IssuePatternDefinitionsPath
+Path to issue pattern definitions used for pattern detection.
+
+.PARAMETER RemediationRulesPath
+Path to remediation rules used to resolve actions.
+
+.PARAMETER EnableRemediationTelemetry
+Enables export of workflow telemetry for learning and audit scenarios.
+
+.PARAMETER RetrainExportPath
+Optional export path for pending retrain requests.
+
+.PARAMETER LogPath
+Activity log path for workflow execution details.
+
+.OUTPUTS
+PSCustomObject
+
+.EXAMPLE
+Start-AIRemediationWorkflow -InputData $telemetry -RemediationMode Assisted -ValidationRulesPath '.\tests\Powershell\fixtures\validation_rules_sample.json'
+
+.NOTES
+Rule-pack identifiers in the canonical test fixtures are contract-sensitive and
+must remain stable.
+#>
 
 Function Start-AIRemediationWorkflow {
     [CmdletBinding(SupportsShouldProcess = $true)] # Added SupportsShouldProcess for -WhatIf on actions
@@ -90,7 +130,7 @@ Function Start-AIRemediationWorkflow {
     )
 
     # --- Logging Function (for script activity) ---
-    function Write-Log {
+    function Write-ActivityLog {
         param (
             [string]$Message,
                 [Parameter(Mandatory=$false)]
@@ -104,11 +144,11 @@ Function Start-AIRemediationWorkflow {
         $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
         $logEntry = "[$timestamp] [$Level] $Message"
         $targetPath = if (-not [string]::IsNullOrWhiteSpace($Path)) { $Path } elseif (-not [string]::IsNullOrWhiteSpace($LogPath)) { $LogPath } else { $null }
-        
-        try {
-            if (-not $targetPath) { Write-Host $logEntry; return }
 
-            if ($WhatIfPreference) { Write-Host $logEntry; return }
+        try {
+            if (-not $targetPath) { Write-Verbose $logEntry; return }
+
+            if ($WhatIfPreference) { Write-Verbose $logEntry; return }
 
             $parentPath = Split-Path $targetPath -Parent
             if (-not (Test-Path $parentPath -PathType Container)) {
@@ -118,7 +158,7 @@ Function Start-AIRemediationWorkflow {
         }
         catch {
             Write-Warning "ACTIVITY_LOG_FAIL: Failed to write to activity log file $Path. Error: $($_.Exception.Message). Logging to console instead."
-            Write-Host $logEntry 
+            Write-Verbose $logEntry
         }
     }
 
@@ -147,7 +187,7 @@ Function Start-AIRemediationWorkflow {
         }
 
         if (-not (Test-Path $enginePath -PathType Leaf)) {
-            Write-Log "Remediation telemetry skipped; invoke_ai_engine.py not found at '$enginePath'." -Level "WARNING"
+            Write-ActivityLog "Remediation telemetry skipped; invoke_ai_engine.py not found at '$enginePath'." -Level "WARNING"
             return $null
         }
 
@@ -158,7 +198,7 @@ Function Start-AIRemediationWorkflow {
         try {
             $payloadJson = $Payload | ConvertTo-Json -Depth 8 -Compress
         } catch {
-            Write-Log "Failed to serialize remediation payload for telemetry: $($_.Exception.Message)" -Level "WARNING"
+            Write-ActivityLog "Failed to serialize remediation payload for telemetry: $($_.Exception.Message)" -Level "WARNING"
             return $null
         }
 
@@ -181,7 +221,7 @@ Function Start-AIRemediationWorkflow {
         try {
             $process = Start-Process -FilePath $pythonPath -ArgumentList $arguments -Wait -NoNewWindow -PassThru -RedirectStandardOutput $stdOutPath -RedirectStandardError $stdErrPath -ErrorAction Stop
         } catch {
-            Write-Log "Remediation telemetry dispatch failed: $($_.Exception.Message)" -Level "WARNING"
+            Write-ActivityLog "Remediation telemetry dispatch failed: $($_.Exception.Message)" -Level "WARNING"
             return $null
         }
 
@@ -190,25 +230,25 @@ Function Start-AIRemediationWorkflow {
         Remove-Item -Path $stdOutPath, $stdErrPath -ErrorAction SilentlyContinue
 
         if ($process.ExitCode -ne 0) {
-            Write-Log "AI engine returned non-zero exit while recording remediation outcome. ExitCode: $($process.ExitCode). Stderr: $stdErr" -Level "WARNING"
+            Write-ActivityLog "AI engine returned non-zero exit while recording remediation outcome. ExitCode: $($process.ExitCode). Stderr: $stdErr" -Level "WARNING"
             return $null
         }
 
         if ([string]::IsNullOrWhiteSpace($stdOut)) {
-            Write-Log "AI engine returned empty output while recording remediation outcome." -Level "WARNING"
+            Write-ActivityLog "AI engine returned empty output while recording remediation outcome." -Level "WARNING"
             return $null
         }
 
         try {
             return $stdOut | ConvertFrom-Json -ErrorAction Stop
         } catch {
-            Write-Log "Failed to parse AI engine response for remediation telemetry. Output: $stdOut" -Level "WARNING"
+            Write-ActivityLog "Failed to parse AI engine response for remediation telemetry. Output: $stdOut" -Level "WARNING"
             return $null
         }
     }
 
     $workflowStartTime = Get-Date
-    Write-Log "Starting AI Remediation Workflow at $workflowStartTime. Mode: $RemediationMode. InputData count: $($InputData.Count)."
+    Write-ActivityLog "Starting AI Remediation Workflow at $workflowStartTime. Mode: $RemediationMode. InputData count: $($InputData.Count)."
 
     $serverNameResolved = if (-not [string]::IsNullOrWhiteSpace($ServerName)) {
         $ServerName
@@ -232,16 +272,16 @@ Function Start-AIRemediationWorkflow {
         if (-not $callerPath) { $callerPath = (Get-Location).Path }
         $resolvedRoot = Split-Path -Parent $callerPath -Resolve
     }
-    $PSScriptRoot = $resolvedRoot
-    $PathImportAIModel = Join-Path $PSScriptRoot "Import-AIModel.ps1"
-    $PathConvertToAIFeatures = if (-not [string]::IsNullOrWhiteSpace($ConvertToAIFeaturesPath)) { $ConvertToAIFeaturesPath } else { Join-Path $PSScriptRoot "ConvertTo-AIFeatures.ps1" }
-    $PathGetAIPredictions = Join-Path $PSScriptRoot "Get-AIPredictions.ps1"
-    $PathGetAIRecommendations = if (-not [string]::IsNullOrWhiteSpace($GetAIRecommendationsPath)) { $GetAIRecommendationsPath } else { Join-Path $PSScriptRoot "Get-AIRecommendations.ps1" }
-    $PathFindIssuePatterns = if (-not [string]::IsNullOrWhiteSpace($FindIssuePatternsPath)) { $FindIssuePatternsPath } else { Join-Path $PSScriptRoot "..\remediation\Find-IssuePatterns.ps1" }
-    $PathGetRemediationAction = if (-not [string]::IsNullOrWhiteSpace($GetRemediationActionPath)) { $GetRemediationActionPath } else { Join-Path $PSScriptRoot "..\remediation\Get-RemediationAction.ps1" }
-    $PathStartRemediationAction = if (-not [string]::IsNullOrWhiteSpace($StartRemediationActionPath)) { $StartRemediationActionPath } else { Join-Path $PSScriptRoot "..\remediation\Start-RemediationAction.ps1" }
-    $PathGetValidationStep = if (-not [string]::IsNullOrWhiteSpace($GetValidationStepPath)) { $GetValidationStepPath } else { Join-Path $PSScriptRoot "..\remediation\Get-ValidationStep.ps1" }
-    $PathTestRemediationResult = if (-not [string]::IsNullOrWhiteSpace($TestRemediationResultPath)) { $TestRemediationResultPath } else { Join-Path $PSScriptRoot "..\remediation\Test-RemediationResult.ps1" }
+    $workflowScriptRoot = $resolvedRoot
+    $PathImportAIModel = Join-Path $workflowScriptRoot "Import-AIModel.ps1"
+    $PathConvertToAIFeatures = if (-not [string]::IsNullOrWhiteSpace($ConvertToAIFeaturesPath)) { $ConvertToAIFeaturesPath } else { Join-Path $workflowScriptRoot "ConvertTo-AIFeatures.ps1" }
+    $PathGetAIPredictions = Join-Path $workflowScriptRoot "Get-AIPredictions.ps1"
+    $PathGetAIRecommendations = if (-not [string]::IsNullOrWhiteSpace($GetAIRecommendationsPath)) { $GetAIRecommendationsPath } else { Join-Path $workflowScriptRoot "Get-AIRecommendations.ps1" }
+    $PathFindIssuePatterns = if (-not [string]::IsNullOrWhiteSpace($FindIssuePatternsPath)) { $FindIssuePatternsPath } else { Join-Path $workflowScriptRoot "..\remediation\Find-IssuePatterns.ps1" }
+    $PathGetRemediationAction = if (-not [string]::IsNullOrWhiteSpace($GetRemediationActionPath)) { $GetRemediationActionPath } else { Join-Path $workflowScriptRoot "..\remediation\Get-RemediationAction.ps1" }
+    $PathStartRemediationAction = if (-not [string]::IsNullOrWhiteSpace($StartRemediationActionPath)) { $StartRemediationActionPath } else { Join-Path $workflowScriptRoot "..\remediation\Start-RemediationAction.ps1" }
+    $PathGetValidationStep = if (-not [string]::IsNullOrWhiteSpace($GetValidationStepPath)) { $GetValidationStepPath } else { Join-Path $workflowScriptRoot "..\remediation\Get-ValidationStep.ps1" }
+    $PathTestRemediationResult = if (-not [string]::IsNullOrWhiteSpace($TestRemediationResultPath)) { $TestRemediationResultPath } else { Join-Path $workflowScriptRoot "..\remediation\Test-RemediationResult.ps1" }
 
     # Map recommendation IDs to remediation action scaffolding
     $recommendationToActionMap = @{
@@ -263,7 +303,7 @@ Function Start-AIRemediationWorkflow {
         $mapped = $recommendationToActionMap[$Recommendation.RecommendationId]
         $remediationId = if ($mapped) { $mapped.RemediationActionId } elseif (-not [string]::IsNullOrWhiteSpace($Recommendation.RecommendationId)) { "REM_$($Recommendation.RecommendationId)" } else { "REM_UNKNOWN" }
         if (-not $mapped) {
-            Write-Log "No remediation mapping for RecommendationId '$($Recommendation.RecommendationId)'. Defaulting to manual action." -Level "WARNING"
+            Write-ActivityLog "No remediation mapping for RecommendationId '$($Recommendation.RecommendationId)'. Defaulting to manual action." -Level "WARNING"
         }
 
         $resolved = [PSCustomObject]@{
@@ -299,33 +339,33 @@ Function Start-AIRemediationWorkflow {
     try {
         # --- Step 1: Load AI Model (if specified) ---
         if (-not [string]::IsNullOrWhiteSpace($AIModelNameOrPath)) {
-            Write-Log "Step 1: Loading AI Model from '$AIModelNameOrPath' with Type '$AIModelType'."
-            if (-not (Test-Path $PathImportAIModel -PathType Leaf)) { Write-Log "Import-AIModel.ps1 not found at $PathImportAIModel" -Level "ERROR"; throw "Dependency script missing." }
+            Write-ActivityLog "Step 1: Loading AI Model from '$AIModelNameOrPath' with Type '$AIModelType'."
+            if (-not (Test-Path $PathImportAIModel -PathType Leaf)) { Write-ActivityLog "Import-AIModel.ps1 not found at $PathImportAIModel" -Level "ERROR"; throw "Dependency script missing." }
             try {
                 $loadedModel = . $PathImportAIModel -ModelPath $AIModelNameOrPath -ModelType $AIModelType -LogPath $LogPath # Pass LogPath for sub-script
                 if ($loadedModel) {
                     $isModelLoaded = $true
-                    Write-Log "AI Model loaded successfully."
+                    Write-ActivityLog "AI Model loaded successfully."
                 } else {
-                    Write-Log "Failed to load AI Model or model type not supported. Continuing without model-based predictions." -Level "WARNING"
+                    Write-ActivityLog "Failed to load AI Model or model type not supported. Continuing without model-based predictions." -Level "WARNING"
                 }
             } catch {
-                Write-Log "Error during Import-AIModel: $($_.Exception.Message). Continuing without model-based predictions." -Level "ERROR"
+                Write-ActivityLog "Error during Import-AIModel: $($_.Exception.Message). Continuing without model-based predictions." -Level "ERROR"
             }
         } else {
-            Write-Log "Step 1: Skipped - No AIModelNameOrPath provided."
+            Write-ActivityLog "Step 1: Skipped - No AIModelNameOrPath provided."
         }
 
         # --- Step 2: Convert Input to Features ---
-        Write-Log "Step 2: Converting InputData to AI Features."
-        if (-not (Test-Path $PathConvertToAIFeatures -PathType Leaf)) { Write-Log "ConvertTo-AIFeatures.ps1 not found at $PathConvertToAIFeatures" -Level "ERROR"; throw "Dependency script missing." }
+        Write-ActivityLog "Step 2: Converting InputData to AI Features."
+        if (-not (Test-Path $PathConvertToAIFeatures -PathType Leaf)) { Write-ActivityLog "ConvertTo-AIFeatures.ps1 not found at $PathConvertToAIFeatures" -Level "ERROR"; throw "Dependency script missing." }
         try {
             $convertParams = @{ InputData = $InputData; LogPath = $LogPath }
             if (-not [string]::IsNullOrWhiteSpace($FeatureDefinitionPath)) { $convertParams.FeatureDefinition = $FeatureDefinitionPath }
             $features = . $PathConvertToAIFeatures @convertParams
-            Write-Log "Converted $($InputData.Count) input items to $($features.Count) feature sets."
+            Write-ActivityLog "Converted $($InputData.Count) input items to $($features.Count) feature sets."
         } catch {
-            Write-Log "Error during ConvertTo-AIFeatures: $($_.Exception.Message). Cannot proceed without features." -Level "FATAL"
+            Write-ActivityLog "Error during ConvertTo-AIFeatures: $($_.Exception.Message). Cannot proceed without features." -Level "FATAL"
             throw "Feature conversion failed." # Critical step
         }
 
@@ -335,49 +375,49 @@ Function Start-AIRemediationWorkflow {
                 $patternParams = @{ InputData = $InputData; LogPath = $LogPath }
                 if (-not [string]::IsNullOrWhiteSpace($IssuePatternDefinitionsPath)) { $patternParams.IssuePatternDefinitionsPath = $IssuePatternDefinitionsPath }
                 $patternMatches = . $PathFindIssuePatterns @patternParams
-                Write-Log "Pattern detection produced $($patternMatches.Count) matches." -Level "INFO"
+                Write-ActivityLog "Pattern detection produced $($patternMatches.Count) matches." -Level "INFO"
             } catch {
-                Write-Log "Pattern detection failed: $($_.Exception.Message)" -Level "WARNING"
+                Write-ActivityLog "Pattern detection failed: $($_.Exception.Message)" -Level "WARNING"
             }
         } else {
-            Write-Log "Step 2a: Skipped pattern detection (no input or script missing)." -Level "DEBUG"
+            Write-ActivityLog "Step 2a: Skipped pattern detection (no input or script missing)." -Level "DEBUG"
         }
 
         # --- Step 3: Get AI Predictions (if model loaded) ---
         if ($isModelLoaded -and $features.Count -gt 0) {
-            Write-Log "Step 3: Getting AI Predictions using model type '$AIModelType'."
-            if (-not (Test-Path $PathGetAIPredictions -PathType Leaf)) { Write-Log "Get-AIPredictions.ps1 not found at $PathGetAIPredictions" -Level "ERROR"; throw "Dependency script missing." }
+            Write-ActivityLog "Step 3: Getting AI Predictions using model type '$AIModelType'."
+            if (-not (Test-Path $PathGetAIPredictions -PathType Leaf)) { Write-ActivityLog "Get-AIPredictions.ps1 not found at $PathGetAIPredictions" -Level "ERROR"; throw "Dependency script missing." }
             try {
                 $predictions = . $PathGetAIPredictions -InputFeatures $features -ModelObject $loadedModel -ModelType $AIModelType -LogPath $LogPath
-                Write-Log "Generated $($predictions.Count) predictions."
+                Write-ActivityLog "Generated $($predictions.Count) predictions."
                 if ($predictions) {
                     $highConfidencePredictions = $predictions | Where-Object { $_.Probability -ge $PredictionConfidenceThreshold -or $_.Status -eq 'Success' -and -not $_.Probability }
-                    Write-Log "High-confidence predictions (>= $PredictionConfidenceThreshold): $($highConfidencePredictions.Count)." -Level "DEBUG"
+                    Write-ActivityLog "High-confidence predictions (>= $PredictionConfidenceThreshold): $($highConfidencePredictions.Count)." -Level "DEBUG"
                 }
             } catch {
-                Write-Log "Error during Get-AIPredictions: $($_.Exception.Message). May affect recommendation quality or subsequent steps." -Level "ERROR"
+                Write-ActivityLog "Error during Get-AIPredictions: $($_.Exception.Message). May affect recommendation quality or subsequent steps." -Level "ERROR"
             }
         } else {
-             Write-Log "Step 3: Skipped - AI Model not loaded or no features generated."
+             Write-ActivityLog "Step 3: Skipped - AI Model not loaded or no features generated."
         }
 
         # --- Step 4: Get AI Recommendations ---
         # Input for recommendations could be $features, $predictions, or even $InputData if patterns were from Find-DiagnosticPattern
         $inputForRecommendations = if ($features.Count -gt 0) { $features } else { $InputData } # Simplified choice
-        
+
         if ($inputForRecommendations.Count -gt 0) {
-            Write-Log "Step 4: Getting AI Recommendations. Using $($inputForRecommendations.Count) items as input for recommendations."
-            if (-not (Test-Path $PathGetAIRecommendations -PathType Leaf)) { Write-Log "Get-AIRecommendations.ps1 not found at $PathGetAIRecommendations" -Level "ERROR"; throw "Dependency script missing." }
+            Write-ActivityLog "Step 4: Getting AI Recommendations. Using $($inputForRecommendations.Count) items as input for recommendations."
+            if (-not (Test-Path $PathGetAIRecommendations -PathType Leaf)) { Write-ActivityLog "Get-AIRecommendations.ps1 not found at $PathGetAIRecommendations" -Level "ERROR"; throw "Dependency script missing." }
             try {
                 $recoParams = @{ InputFeatures = $inputForRecommendations; LogPath = $LogPath }
                 if (-not [string]::IsNullOrWhiteSpace($RecommendationRulesPath)) { $recoParams.RecommendationRulesPath = $RecommendationRulesPath }
                 $recommendationsOutput = . $PathGetAIRecommendations @recoParams
-                Write-Log "Retrieved recommendations for $($recommendationsOutput.Count) input items."
+                Write-ActivityLog "Retrieved recommendations for $($recommendationsOutput.Count) input items."
             } catch {
-                Write-Log "Error during Get-AIRecommendations: $($_.Exception.Message)." -Level "ERROR"
+                Write-ActivityLog "Error during Get-AIRecommendations: $($_.Exception.Message)." -Level "ERROR"
             }
         } else {
-            Write-Log "Step 4: Skipped - No suitable input for recommendations."
+            Write-ActivityLog "Step 4: Skipped - No suitable input for recommendations."
         }
 
         # --- Step 4a: Resolve remediation actions from pattern matches ---
@@ -385,12 +425,12 @@ Function Start-AIRemediationWorkflow {
             if (Test-Path $PathGetRemediationAction -PathType Leaf) {
                 try {
                     $patternDerivedActions = . $PathGetRemediationAction -InputObject $patternMatches -RemediationRulesPath $RemediationRulesPath -MaxActionsPerInput 1 -LogPath $LogPath
-                    Write-Log "Resolved $($patternDerivedActions.Count) remediation action plans from pattern matches." -Level "INFO"
+                    Write-ActivityLog "Resolved $($patternDerivedActions.Count) remediation action plans from pattern matches." -Level "INFO"
                 } catch {
-                    Write-Log "Get-RemediationAction failed for pattern matches: $($_.Exception.Message)" -Level "WARNING"
+                    Write-ActivityLog "Get-RemediationAction failed for pattern matches: $($_.Exception.Message)" -Level "WARNING"
                 }
             } else {
-                Write-Log "Get-RemediationAction.ps1 not found at $PathGetRemediationAction; using direct pattern-to-action fallback." -Level "WARNING"
+                Write-ActivityLog "Get-RemediationAction.ps1 not found at $PathGetRemediationAction; using direct pattern-to-action fallback." -Level "WARNING"
                 foreach ($pm in $patternMatches) {
                     $fallbackActionId = if ($pm.SuggestedRemediationId) { $pm.SuggestedRemediationId } elseif ($pm.MatchedIssueId) { "REM_$($pm.MatchedIssueId)" } else { "REM_UNKNOWN" }
                     $patternDerivedActions.Add([PSCustomObject]@{
@@ -412,41 +452,41 @@ Function Start-AIRemediationWorkflow {
                 }
             }
         }
-        
+
         # --- Step 5: Process Recommendations and Attempt Remediation ---
-        Write-Log "Step 5: Processing Recommendations and Attempting Remediation (Mode: $RemediationMode)."
+        Write-ActivityLog "Step 5: Processing Recommendations and Attempting Remediation (Mode: $RemediationMode)."
         if ($recommendationsOutput.Count -gt 0) {
             foreach ($recoPackage in $recommendationsOutput) { # Each $recoPackage has InputItem and Recommendations array
-                Write-Log "Input Item: $($recoPackage.InputItem | Out-String -Width 100)" -Level "DEBUG"
+                Write-ActivityLog "Input Item: $($recoPackage.InputItem | Out-String -Width 100)" -Level "DEBUG"
                 $recommendationList = @($recoPackage.Recommendations)
                 foreach ($recAction in $recommendationList) {
                     if (-not $recAction) { continue }
-                    Write-Log "Considering Recommendation: '$($recAction.Title)' (ID: $($recAction.RecommendationId), Severity: $($recAction.Severity), Confidence: $($recAction.Confidence))"
-                    
+                    Write-ActivityLog "Considering Recommendation: '$($recAction.Title)' (ID: $($recAction.RecommendationId), Severity: $($recAction.Severity), Confidence: $($recAction.Confidence))"
+
                     $attemptAction = $false
                     if ($RemediationMode -eq 'Automatic') {
-                        Write-Log "Automatic mode: Action for '$($recAction.Title)' will be attempted."
+                        Write-ActivityLog "Automatic mode: Action for '$($recAction.Title)' will be attempted."
                         $attemptAction = $true
                     } elseif ($RemediationMode -eq 'Assisted') {
                         if ($PSCmdlet.ShouldProcess("User for approval of: $($recAction.Title) - $($recAction.Description)", "Apply Remediation")) {
                              # Using Read-Host for actual prompt in non-interactive or test if ShouldProcess isn't enough
                              $choice = Read-Host -Prompt "Apply remediation: '$($recAction.Title)'? (y/n)"
                              if ($choice -eq 'y') {
-                                 Write-Log "User approved action for '$($recAction.Title)'."
+                                 Write-ActivityLog "User approved action for '$($recAction.Title)'."
                                  $attemptAction = $true
                              } else {
-                                 Write-Log "User SKIPPED action for '$($recAction.Title)'."
+                                 Write-ActivityLog "User SKIPPED action for '$($recAction.Title)'."
                                  $remediationsAttempted.Add([PSCustomObject]@{ RecommendationTitle = $recAction.Title; RecommendationId = $recAction.RecommendationId; Status = "SkippedByUser" }) | Out-Null
                              }
                         } else {
-                             Write-Log "Action for '$($recAction.Title)' SKIPPED due to ShouldProcess (-WhatIf)."
+                             Write-ActivityLog "Action for '$($recAction.Title)' SKIPPED due to ShouldProcess (-WhatIf)."
                              $remediationsAttempted.Add([PSCustomObject]@{ RecommendationTitle = $recAction.Title; RecommendationId = $recAction.RecommendationId; Status = "SkippedWhatIf" }) | Out-Null
                         }
                     }
 
                     if ($attemptAction) {
-                        Write-Log "Attempting to execute action for recommendation: '$($recAction.Title)' (ID: $($recAction.RecommendationId))"
-                        if (-not (Test-Path $PathStartRemediationAction -PathType Leaf)) { Write-Log "Start-RemediationAction.ps1 not found at $PathStartRemediationAction" -Level "ERROR"; $remediationsAttempted.Add([PSCustomObject]@{ RecommendationTitle = $recAction.Title; RecommendationId = $recAction.RecommendationId; Status = "FailedDependencyMissing" }) | Out-Null; continue }
+                        Write-ActivityLog "Attempting to execute action for recommendation: '$($recAction.Title)' (ID: $($recAction.RecommendationId))"
+                        if (-not (Test-Path $PathStartRemediationAction -PathType Leaf)) { Write-ActivityLog "Start-RemediationAction.ps1 not found at $PathStartRemediationAction" -Level "ERROR"; $remediationsAttempted.Add([PSCustomObject]@{ RecommendationTitle = $recAction.Title; RecommendationId = $recAction.RecommendationId; Status = "FailedDependencyMissing" }) | Out-Null; continue }
                         $actionPlan = Convert-RecommendationToAction -Recommendation $recAction
                         if (-not $actionPlan) {
                             $remediationsAttempted.Add([PSCustomObject]@{ RecommendationTitle = $recAction.Title; RecommendationId = $recAction.RecommendationId; Status = "FailedMapping" }) | Out-Null
@@ -460,7 +500,7 @@ Function Start-AIRemediationWorkflow {
                             $remediationResults.Add($actionResult) | Out-Null
                             $remediationsAttempted.Add([PSCustomObject]@{ RecommendationTitle = $recAction.Title; RecommendationId = $recAction.RecommendationId; Status = $actionResult.Status; RemediationActionId = $actionResult.RemediationActionId }) | Out-Null
                         } catch {
-                            Write-Log "Failed to execute remediation for '$($recAction.Title)'. Error: $($_.Exception.Message)" -Level "ERROR"
+                            Write-ActivityLog "Failed to execute remediation for '$($recAction.Title)'. Error: $($_.Exception.Message)" -Level "ERROR"
                             $remediationsAttempted.Add([PSCustomObject]@{ RecommendationTitle = $recAction.Title; RecommendationId = $recAction.RecommendationId; Status = "FailedExecution" }) | Out-Null
                             $actionResult = $null
                         }
@@ -473,13 +513,13 @@ Function Start-AIRemediationWorkflow {
                                     $validationReport = . $PathTestRemediationResult -ValidationSteps $validationSteps -RemediationActionResult $actionResult -LogPath $LogPath
                                     if ($validationReport) { $validationReports.Add($validationReport) | Out-Null }
                                 } else {
-                                    Write-Log "No validation steps generated for action '$($actionPlan.RemediationActionId)'" -Level "INFO"
+                                    Write-ActivityLog "No validation steps generated for action '$($actionPlan.RemediationActionId)'" -Level "INFO"
                                 }
                             } catch {
-                                Write-Log "Validation failed for action '$($actionPlan.RemediationActionId)'. Error: $($_.Exception.Message)" -Level "ERROR"
+                                Write-ActivityLog "Validation failed for action '$($actionPlan.RemediationActionId)'. Error: $($_.Exception.Message)" -Level "ERROR"
                             }
                         } else {
-                            Write-Log "Validation not attempted; scripts missing or action result unavailable for '$($recAction.RecommendationId)'." -Level "DEBUG"
+                            Write-ActivityLog "Validation not attempted; scripts missing or action result unavailable for '$($recAction.RecommendationId)'." -Level "DEBUG"
                         }
 
                         if ($actionResult) {
@@ -507,7 +547,7 @@ Function Start-AIRemediationWorkflow {
                 }
             }
         } else {
-            Write-Log "No recommendations generated to process."
+            Write-ActivityLog "No recommendations generated to process."
         }
 
         # --- Step 5b: Process pattern-derived remediation actions ---
@@ -541,7 +581,7 @@ Function Start-AIRemediationWorkflow {
                         $remediationResults.Add($actionResult) | Out-Null
                         $remediationsAttempted.Add([PSCustomObject]@{ RecommendationTitle = $titleForLog; RecommendationId = $sourceId; Status = $actionResult.Status; RemediationActionId = $actionResult.RemediationActionId }) | Out-Null
                     } catch {
-                        Write-Log "Failed to execute remediation for pattern '$sourceId'. Error: $($_.Exception.Message)" -Level "ERROR"
+                        Write-ActivityLog "Failed to execute remediation for pattern '$sourceId'. Error: $($_.Exception.Message)" -Level "ERROR"
                         $remediationsAttempted.Add([PSCustomObject]@{ RecommendationTitle = $titleForLog; RecommendationId = $sourceId; Status = "FailedExecution" }) | Out-Null
                     }
 
@@ -553,7 +593,7 @@ Function Start-AIRemediationWorkflow {
                                 if ($validationReport) { $validationReports.Add($validationReport) | Out-Null }
                             }
                         } catch {
-                            Write-Log "Validation failed for pattern action '$($actionPlan.RemediationActionId)': $($_.Exception.Message)" -Level "ERROR"
+                            Write-ActivityLog "Validation failed for pattern action '$($actionPlan.RemediationActionId)': $($_.Exception.Message)" -Level "ERROR"
                         }
                     }
 
@@ -581,11 +621,11 @@ Function Start-AIRemediationWorkflow {
         }
 
         # --- Step 6: Verify Remediation (Conceptual) ---
-        Write-Log "Step 6: Remediation Verification (Conceptual)."
+        Write-ActivityLog "Step 6: Remediation Verification (Conceptual)."
         if ($remediationsAttempted.Count -gt 0) {
-            Write-Log "Validation reports captured: $($validationReports.Count). Remediation results captured: $($remediationResults.Count)."
+            Write-ActivityLog "Validation reports captured: $($validationReports.Count). Remediation results captured: $($remediationResults.Count)."
         } else {
-            Write-Log "No remediations were attempted, skipping verification."
+            Write-ActivityLog "No remediations were attempted, skipping verification."
         }
 
         # If validation was requested but produced no reports, surface as a failed validation artifact
@@ -596,7 +636,7 @@ Function Start-AIRemediationWorkflow {
                 Notes                   = 'Validation requested but no validation reports were produced.'
             }
             $validationReports.Add($fallbackValidation) | Out-Null
-            Write-Log "Validation rules were supplied but no validation reports were generated; marking validation as failed." -Level "WARNING"
+            Write-ActivityLog "Validation rules were supplied but no validation reports were generated; marking validation as failed." -Level "WARNING"
         }
 
         $overallStatus = "Completed"
@@ -640,16 +680,16 @@ Function Start-AIRemediationWorkflow {
         }
     }
     catch {
-        Write-Log "A critical error occurred in the workflow: $($_.Exception.Message)" -Level "FATAL"
-        Write-Log "Stack Trace: $($_.ScriptStackTrace)" -Level "DEBUG"
+        Write-ActivityLog "A critical error occurred in the workflow: $($_.Exception.Message)" -Level "FATAL"
+        Write-ActivityLog "Stack Trace: $($_.ScriptStackTrace)" -Level "DEBUG"
         $overallStatus = "FailedWithError"
         # Depending on the error, we might re-throw or just return the summary
         # throw $_ # Uncomment to make the whole workflow script throw on error
     }
     finally {
         $workflowEndTime = Get-Date
-        Write-Log "AI Remediation Workflow finished at $workflowEndTime. Overall Status: $overallStatus."
-        
+        Write-ActivityLog "AI Remediation Workflow finished at $workflowEndTime. Overall Status: $overallStatus."
+
         $summary = @{
             WorkflowStartTime      = $workflowStartTime
             WorkflowEndTime        = $workflowEndTime
@@ -676,7 +716,7 @@ Function Start-AIRemediationWorkflow {
             AIRecommenderResponses = $aiRecommenderResponses
             OverallStatus          = $overallStatus
         }
-        Write-Log "Workflow Summary: $($summary | Out-String)" -Level "DEBUG"
+        Write-ActivityLog "Workflow Summary: $($summary | Out-String)" -Level "DEBUG"
     }
     return [PSCustomObject]$summary
 }

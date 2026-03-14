@@ -28,6 +28,20 @@ if (-not (Get-Command Write-Log -ErrorAction SilentlyContinue)) {
 $ConfigFile = Join-Path -Path $ScriptRoot -ChildPath "..\..\config\security-baseline.json" # Adjusted path
 $ConfigFile = [System.IO.Path]::GetFullPath($ConfigFile)
 
+if (-not (Get-Command Export-TlsRegistryKey -ErrorAction SilentlyContinue)) {
+    function Export-TlsRegistryKey {
+        param (
+            [Parameter(Mandatory)]
+            [string]$RegistryKey,
+
+            [Parameter(Mandatory)]
+            [string]$ExportPath
+        )
+
+        & reg.exe export $RegistryKey $ExportPath /y | Out-Null
+    }
+}
+
 # --- Registry Backup Function ---
 function Backup-RegistryKeys {
     param (
@@ -43,7 +57,7 @@ function Backup-RegistryKeys {
         $exportPath = Join-Path -Path $BackupPath -ChildPath "$keyName.reg"
         Write-Log "Backing up $key to $exportPath"
         try {
-            Invoke-Expression "reg export `"$key`" `"$exportPath`" /y"
+            Export-TlsRegistryKey -RegistryKey $key -ExportPath $exportPath
             Write-Log "Successfully backed up $key."
         }
         catch {

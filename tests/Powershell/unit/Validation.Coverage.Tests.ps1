@@ -2052,6 +2052,9 @@ Describe 'Test-ArcAgentValidation.ps1 additional branches' {
         Set-Item -Path Function:global:Write-Log -Value {
             param([string]$Message, [string]$Level = 'INFO', [string]$Path)
         }
+        Remove-Item Function:\Get-ArcValidationRecommendations -ErrorAction SilentlyContinue
+        Remove-Item Function:global\Get-ArcValidationRecommendations -ErrorAction SilentlyContinue
+        . (Join-Path $script:SrcRoot 'Validation\Test-ArcAgentValidation.ps1')
         Mock New-Item     {} -ErrorAction SilentlyContinue
         Mock Out-File     {} -ErrorAction SilentlyContinue
         Mock ConvertTo-Json { '{}' } -ErrorAction SilentlyContinue

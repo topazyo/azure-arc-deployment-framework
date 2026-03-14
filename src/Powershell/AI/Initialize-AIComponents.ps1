@@ -17,7 +17,7 @@ function Initialize-AIComponents {
             # Method to predict deployment risks
             PredictDeploymentRisk = {
                 param ([string]$ServerName)
-                
+
                 $telemetry = Get-ServerTelemetry -ServerName $ServerName
                 $prediction = Invoke-AIPrediction -AIEngine $this.Engine `
                     -TelemetryData $telemetry `
@@ -33,7 +33,7 @@ function Initialize-AIComponents {
             # Method to analyze diagnostics
             AnalyzeDiagnostics = {
                 param ([hashtable]$DiagnosticData)
-                
+
                 $patterns = $this.Engine.Components.PatternRecognition.Patterns
                 $analysis = @{
                     Patterns = @()
@@ -67,7 +67,7 @@ function Initialize-AIComponents {
             # Method to generate remediation plan
             GenerateRemediationPlan = {
                 param ([object]$Insights)
-                
+
                 $plan = @{
                     Actions = @()
                     Priority = @()
@@ -100,7 +100,7 @@ function Initialize-AIComponents {
             # Method to learn from remediation outcomes
             LearnFromRemediation = {
                 param ([object]$RemediationResult)
-                
+
                 $learningResults = Start-AILearning `
                     -AIEngine $this.Engine `
                     -TrainingData @{
@@ -118,7 +118,7 @@ function Initialize-AIComponents {
             # Method to log exceptions
             LogException = {
                 param ([Exception]$Exception)
-                
+
                 $exceptionData = @{
                     Timestamp = Get-Date
                     Message = $Exception.Message
@@ -143,7 +143,7 @@ function Initialize-AIComponents {
 
 function Get-ServerTelemetry {
     param ([string]$ServerName)
-    
+
     return @{
         Performance = Get-AMAPerformanceMetrics -ServerName $ServerName
         Errors = Get-EventLogErrors -ServerName $ServerName
@@ -174,12 +174,12 @@ function Find-DiagnosticPattern {
 
     try {
         foreach ($keyword in $Pattern.Keywords) {
-            $matches = $Data | Select-String -Pattern $keyword -AllMatches
-            if ($matches) {
+            $keywordMatches = $Data | Select-String -Pattern $keyword -AllMatches
+            if ($keywordMatches) {
                 $result.Matches += @{
                     Keyword = $keyword
-                    Count = $matches.Matches.Count
-                    Context = $matches.Line
+                    Count = $keywordMatches.Matches.Count
+                    Context = $keywordMatches.Line
                 }
             }
         }

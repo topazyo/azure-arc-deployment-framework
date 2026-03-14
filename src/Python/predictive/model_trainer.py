@@ -427,73 +427,51 @@ class ArcModelTrainer:
 
         try:
             if not isinstance(remediation_data, dict):
-                response["reason"] = "remediation_data must be a dict"
-                return response
+                return self._reject_remediation_response(
+                    response, "remediation_data must be a dict"
+                )
 
-            model_type = str(
-                remediation_data.get(
-                    "model_type",
-                    "failure_prediction"))
+            model_type = self._get_remediation_model_type(remediation_data)
             if not model_type:
-                response["reason"] = "model_type missing"
-                return response
+                return self._reject_remediation_response(
+                    response, "model_type missing"
+                )
 
             features_payload = remediation_data.get(
                 "features") or remediation_data.get("context")
             if not isinstance(features_payload, dict) or not features_payload:
-                response["reason"] = "features missing or not a dict"
-                return response
+                return self._reject_remediation_response(
+                    response, "features missing or not a dict"
+                )
 
             target_value = remediation_data.get("target")
-            # Target is optional; if provided, require it to be int/bool/float
             if target_value is not None and not isinstance(
                     target_value, (int, float, bool)):
-                response["reason"] = "target must be numeric/bool if provided"
-                return response
+                return self._reject_remediation_response(
+                    response, "target must be numeric/bool if provided"
+                )
 
-            # Determine expected features from trained metadata if available
-            required_features: List[str] = self.feature_importance.get(
-                model_type, {}).get("names", [])
-            feature_vector: Dict[str, float] = {}
-            if required_features:
-                for name in required_features:
-                    raw_val = features_payload.get(name)
-                    try:
-                        feature_vector[name] = (
-                            float(raw_val)
-                            if raw_val is not None
-                            else 0.0
-                        )
-                    except Exception:
-                        self.logger.warning(
-                            f"Could not convert remediation feature "
-                            f"'{name}' value '{raw_val}' to float; "
-                            f"defaulting to 0.0"
-                        )
-                        feature_vector[name] = 0.0
-            else:
-                # Fallback: take numeric-like entries from payload
-                for key, val in features_payload.items():
-                    if isinstance(val, (int, float, bool)):
-                        feature_vector[key] = float(val)
+            feature_vector = self._extract_remediation_feature_vector(
+                model_type, features_payload
+            )
 
             if not feature_vector:
-                response["reason"] = "no numeric features extracted"
-                return response
+                return self._reject_remediation_response(
+                    response, "no numeric features extracted"
+                )
 
-            # Buffer the sample for later offline retraining
-            if model_type not in self.remediation_buffer:
-                self.remediation_buffer[model_type] = []
-            self.remediation_buffer[model_type].append({
+            queued_count = self._queue_remediation_sample(
+                model_type,
+                {
                 "features": feature_vector,
                 "target": target_value,
                 "received_at": datetime.now().isoformat(),
-            })
+                }
+            )
 
             threshold = int(
                 self.config.get(
                     "remediation_update_batch_size", 10))
-            queued_count = len(self.remediation_buffer[model_type])
             response.update({
                 "status": "queued",
                 "reason": "models require offline retrain; sample buffered",
@@ -523,3 +501,71 @@ class ArcModelTrainer:
             response["status"] = "error"
             response["reason"] = str(e)
             return response
+
+    @staticmethod
+    def _reject_remediation_response(
+            response: Dict[str, Any], reason: str) -> Dict[str, Any]:
+        """Return a standardized rejection response for remediation updates."""
+        response["reason"] = reason
+        return response
+
+    @staticmethod
+    def _get_remediation_model_type(remediation_data: Dict[str, Any]) -> str:
+        """Extract the remediation model type with the framework default."""
+        return str(remediation_data.get("model_type", "failure_prediction"))
+
+    def _extract_remediation_feature_vector(
+            self,
+            model_type: str,
+            features_payload: Dict[str, Any]) -> Dict[str, float]:
+        """Build a numeric remediation feature vector from the payload."""
+        required_features: List[str] = self.feature_importance.get(
+            model_type, {}
+        ).get("names", [])
+        if required_features:
+            return self._extract_required_remediation_features(
+                required_features, features_payload
+            )
+        return self._extract_numeric_payload_features(features_payload)
+
+    def _extract_required_remediation_features(
+            self,
+            required_features: List[str],
+            features_payload: Dict[str, Any]) -> Dict[str, float]:
+        """Extract the expected remediation features in trained order."""
+        feature_vector: Dict[str, float] = {}
+        for name in required_features:
+            feature_vector[name] = self._coerce_remediation_feature_value(
+                name,
+                features_payload.get(name)
+            )
+        return feature_vector
+
+    @staticmethod
+    def _extract_numeric_payload_features(
+            features_payload: Dict[str, Any]) -> Dict[str, float]:
+        """Extract numeric-like values from a remediation payload."""
+        feature_vector: Dict[str, float] = {}
+        for key, value in features_payload.items():
+            if isinstance(value, (int, float, bool)):
+                feature_vector[key] = float(value)
+        return feature_vector
+
+    def _coerce_remediation_feature_value(
+            self, feature_name: str, raw_value: Any) -> float:
+        """Coerce a remediation feature value to float with stable fallback."""
+        try:
+            return float(raw_value) if raw_value is not None else 0.0
+        except Exception:
+            self.logger.warning(
+                f"Could not convert remediation feature "
+                f"'{feature_name}' value '{raw_value}' to float; "
+                f"defaulting to 0.0"
+            )
+            return 0.0
+
+    def _queue_remediation_sample(
+            self, model_type: str, sample: Dict[str, Any]) -> int:
+        """Append a remediation sample to the retrain buffer and return count."""
+        self.remediation_buffer.setdefault(model_type, []).append(sample)
+        return len(self.remediation_buffer[model_type])

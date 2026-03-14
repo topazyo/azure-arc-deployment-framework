@@ -21,12 +21,15 @@ function Set-DataCollectionRules {
             Changes = @()
         }
 
-        # Load default configurations
-        $defaultConfigs = Get-Content ".\Config\dcr-templates.json" | ConvertFrom-Json
+        $defaultConfigs = $null
     }
 
     process {
         try {
+            if (-not $defaultConfigs -and $RuleType -ne 'Custom') {
+                $defaultConfigs = Get-Content ".\Config\dcr-templates.json" | ConvertFrom-Json
+            }
+
             # Select base configuration
             $baseConfig = switch ($RuleType) {
                 'Security' { $defaultConfigs.security }
@@ -89,7 +92,7 @@ function Set-DataCollectionRules {
         catch {
             $dcrState.Status = "Failed"
             $dcrState.Error = $_.Exception.Message
-            Write-Error $_
+            Write-Warning "Failed to configure data collection rules: $($_.Exception.Message)"
         }
     }
 

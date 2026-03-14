@@ -102,6 +102,9 @@ Describe 'Set-TLSConfiguration.ps1 Tests' {
         $Global:MockedRegistryExportCommand = $null
         $Global:MockedWriteLogMessages.Clear()
 
+        Set-Item -Path Function:Export-TlsRegistryKey -Value { param([string]$RegistryKey, [string]$ExportPath) }
+        Set-Item -Path Function:global:Export-TlsRegistryKey -Value { param([string]$RegistryKey, [string]$ExportPath) }
+
         if ($null -eq $Global:MockTlsConfigObject) {
             $Global:MockTlsConfigObject = Microsoft.PowerShell.Utility\ConvertFrom-Json -InputObject $Global:MockJsonContentForTls
         }
@@ -120,12 +123,9 @@ Describe 'Set-TLSConfiguration.ps1 Tests' {
              return $null 
         } -Verifiable
         
-        Mock Invoke-Expression {
-            param ([string]$Command)
-            Write-Verbose "Mock Invoke-Expression for TLS called with: $Command"
-            if ($Command -like "reg export*") {
-                $Global:MockedRegistryExportCommand = $Command
-            }
+        Mock Export-TlsRegistryKey {
+            param ([string]$RegistryKey, [string]$ExportPath)
+            $Global:MockedRegistryExportCommand = "reg export `"$RegistryKey`" `"$ExportPath`" /y"
         } -Verifiable
 
         Mock Write-Host { } -Verifiable
@@ -551,6 +551,8 @@ Describe 'Set-FirewallRules.ps1 Tests' {
 
         . $Global:TestIsAdminPath
         . (Join-Path $PSScriptRoot '..\..\..\src\Powershell\utils\Invoke-NetFirewallRule.ps1')
+        Set-Item -Path Function:Export-FirewallPolicy -Value { param([string]$BackupFilePath) }
+        Set-Item -Path Function:global:Export-FirewallPolicy -Value { param([string]$BackupFilePath) }
 
         if ($null -eq $Global:MockFirewallConfigObject) {
             $Global:MockFirewallConfigObject = Microsoft.PowerShell.Utility\ConvertFrom-Json -InputObject $Global:MockJsonContentForFirewall
@@ -572,12 +574,9 @@ Describe 'Set-FirewallRules.ps1 Tests' {
             Write-Verbose "Mock New-Item for Firewall for Path: $Path"
         } -Verifiable 
         
-        Mock Invoke-Expression {
-            param ([string]$Command)
-            Write-Verbose "Mock Invoke-Expression for Firewall called with: $Command"
-            if ($Command -like "netsh advfirewall export*") {
-                $Global:MockedNetshExportCommand = $Command
-            }
+        Mock Export-FirewallPolicy {
+            param ([string]$BackupFilePath)
+            $Global:MockedNetshExportCommand = "netsh advfirewall export `"$BackupFilePath`""
         } -Verifiable
 
         Mock Write-Host { } -Verifiable
@@ -724,19 +723,19 @@ Describe 'Set-FirewallRules.ps1 Tests' {
         It 'Should call "netsh advfirewall export" when BackupRules is $true (default) and EnforceRules is $true (default)' {
             . $script:ScriptPathFirewall
             $Global:MockedNetshExportCommand | Should -Match "netsh advfirewall export `".*FirewallPolicyBackup-.*\.wfw`""
-            Assert-MockCalled Invoke-Expression -Scope It -Times 1
+            Assert-MockCalled Export-FirewallPolicy -Scope It -Times 1
         }
 
         It 'Should NOT call "netsh advfirewall export" when BackupRules is $false' {
             . $script:ScriptPathFirewall -BackupRules $false
             $Global:MockedNetshExportCommand | Should -BeNullOrEmpty
-            Assert-MockCalled Invoke-Expression -Scope It -Times 0 -ParameterFilter {$_ -like "netsh advfirewall export*"}
+            Assert-MockCalled Export-FirewallPolicy -Scope It -Times 0
         }
         
         It 'Should NOT call "netsh advfirewall export" when EnforceRules is $false' {
             . $script:ScriptPathFirewall -EnforceRules $false
             $Global:MockedNetshExportCommand | Should -BeNullOrEmpty
-            Assert-MockCalled Invoke-Expression -Scope It -Times 0 -ParameterFilter {$_ -like "netsh advfirewall export*"}
+            Assert-MockCalled Export-FirewallPolicy -Scope It -Times 0
         }
     }
 
@@ -785,6 +784,8 @@ Describe 'Set-AuditPolicies.ps1 Tests' {
         $Global:AuditpolCommands.Clear() # Use specific global for auditpol commands
 
         . $Global:TestIsAdminPath
+        Set-Item -Path Function:Invoke-AuditPolCommand -Value { param([string[]]$Arguments) }
+        Set-Item -Path Function:global:Invoke-AuditPolCommand -Value { param([string[]]$Arguments) }
 
         if ($null -eq $Global:MockAuditConfigObject) {
             $Global:MockAuditConfigObject = Microsoft.PowerShell.Utility\ConvertFrom-Json -InputObject $Global:MockJsonContentForAudit
@@ -801,17 +802,15 @@ Describe 'Set-AuditPolicies.ps1 Tests' {
         Mock Test-Path { param($Path) Write-Verbose "Mock Test-Path for Audit for $Path"; return $true } -Verifiable 
         Mock New-Item { param([string]$Path, [string]$ItemType, [switch]$Force, $ErrorAction) Write-Verbose "Mock New-Item for Audit for $Path" } -Verifiable
         
-        # Mock Invoke-Expression for auditpol calls
-        Mock Invoke-Expression {
-            param ([string]$Command)
-            Write-Verbose "Mock Invoke-Expression for Audit called with: $Command"
-            $Global:AuditpolCommands.Add($Command) # Store all calls for verification
+        Mock Invoke-AuditPolCommand {
+            param ([string[]]$Arguments)
+            $Global:AuditpolCommands.Add(("auditpol " + ($Arguments -join ' ')))
             $global:LASTEXITCODE = 0
         } -Verifiable
 
         Mock Write-Host { } -Verifiable
         
-        # Script checks $LASTEXITCODE directly; set it in the Invoke-Expression mock.
+        # Script checks $LASTEXITCODE directly; set it in the auditpol helper mock.
 
 
         $sink = {
@@ -853,29 +852,29 @@ Describe 'Set-AuditPolicies.ps1 Tests' {
     Context 'Audit Policy Processing (Set-AuditPolicies)' {
         It 'Should set "Credential Validation" to Success and Failure' {
             . $script:ScriptPathAudit
-            @($Global:AuditpolCommands | Where-Object { $_ -eq 'auditpol /set /subcategory:"Credential Validation" /success:enable /failure:enable' }).Count | Should -BeGreaterThan 0
+            @($Global:AuditpolCommands | Where-Object { $_ -eq 'auditpol /set /subcategory:Credential Validation /success:enable /failure:enable' }).Count | Should -BeGreaterThan 0
         }
 
         It 'Should set "Process Creation" to Success only' {
             . $script:ScriptPathAudit
-            @($Global:AuditpolCommands | Where-Object { $_ -eq 'auditpol /set /subcategory:"Process Creation" /success:enable /failure:disable' }).Count | Should -BeGreaterThan 0
+            @($Global:AuditpolCommands | Where-Object { $_ -eq 'auditpol /set /subcategory:Process Creation /success:enable /failure:disable' }).Count | Should -BeGreaterThan 0
         }
 
         It 'Should set "Logon" to Failure only' { # Note: JSON key is "logon", script converts to "Logon"
             . $script:ScriptPathAudit
-            @($Global:AuditpolCommands | Where-Object { $_ -eq 'auditpol /set /subcategory:"Logon" /success:disable /failure:enable' }).Count | Should -BeGreaterThan 0
+            @($Global:AuditpolCommands | Where-Object { $_ -eq 'auditpol /set /subcategory:Logon /success:disable /failure:enable' }).Count | Should -BeGreaterThan 0
         }
 
         It 'Should set "File System" to No Auditing (both disabled)' {
             . $script:ScriptPathAudit
-            @($Global:AuditpolCommands | Where-Object { $_ -eq 'auditpol /set /subcategory:"File System" /success:disable /failure:disable' }).Count | Should -BeGreaterThan 0
+            @($Global:AuditpolCommands | Where-Object { $_ -eq 'auditpol /set /subcategory:File System /success:disable /failure:disable' }).Count | Should -BeGreaterThan 0
         }
     }
 
     Context 'Backup Logic (Set-AuditPolicies)' {
         It 'Should call "auditpol /backup /file:" when BackupSettings and EnforceSettings are $true (default)' {
             . $script:ScriptPathAudit
-            ($Global:AuditpolCommands | Where-Object { $_ -match 'auditpol /backup /file:".*AuditPolicyBackup-.*\.csv"' }).Count | Should -Be 1
+            ($Global:AuditpolCommands | Where-Object { $_ -match 'auditpol /backup /file:.*AuditPolicyBackup-.*\.csv' }).Count | Should -Be 1
         }
 
         It 'Should NOT call "auditpol /backup" when BackupSettings is $false' {

@@ -358,7 +358,7 @@ function Test-ArcConfiguration {
     try {
         # Get agent configuration
         $configPath = "\\$ServerName\c$\Program Files\Azure Connected Machine Agent\config"
-        
+
         if (-not (Test-Path $configPath)) {
             $results.Status = "Failed"
             $results.Details.ConfigPath = "Not found: $configPath"
@@ -479,7 +479,7 @@ function Test-ArcConnectivity {
 
         foreach ($endpoint in $endpoints.GetEnumerator()) {
             $test = Test-NetConnection -ComputerName $endpoint.Value.Url -Port $endpoint.Value.Port -WarningAction SilentlyContinue
-            
+
             $endpointResults[$endpoint.Key] = @{
                 Url = $endpoint.Value.Url
                 Port = $endpoint.Value.Port
@@ -550,12 +550,12 @@ function Test-ArcRegistrationStatus {
 
         if ($regStatus) {
             $results.Details.LocalStatus = $regStatus
-            
+
             # Parse status output
             $connected = $regStatus -match "Agent Status: Connected"
             $resourceId = ($regStatus | Select-String -Pattern "Resource Id: (.+)").Matches.Groups[1].Value
             $version = ($regStatus | Select-String -Pattern "Agent Version: (.+)").Matches.Groups[1].Value
-            
+
             $results.Details.ParsedStatus = @{
                 Connected = $connected
                 ResourceId = $resourceId
@@ -630,10 +630,21 @@ function Get-ArcValidationRecommendations {
     $recommendations = @()
 
     foreach ($issue in $Issues) {
-        $recommendation = switch ($issue.Component) {
+        $component = if ($issue -is [System.Collections.IDictionary]) {
+            $issue['Component']
+        }
+        else {
+            $issue.Component
+        }
+
+        if ([string]::IsNullOrWhiteSpace($component)) {
+            $component = 'Unknown'
+        }
+
+        $recommendation = switch ($component) {
             "Service Status" {
                 @{
-                    Component = $issue.Component
+                    Component = $component
                     Priority = "High"
                     Action = "Restart the Arc agent service"
                     Details = "Run 'Restart-Service -Name himds' or use azcmagent to restart the service"
@@ -641,7 +652,7 @@ function Get-ArcValidationRecommendations {
             }
             "Configuration" {
                 @{
-                    Component = $issue.Component
+                    Component = $component
                     Priority = "High"
                     Action = "Repair Arc agent configuration"
                     Details = "Run 'azcmagent config' to reconfigure the agent or reinstall if necessary"
@@ -649,7 +660,7 @@ function Get-ArcValidationRecommendations {
             }
             "Connectivity" {
                 @{
-                    Component = $issue.Component
+                    Component = $component
                     Priority = "High"
                     Action = "Resolve network connectivity issues"
                     Details = "Check firewall rules, proxy settings, and DNS resolution for required endpoints"
@@ -657,7 +668,7 @@ function Get-ArcValidationRecommendations {
             }
             "Registration" {
                 @{
-                    Component = $issue.Component
+                    Component = $component
                     Priority = "High"
                     Action = "Re-register the Arc agent"
                     Details = "Run 'azcmagent disconnect' followed by 'azcmagent connect' with appropriate parameters"
@@ -665,7 +676,7 @@ function Get-ArcValidationRecommendations {
             }
             "Authentication" {
                 @{
-                    Component = $issue.Component
+                    Component = $component
                     Priority = "High"
                     Action = "Fix authentication issues"
                     Details = "Check service principal credentials or managed identity configuration"
@@ -673,7 +684,7 @@ function Get-ArcValidationRecommendations {
             }
             "Resource Health" {
                 @{
-                    Component = $issue.Component
+                    Component = $component
                     Priority = "Medium"
                     Action = "Check Azure resource health"
                     Details = "Verify the Arc-enabled server resource in Azure portal"
@@ -681,7 +692,7 @@ function Get-ArcValidationRecommendations {
             }
             "Extension Status" {
                 @{
-                    Component = $issue.Component
+                    Component = $component
                     Priority = "Medium"
                     Action = "Repair failed extensions"
                     Details = "Reinstall or update problematic extensions"
@@ -689,7 +700,7 @@ function Get-ArcValidationRecommendations {
             }
             "Logs" {
                 @{
-                    Component = $issue.Component
+                    Component = $component
                     Priority = "Low"
                     Action = "Review and clear error logs"
                     Details = "Check logs at 'C:\Program Files\Azure Connected Machine Agent\logs'"
@@ -697,7 +708,7 @@ function Get-ArcValidationRecommendations {
             }
             "Version" {
                 @{
-                    Component = $issue.Component
+                    Component = $component
                     Priority = "Medium"
                     Action = "Update Arc agent to latest version"
                     Details = "Run 'azcmagent upgrade' to update the agent"
@@ -705,7 +716,7 @@ function Get-ArcValidationRecommendations {
             }
             "Certificates" {
                 @{
-                    Component = $issue.Component
+                    Component = $component
                     Priority = "High"
                     Action = "Renew or fix certificates"
                     Details = "Check certificate validity and trust chain"
@@ -713,7 +724,7 @@ function Get-ArcValidationRecommendations {
             }
             "Performance" {
                 @{
-                    Component = $issue.Component
+                    Component = $component
                     Priority = "Low"
                     Action = "Optimize agent performance"
                     Details = "Check system resources and agent configuration"
@@ -721,7 +732,7 @@ function Get-ArcValidationRecommendations {
             }
             "Dependencies" {
                 @{
-                    Component = $issue.Component
+                    Component = $component
                     Priority = "High"
                     Action = "Install missing dependencies"
                     Details = "Verify all required dependencies are installed and properly configured"
@@ -729,7 +740,7 @@ function Get-ArcValidationRecommendations {
             }
             default {
                 @{
-                    Component = $issue.Component
+                    Component = $component
                     Priority = "Medium"
                     Action = "Investigate and resolve issues"
                     Details = "Review detailed error information and logs"
@@ -738,7 +749,7 @@ function Get-ArcValidationRecommendations {
         }
 
         if ($recommendation) {
-            $recommendations += $recommendation
+            $recommendations += [PSCustomObject]$recommendation
         }
     }
 

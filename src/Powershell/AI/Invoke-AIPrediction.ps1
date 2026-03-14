@@ -164,3 +164,72 @@ function Get-PredictionRecommendations {
 
     return $recommendations | Sort-Object -Property Priority -Descending
 }
+
+function Get-RiskAssessment {
+    param (
+        [hashtable]$Predictions,
+        [hashtable]$Thresholds
+    )
+
+    $score = 0.0
+    if ($Predictions -and $Predictions.ContainsKey('Results') -and $null -ne $Predictions.Results) {
+        $rawScore = $Predictions.Results
+
+        if ($rawScore -is [System.Array] -or ($rawScore -is [System.Collections.IEnumerable] -and -not ($rawScore -is [string]))) {
+            $numericScore = $rawScore |
+                Where-Object { $_ -is [ValueType] -or $_ -is [string] } |
+                ForEach-Object {
+                    try {
+                        [double]$_
+                    }
+                    catch {
+                        Write-Verbose "Ignoring non-numeric prediction result value '$($_)'."
+                    }
+                } |
+                Select-Object -First 1
+
+            if ($null -ne $numericScore) {
+                $score = [double]$numericScore
+            }
+        }
+        else {
+            try {
+                $score = [double]$rawScore
+            }
+            catch {
+                $score = 0.0
+            }
+        }
+    }
+
+    $warningThreshold = 0.5
+    $criticalThreshold = 0.8
+
+    if ($Thresholds) {
+        if ($Thresholds.ContainsKey('warning') -and $null -ne $Thresholds.warning) {
+            $warningThreshold = [double]$Thresholds.warning
+        }
+        if ($Thresholds.ContainsKey('critical') -and $null -ne $Thresholds.critical) {
+            $criticalThreshold = [double]$Thresholds.critical
+        }
+    }
+
+    $level = if ($score -ge $criticalThreshold) {
+        'Critical'
+    }
+    elseif ($score -ge $warningThreshold) {
+        'Warning'
+    }
+    else {
+        'Low'
+    }
+
+    return [PSCustomObject]@{
+        Score = $score
+        Level = $level
+        Thresholds = [PSCustomObject]@{
+            Warning = $warningThreshold
+            Critical = $criticalThreshold
+        }
+    }
+}

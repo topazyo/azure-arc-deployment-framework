@@ -27,7 +27,7 @@ function Get-ArcRegistrationStatus {
         try {
             # Check if server exists in Azure
             $arcServer = Get-AzConnectedMachine -Name $ServerName -ErrorAction SilentlyContinue
-            
+
             if ($arcServer) {
                 $registrationStatus.Status = $arcServer.Status
                 $registrationStatus.Details = @{
@@ -50,7 +50,7 @@ function Get-ArcRegistrationStatus {
 
                 # Check for mismatches between Azure and local status
                 $registrationStatus.Details.StatusMismatch = $localStatus.Status -ne $arcServer.Status
-                
+
                 if ($registrationStatus.Details.StatusMismatch) {
                     Write-Log -Message "Status mismatch detected for $ServerName. Azure: $($arcServer.Status), Local: $($localStatus.Status)" -Level Warning
                 }
@@ -71,7 +71,7 @@ function Get-ArcRegistrationStatus {
             else {
                 # Server not found in Azure, check local agent
                 $localStatus = Get-LocalAgentStatus -ServerName $ServerName
-                
+
                 if ($localStatus.Installed) {
                     # Agent installed but not registered
                     $registrationStatus.Status = "NotRegistered"
@@ -79,7 +79,7 @@ function Get-ArcRegistrationStatus {
                         LocalStatus = $localStatus
                         Error = "Server exists locally but is not registered with Azure"
                     }
-                    
+
                     Write-Log -Message "Server $ServerName has Arc agent installed but is not registered with Azure" -Level Warning
                 }
                 else {
@@ -89,7 +89,7 @@ function Get-ArcRegistrationStatus {
                         LocalStatus = $localStatus
                         Error = "Arc agent not installed on server"
                     }
-                    
+
                     Write-Log -Message "Arc agent not installed on server $ServerName" -Level Warning
                 }
             }
@@ -121,11 +121,11 @@ function Get-LocalAgentStatus {
     try {
         # Check if agent service exists
         $service = Get-Service -Name "himds" -ComputerName $ServerName -ErrorAction SilentlyContinue
-        
+
         if ($service) {
             $status.Installed = $true
             $status.Status = $service.Status
-            
+
             # Get agent process details
             $process = Get-Process -Name "himds" -ComputerName $ServerName -ErrorAction SilentlyContinue
             if ($process) {
@@ -162,9 +162,9 @@ function Get-LocalAgentStatus {
                 $latestLog = Get-ChildItem $logPath -Filter "himds.log" | Sort-Object LastWriteTime -Descending | Select-Object -First 1
                 if ($latestLog) {
                     $status.Details.LatestLogTime = $latestLog.LastWriteTime
-                    
+
                     # Check for recent errors
-                    $recentErrors = Select-String -Path $latestLog.FullName -Pattern "ERROR|CRITICAL" -Context 0,1 | 
+                    $recentErrors = Select-String -Path $latestLog.FullName -Pattern "ERROR|CRITICAL" -Context 0,1 |
                         Select-Object -Last 5
                     if ($recentErrors) {
                         $status.Details.RecentErrors = $recentErrors | ForEach-Object { $_.Line }
@@ -173,7 +173,8 @@ function Get-LocalAgentStatus {
             }
 
             # Check connectivity
-            $connectivityTest = Test-NetConnection -ComputerName "management.azure.com" -Port 443 -ComputerName $ServerName -ErrorAction SilentlyContinue
+            $azureManagementEndpoint = 'management.azure.com'
+            $connectivityTest = Test-NetConnection -ComputerName $azureManagementEndpoint -Port 443 -ErrorAction SilentlyContinue
             $status.Details.Connectivity = $connectivityTest.TcpTestSucceeded
         }
     }
@@ -190,7 +191,7 @@ function Get-ArcExtensions {
 
     try {
         $extensions = Get-AzConnectedMachineExtension -MachineName $ServerName -ErrorAction SilentlyContinue
-        
+
         return $extensions | ForEach-Object {
             @{
                 Name = $_.Name
@@ -216,11 +217,11 @@ function Get-ArcResourceHealth {
 
     try {
         $arcServer = Get-AzConnectedMachine -Name $ServerName -ErrorAction SilentlyContinue
-        
+
         if ($arcServer) {
             $resourceId = $arcServer.Id
             $healthResource = Get-AzHealthResource -ResourceId $resourceId -ErrorAction SilentlyContinue
-            
+
             if ($healthResource) {
                 return @{
                     AvailabilityState = $healthResource.Properties.AvailabilityState
@@ -232,7 +233,7 @@ function Get-ArcResourceHealth {
                 }
             }
         }
-        
+
         return $null
     }
     catch {
@@ -247,11 +248,11 @@ function Get-ArcComplianceStatus {
 
     try {
         $arcServer = Get-AzConnectedMachine -Name $ServerName -ErrorAction SilentlyContinue
-        
+
         if ($arcServer) {
             $resourceId = $arcServer.Id
             $complianceStatus = Get-AzPolicyState -ResourceId $resourceId -ErrorAction SilentlyContinue
-            
+
             return $complianceStatus | ForEach-Object {
                 @{
                     PolicyDefinitionId = $_.PolicyDefinitionId
@@ -263,7 +264,7 @@ function Get-ArcComplianceStatus {
                 }
             }
         }
-        
+
         return $null
     }
     catch {
@@ -278,11 +279,11 @@ function Get-ArcRegistrationHistory {
 
     try {
         $arcServer = Get-AzConnectedMachine -Name $ServerName -ErrorAction SilentlyContinue
-        
+
         if ($arcServer) {
             $resourceId = $arcServer.Id
             $activityLogs = Get-AzActivityLog -ResourceId $resourceId -StartTime (Get-Date).AddDays(-30) -ErrorAction SilentlyContinue
-            
+
             return $activityLogs | ForEach-Object {
                 @{
                     EventTimestamp = $_.EventTimestamp
@@ -296,7 +297,7 @@ function Get-ArcRegistrationHistory {
                 }
             }
         }
-        
+
         return $null
     }
     catch {

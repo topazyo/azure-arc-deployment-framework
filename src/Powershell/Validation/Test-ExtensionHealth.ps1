@@ -33,7 +33,7 @@ function Test-ExtensionHealth {
         try {
             # Get Arc server resource
             $arcServer = Get-AzConnectedMachine -Name $ServerName -ErrorAction Stop
-            
+
             if (-not $arcServer) {
                 throw "Server $ServerName not found as an Arc-enabled server"
             }
@@ -89,10 +89,10 @@ function Test-ExtensionHealth {
                 # Get detailed status
                 if ($IncludeDetails) {
                     $detailedStatus = Get-ExtensionDetailedStatus -ResourceGroupName $arcServer.ResourceGroupName -MachineName $ServerName -ExtensionName $extension.Name
-                    
+
                     if ($detailedStatus) {
                         $extHealth.DetailedStatus = $detailedStatus
-                        
+
                         # Update status based on detailed information
                         if ($detailedStatus.Status -eq "Failed") {
                             $extHealth.Status = "Unhealthy"
@@ -107,7 +107,7 @@ function Test-ExtensionHealth {
                 if ($extension.Name -eq "AzureMonitorWindowsAgent") {
                     $serviceStatus = Get-ServiceStatus -ServerName $ServerName -ServiceName "AzureMonitorAgent"
                     $extHealth.ServiceStatus = $serviceStatus
-                    
+
                     if ($serviceStatus.Status -ne "Running") {
                         $extHealth.Status = "Unhealthy"
                         if ($extHealth.Status -eq "Healthy") {
@@ -120,7 +120,7 @@ function Test-ExtensionHealth {
                 elseif ($extension.Name -eq "GuestConfigurationForWindows") {
                     $serviceStatus = Get-ServiceStatus -ServerName $ServerName -ServiceName "GCService"
                     $extHealth.ServiceStatus = $serviceStatus
-                    
+
                     if ($serviceStatus.Status -ne "Running") {
                         $extHealth.Status = "Unhealthy"
                         if ($extHealth.Status -eq "Healthy") {
@@ -183,19 +183,19 @@ function Get-ExtensionDetailedStatus {
 
     try {
         # Get extension instance view
-        $instanceView = Invoke-AzRestMethod -Method GET -Path "/subscriptions/{0}/resourceGroups/{1}/providers/Microsoft.HybridCompute/machines/{2}/extensions/{3}?api-version=2021-05-20&expand=instanceView" -f 
-            (Get-AzContext).Subscription.Id, 
-            $ResourceGroupName, 
-            $MachineName, 
+        $instanceView = Invoke-AzRestMethod -Method GET -Path "/subscriptions/{0}/resourceGroups/{1}/providers/Microsoft.HybridCompute/machines/{2}/extensions/{3}?api-version=2021-05-20&expand=instanceView" -f
+            (Get-AzContext).Subscription.Id,
+            $ResourceGroupName,
+            $MachineName,
             $ExtensionName
 
         if ($instanceView.StatusCode -eq 200) {
             $instanceViewContent = $instanceView.Content | ConvertFrom-Json
-            
+
             if ($instanceViewContent.properties.instanceView) {
                 $status = $instanceViewContent.properties.instanceView.status
                 $statusMessage = $instanceViewContent.properties.instanceView.statusMessage
-                
+
                 return @{
                     Status = $status.code
                     DisplayStatus = $status.displayStatus
@@ -205,7 +205,7 @@ function Get-ExtensionDetailedStatus {
                 }
             }
         }
-        
+
         return $null
     }
     catch {
@@ -229,15 +229,15 @@ function Get-ExtensionLastOperation {
         # Get activity logs for the extension
         $endTime = Get-Date
         $startTime = $endTime.AddDays(-7) # Last 7 days
-        
+
         $logs = Get-AzActivityLog -ResourceGroupName $ResourceGroupName -StartTime $startTime -EndTime $endTime |
-            Where-Object { 
+            Where-Object {
                 $_.ResourceId -like "*/machines/$MachineName/extensions/$ExtensionName" -or
                 ($_.ResourceId -like "*/machines/$MachineName" -and $_.OperationName.Value -like "*extensions*")
             } |
             Sort-Object EventTimestamp -Descending |
             Select-Object -First 5
-        
+
         if ($logs) {
             return @{
                 LastOperation = $logs[0].OperationName.Value
@@ -254,7 +254,7 @@ function Get-ExtensionLastOperation {
                 }
             }
         }
-        
+
         return $null
     }
     catch {
@@ -274,7 +274,7 @@ function Get-ServiceStatus {
 
     try {
         $service = Get-Service -ComputerName $ServerName -Name $ServiceName -ErrorAction SilentlyContinue
-        
+
         if ($service) {
             return @{
                 Name = $service.Name

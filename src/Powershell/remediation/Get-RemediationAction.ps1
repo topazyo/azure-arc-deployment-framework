@@ -20,7 +20,7 @@ Function Get-RemediationAction {
     )
 
     # --- Logging Function (for script activity) ---
-    function Write-Log {
+    function Write-ActivityLog {
         param (
             [string]$Message,
             [string]$Level = "INFO", # INFO, WARNING, ERROR, DEBUG
@@ -28,7 +28,7 @@ Function Get-RemediationAction {
         )
         $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
         $logEntry = "[$timestamp] [$Level] $Message"
-        
+
         try {
             if (-not (Test-Path (Split-Path $Path -Parent) -PathType Container)) {
                 New-Item -ItemType Directory -Path (Split-Path $Path -Parent) -Force -ErrorAction Stop | Out-Null
@@ -37,35 +37,75 @@ Function Get-RemediationAction {
         }
         catch {
             Write-Warning "ACTIVITY_LOG_FAIL: Failed to write to activity log file $Path. Error: $($_.Exception.Message). Logging to console instead."
-            Write-Host $logEntry 
+            Write-Verbose $logEntry
         }
     }
 
-    Write-Log "Starting Get-RemediationAction script. InputObject count: $($InputObject.Count)."
+    function Resolve-InputContextReference {
+        param(
+            [Parameter(Mandatory)]
+            [object]$InputContext,
+
+            [Parameter(Mandatory)]
+            [string]$ReferencePath
+        )
+
+        if (-not $ReferencePath.StartsWith('$InputContext.')) {
+            return $ReferencePath
+        }
+
+        $currentValue = $InputContext
+        $pathSegments = $ReferencePath.Substring('$InputContext.'.Length).Split('.')
+
+        foreach ($segment in $pathSegments) {
+            if ($null -eq $currentValue) {
+                throw "Cannot resolve '$ReferencePath' because '$segment' is null."
+            }
+
+            if ($currentValue -is [System.Collections.IDictionary]) {
+                if (-not $currentValue.Contains($segment)) {
+                    throw "Cannot resolve '$ReferencePath' because key '$segment' was not found."
+                }
+                $currentValue = $currentValue[$segment]
+                continue
+            }
+
+            $property = $currentValue.PSObject.Properties[$segment]
+            if ($null -eq $property) {
+                throw "Cannot resolve '$ReferencePath' because property '$segment' was not found."
+            }
+
+            $currentValue = $property.Value
+        }
+
+        return $currentValue
+    }
+
+    Write-ActivityLog "Starting Get-RemediationAction script. InputObject count: $($InputObject.Count)."
 
     $remediationRules = @()
 
     if (-not [string]::IsNullOrWhiteSpace($RemediationRulesPath)) {
-        Write-Log "Loading remediation rules from: $RemediationRulesPath"
+        Write-ActivityLog "Loading remediation rules from: $RemediationRulesPath"
         if (Test-Path $RemediationRulesPath -PathType Leaf) {
             try {
                 $jsonContent = Get-Content -Path $RemediationRulesPath -Raw | ConvertFrom-Json -ErrorAction Stop
                 if ($jsonContent.remediationRules) {
                     $remediationRules = $jsonContent.remediationRules
-                    Write-Log "Successfully loaded $($remediationRules.Count) remediation rules from JSON file."
+                    Write-ActivityLog "Successfully loaded $($remediationRules.Count) remediation rules from JSON file."
                 } else {
-                    Write-Log "Rules file '$RemediationRulesPath' does not contain a 'remediationRules' array at the root." -Level "WARNING"
+                    Write-ActivityLog "Rules file '$RemediationRulesPath' does not contain a 'remediationRules' array at the root." -Level "WARNING"
                 }
             } catch {
-                Write-Log "Failed to load or parse remediation rules file '$RemediationRulesPath'. Error: $($_.Exception.Message)" -Level "ERROR"
+                Write-ActivityLog "Failed to load or parse remediation rules file '$RemediationRulesPath'. Error: $($_.Exception.Message)" -Level "ERROR"
             }
         } else {
-            Write-Log "Remediation rules file not found at: $RemediationRulesPath" -Level "WARNING"
+            Write-ActivityLog "Remediation rules file not found at: $RemediationRulesPath" -Level "WARNING"
         }
     }
 
     if ($remediationRules.Count -eq 0) {
-        Write-Log "Using hardcoded remediation rule definitions."
+        Write-ActivityLog "Using hardcoded remediation rule definitions."
         $remediationRules = @(
             @{
                 AppliesToId = "ServiceCrashUnexpected"
@@ -200,7 +240,7 @@ Function Get-RemediationAction {
                 SuccessCriteria = "CPU pressure relieved or offending process identified."
             }
         )
-        Write-Log "Loaded $($remediationRules.Count) hardcoded remediation rules."
+        Write-ActivityLog "Loaded $($remediationRules.Count) hardcoded remediation rules."
     }
 
     $allSuggestedActions = [System.Collections.ArrayList]::new()
@@ -221,11 +261,11 @@ Function Get-RemediationAction {
         } elseif ($item.PSObject.Properties['IssueId']) {
             $lookupId = $item.IssueId
         } else {
-            Write-Log "Could not determine a suitable LookupID from input item: $($item | Out-String -Depth 1)" -Level "WARNING"
+            Write-ActivityLog "Could not determine a suitable LookupID from input item: $($item | Out-String -Depth 1)" -Level "WARNING"
             continue
         }
-        
-        Write-Log "Processing input item with LookupID: '$lookupId'." -Level "DEBUG"
+
+        Write-ActivityLog "Processing input item with LookupID: '$lookupId'." -Level "DEBUG"
 
         $actionsForThisItem = [System.Collections.ArrayList]::new()
         $matchingRules = $remediationRules | Where-Object { $_.AppliesToId -eq $lookupId -or $_.RemediationActionId -eq $lookupId }
@@ -234,7 +274,7 @@ Function Get-RemediationAction {
         foreach ($rule in $matchingRules) {
             if ($actionsForThisItem.Count -ge $MaxActionsPerInput) { break }
 
-            Write-Log "Rule '$($rule.RemediationActionId)' matches LookupID '$lookupId'." -Level "DEBUG"
+            Write-ActivityLog "Rule '$($rule.RemediationActionId)' matches LookupID '$lookupId'." -Level "DEBUG"
             $resolvedParameters = @{}
             $parameterBag = @{}
             if ($rule.PSObject.Properties['Parameters']) {
@@ -249,12 +289,11 @@ Function Get-RemediationAction {
             foreach ($paramName in $parameterBag.Keys) {
                 $paramValueOrPath = $parameterBag[$paramName]
                 if ($paramValueOrPath -is [string] -and $paramValueOrPath.StartsWith('$InputContext.')) {
-                    $expression = $paramValueOrPath.Replace('$InputContext', '$inputContextForParameterResolution')
                     try {
-                        $resolvedParameters[$paramName] = Invoke-Expression $expression
-                        Write-Log "Resolved parameter '$paramName' to '$($resolvedParameters[$paramName])' from expression '$expression'." -Level "DEBUG"
+                        $resolvedParameters[$paramName] = Resolve-InputContextReference -InputContext $inputContextForParameterResolution -ReferencePath $paramValueOrPath
+                        Write-ActivityLog "Resolved parameter '$paramName' to '$($resolvedParameters[$paramName])' from reference '$paramValueOrPath'." -Level "DEBUG"
                     } catch {
-                        Write-Log "Failed to resolve parameter '$paramName' using expression '$expression'. Error: $($_.Exception.Message)" -Level "WARNING"
+                        Write-ActivityLog "Failed to resolve parameter '$paramName' using reference '$paramValueOrPath'. Error: $($_.Exception.Message)" -Level "WARNING"
                         $resolvedParameters[$paramName] = $paramValueOrPath # Keep original path as value if resolution fails
                     }
                 } else {
@@ -277,20 +316,20 @@ Function Get-RemediationAction {
             }
             $actionsForThisItem.Add($action) | Out-Null
         }
-        
+
         if ($actionsForThisItem.Count -gt 0) {
             # Sorting by Impact or a predefined priority could be added here if rules had such fields
             $allSuggestedActions.Add([PSCustomObject]@{
-                InputContext = $item 
+                InputContext = $item
                 SuggestedActions = $actionsForThisItem # Already limited by MaxActionsPerInput if multiple rules matched one ID
                 Timestamp = (Get-Date -Format o)
             }) | Out-Null
-            Write-Log "Found $($actionsForThisItem.Count) actions for LookupID '$lookupId'."
+            Write-ActivityLog "Found $($actionsForThisItem.Count) actions for LookupID '$lookupId'."
         } else {
-            Write-Log "No matching remediation rules found for LookupID '$lookupId'." -Level "INFO"
+            Write-ActivityLog "No matching remediation rules found for LookupID '$lookupId'." -Level "INFO"
         }
     }
 
-    Write-Log "Get-RemediationAction script finished. Generated action plans for $($allSuggestedActions.Count) input items."
+    Write-ActivityLog "Get-RemediationAction script finished. Generated action plans for $($allSuggestedActions.Count) input items."
     return $allSuggestedActions
 }

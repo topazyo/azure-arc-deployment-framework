@@ -44,7 +44,7 @@ function Test-ArcEndpoints {
     try {
         foreach ($endpoint in $endpoints.GetEnumerator()) {
             Write-Verbose "Testing connection to $($endpoint.Key) ($($endpoint.Value.Url))"
-            
+
             # Test DNS resolution
             $dns = Resolve-DnsName -Name $endpoint.Value.Url -ErrorAction SilentlyContinue
             $results.DNSResolution[$endpoint.Key] = @{
@@ -54,7 +54,7 @@ function Test-ArcEndpoints {
 
             # Test connectivity
             $test = Test-NetConnection -ComputerName $endpoint.Value.Url -Port $endpoint.Value.Port -WarningAction SilentlyContinue
-            
+
             $results.EndpointTests[$endpoint.Key] = @{
                 Url = $endpoint.Value.Url
                 Port = $endpoint.Value.Port
@@ -76,10 +76,10 @@ function Test-ArcEndpoints {
         if ($DetailedOutput) {
             # Get network route
             $results.NetworkRoute = Get-NetworkRoute -ServerName $ServerName
-            
+
             # Get firewall status
             $results.FirewallStatus = Get-FirewallStatus -ServerName $ServerName
-            
+
             # Get TLS configuration
             $results.TLSConfig = Get-TLSConfiguration -ServerName $ServerName
         }
@@ -100,10 +100,10 @@ function Test-ArcEndpoints {
 function Get-NetworkRoute {
     [CmdletBinding()]
     param ([string]$ServerName)
-    
+
     try {
         $routes = Invoke-Command -ComputerName $ServerName -ScriptBlock {
-            Get-NetRoute | Where-Object { 
+            Get-NetRoute | Where-Object {
                 $_.DestinationPrefix -notlike '169.254.*' -and
                 $_.DestinationPrefix -notlike '224.0.0.*'
             }
@@ -120,7 +120,7 @@ function Get-NetworkRoute {
 function Get-ProxyConfiguration {
     [CmdletBinding()]
     param ([string]$ServerName)
-    
+
     try {
         $proxyConfig = Invoke-Command -ComputerName $ServerName -ScriptBlock {
             $config = @{

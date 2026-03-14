@@ -1053,6 +1053,12 @@ Describe 'Test-Prerequisite.ps1 additional branch coverage' {
 Describe 'Backup-OperationState ServiceConfiguration and Compress branches' {
     BeforeAll {
         . (Join-Path $script:SrcRoot 'utils\Backup-OperationState.ps1')
+        if (-not (Get-Command Export-RegistryKeyBackup -ErrorAction SilentlyContinue)) {
+            Set-Item -Path Function:Export-RegistryKeyBackup -Value { param([string]$RegistryKey, [string]$DestinationPath) }
+        }
+        if (-not (Get-Command global:Export-RegistryKeyBackup -ErrorAction SilentlyContinue)) {
+            Set-Item -Path Function:global:Export-RegistryKeyBackup -Value { param([string]$RegistryKey, [string]$DestinationPath) }
+        }
     }
     BeforeEach {
         Set-Item -Path Function:global:Write-Log -Value {
@@ -1100,7 +1106,7 @@ Describe 'Backup-OperationState ServiceConfiguration and Compress branches' {
     }
 
     It 'ConvertTo-RegExePath converts HKCU path via RegistryKey backup' {
-        Mock Invoke-Expression {}
+        Mock Export-RegistryKeyBackup {}
         $items = @([PSCustomObject]@{ Type = 'RegistryKey'; Path = 'HKCU:\Software\TestKey'; Name = 'TestKey' })
         $result = Backup-OperationState -OperationId 'OP-HKCU-01' `
             -BackupPathBase "$TestDrive\backup" -ItemsToBackup $items `
@@ -1109,7 +1115,7 @@ Describe 'Backup-OperationState ServiceConfiguration and Compress branches' {
     }
 
     It 'ConvertTo-RegExePath converts HKCR path via RegistryKey backup' {
-        Mock Invoke-Expression {}
+        Mock Export-RegistryKeyBackup {}
         $items = @([PSCustomObject]@{ Type = 'RegistryKey'; Path = 'HKCR:\CLSID\{test}'; Name = 'TestClsid' })
         $result = Backup-OperationState -OperationId 'OP-HKCR-01' `
             -BackupPathBase "$TestDrive\backup" -ItemsToBackup $items `
@@ -1157,6 +1163,12 @@ Describe 'Backup-OperationState ServiceConfiguration and Compress branches' {
 Describe 'Backup-OperationState.ps1 cleanup edge coverage' {
     BeforeAll {
         . (Join-Path $script:SrcRoot 'utils\Backup-OperationState.ps1')
+        if (-not (Get-Command Export-RegistryKeyBackup -ErrorAction SilentlyContinue)) {
+            Set-Item -Path Function:Export-RegistryKeyBackup -Value { param([string]$RegistryKey, [string]$DestinationPath) }
+        }
+        if (-not (Get-Command global:Export-RegistryKeyBackup -ErrorAction SilentlyContinue)) {
+            Set-Item -Path Function:global:Export-RegistryKeyBackup -Value { param([string]$RegistryKey, [string]$DestinationPath) }
+        }
     }
 
     It 'records SkippedWhatIf for items skipped by ShouldProcess' {
@@ -1204,7 +1216,7 @@ Describe 'Backup-OperationState.ps1 cleanup edge coverage' {
             if ($Path -like '*.reg') { return $false }
             return $true
         }
-        Mock Invoke-Expression {}
+        Mock Export-RegistryKeyBackup {}
         Mock Get-ChildItem { @() }
 
         $result = Backup-OperationState -OperationId 'OP-REG-UNKNOWN' `

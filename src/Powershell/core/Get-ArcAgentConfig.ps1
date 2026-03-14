@@ -1,3 +1,27 @@
+<#
+.SYNOPSIS
+Retrieves Azure Connected Machine Agent configuration and supporting metadata.
+
+.DESCRIPTION
+Collects Arc agent configuration files, service state, parsed key fields, and
+optional extension, log, registry, environment, and network details for a
+target server. Sensitive values remain redacted unless explicitly requested.
+
+.PARAMETER ServerName
+Target server to inspect.
+
+.PARAMETER DetailLevel
+Controls whether the result includes basic, detailed, or full supporting data.
+
+.PARAMETER IncludeSecrets
+Returns sensitive configuration values without redaction.
+
+.PARAMETER AsObject
+Returns the parsed agent configuration object instead of the full wrapper.
+
+.OUTPUTS
+PSCustomObject
+#>
 function Get-ArcAgentConfig {
     [CmdletBinding()]
     param (
@@ -91,16 +115,16 @@ function Get-ArcAgentConfig {
                 if ($configFile.Value -notmatch "Error|not found") {
                     try {
                         $parsedConfig = $configFile.Value | ConvertFrom-Json -ErrorAction Stop
-                        
+
                         # Remove secrets if not requested
                         if (-not $IncludeSecrets -and $configFile.Key -eq 'AgentConfig') {
                             if ($parsedConfig.PSObject.Properties.Name -contains 'authentication') {
-                                $parsedConfig.authentication.PSObject.Properties | 
-                                    Where-Object { $_.Name -match 'key|secret|password|credential' } | 
+                                $parsedConfig.authentication.PSObject.Properties |
+                                    Where-Object { $_.Name -match 'key|secret|password|credential' } |
                                     ForEach-Object { $_.Value = '*** REDACTED ***' }
                             }
                         }
-                        
+
                         $configResult.ParsedConfig[$configFile.Key] = $parsedConfig
                     }
                     catch {
@@ -117,7 +141,7 @@ function Get-ArcAgentConfig {
                     $extensions = Get-ChildItem -Path $extensionsPath -Directory | ForEach-Object {
                         $extensionConfig = Join-Path $_.FullName "config\*.settings"
                         $configFiles = Get-ChildItem -Path $extensionConfig -ErrorAction SilentlyContinue
-                        
+
                         @{
                             Name = $_.Name
                             Path = $_.FullName
@@ -196,17 +220,26 @@ function Get-ArcAgentConfig {
         if ($AsObject -and $configResult.ConfigFound) {
             return [PSCustomObject]$configResult.ParsedConfig.AgentConfig
         }
-        
+
         return [PSCustomObject]$configResult
     }
 }
 
+<#
+.SYNOPSIS
+Collects network, proxy, and firewall context for Arc agent troubleshooting.
+
+.PARAMETER ServerName
+Target server to inspect.
+#>
 function Get-NetworkConfiguration {
     [CmdletBinding()]
     param ([string]$ServerName)
-    
+
     try {
         $networkConfig = Invoke-Command -ComputerName $ServerName -ScriptBlock {
+            $azureManagementEndpoint = 'management.azure.com'
+            $azureIdentityEndpoint = 'login.microsoftonline.com'
             @{
                 ProxySettings = @{
                     WinHTTP = netsh winhttp show proxy
@@ -215,16 +248,16 @@ function Get-NetworkConfiguration {
                 }
                 IPConfiguration = Get-NetIPConfiguration | Select-Object InterfaceAlias, IPv4Address, IPv4DefaultGateway, DNSServer
                 Connectivity = @{
-                    AzureManagement = Test-NetConnection -ComputerName management.azure.com -Port 443 -WarningAction SilentlyContinue
-                    AzureIdentity = Test-NetConnection -ComputerName login.microsoftonline.com -Port 443 -WarningAction SilentlyContinue
+                    AzureManagement = Test-NetConnection -ComputerName $azureManagementEndpoint -Port 443 -WarningAction SilentlyContinue
+                    AzureIdentity = Test-NetConnection -ComputerName $azureIdentityEndpoint -Port 443 -WarningAction SilentlyContinue
                 }
-                FirewallRules = Get-NetFirewallRule | Where-Object { 
-                    $_.DisplayName -like "*Azure*" -or 
-                    $_.DisplayName -like "*Arc*" 
+                FirewallRules = Get-NetFirewallRule | Where-Object {
+                    $_.DisplayName -like "*Azure*" -or
+                    $_.DisplayName -like "*Arc*"
                 } | Select-Object DisplayName, Enabled, Direction, Action
             }
         }
-        
+
         return $networkConfig
     }
     catch {

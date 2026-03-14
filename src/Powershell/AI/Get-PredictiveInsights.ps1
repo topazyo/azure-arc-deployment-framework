@@ -1,3 +1,49 @@
+﻿<##
+.SYNOPSIS
+Gets predictive analysis results for a server through the Python AI engine.
+
+.DESCRIPTION
+Invokes invoke_ai_engine.py through the PowerShell-to-Python subprocess boundary,
+validates the script and Python runtime, and returns parsed JSON results annotated
+with PowerShell context fields such as the server name, analysis type, and
+correlation identifier.
+
+.PARAMETER ServerName
+Target server name passed to the Python AI engine.
+
+.PARAMETER AnalysisType
+Analysis mode to request from the AI engine.
+
+.PARAMETER PythonExecutable
+Python executable to use for the subprocess invocation.
+
+.PARAMETER ScriptPath
+Optional explicit path to invoke_ai_engine.py.
+
+.PARAMETER AIModelDirectory
+Optional model directory forwarded to the Python engine.
+
+.PARAMETER AIConfigPath
+Optional configuration path forwarded to the Python engine.
+
+.PARAMETER TimeoutSeconds
+Maximum runtime allowed for the Python process.
+
+.PARAMETER MaxRetries
+Number of retry attempts for transient failures.
+
+.PARAMETER CorrelationId
+Optional cross-process tracing identifier. One is generated when omitted.
+
+.OUTPUTS
+PSCustomObject
+
+.EXAMPLE
+Get-PredictiveInsights -ServerName 'SERVER01' -AnalysisType Full -AIConfigPath '.\src\config\ai_config.json'
+
+.NOTES
+Stdout from the Python CLI must remain JSON-only because callers parse it directly.
+#>
 function Get-PredictiveInsights {
     [CmdletBinding()]
     param (
@@ -33,6 +79,25 @@ function Get-PredictiveInsights {
     )
 
     begin {
+        function Write-PredictiveInsightsLog {
+            [CmdletBinding()]
+            param(
+                [Parameter(Mandatory)]
+                [string]$Message,
+                [Parameter()]
+                [string]$Level = 'Information',
+                [Parameter()]
+                [string]$Component = 'Get-PredictiveInsights'
+            )
+
+            if (Get-Command -Name Write-Log -ErrorAction SilentlyContinue) {
+                Write-Log -Message $Message -Level $Level -Component $Component
+                return
+            }
+
+            Write-Verbose "[$Component][$Level] $Message"
+        }
+
         Write-Verbose "Starting Get-PredictiveInsights for server '$ServerName' with analysis type '$AnalysisType'."
 
         $aiEngineScript = $ScriptPath
@@ -72,8 +137,8 @@ function Get-PredictiveInsights {
         }
 
         if ($forcePythonFail) {
-            try { & $PythonExecutable --version -ErrorAction SilentlyContinue -WarningAction SilentlyContinue | Out-Null } catch {}
-            try { & python3 --version -ErrorAction SilentlyContinue -WarningAction SilentlyContinue | Out-Null } catch {}
+            try { & $PythonExecutable --version -ErrorAction SilentlyContinue -WarningAction SilentlyContinue | Out-Null } catch { Write-Verbose "Python probe failed during forced failure path for '$PythonExecutable'." }
+            try { & python3 --version -ErrorAction SilentlyContinue -WarningAction SilentlyContinue | Out-Null } catch { Write-Verbose "Fallback python3 probe failed during forced failure path." }
             Write-Error "Python executable '$PythonExecutable' (and 'python3' if default) not found or not working. Please ensure Python is installed and in PATH, or specify the full path."
             throw "Python executable not found."
         }
@@ -82,7 +147,7 @@ function Get-PredictiveInsights {
             try {
                 & $PythonExecutable --version -ErrorAction SilentlyContinue -WarningAction SilentlyContinue | Out-Null
                 if ($? -or $LASTEXITCODE -eq 0 -or $null -eq $LASTEXITCODE) { $pythonFound = $true }
-            } catch {}
+            } catch { Write-Verbose "Primary Python probe failed for '$PythonExecutable'." }
 
             if (-not $pythonFound -and $PythonExecutable -eq "python") {
                 try {
@@ -92,7 +157,7 @@ function Get-PredictiveInsights {
                         $pythonFound = $true
                         Write-Verbose "Defaulted to 'python3'."
                     }
-                } catch {}
+                } catch { Write-Verbose "Fallback python3 probe failed." }
             }
         }
 
@@ -157,7 +222,7 @@ function Get-PredictiveInsights {
                 $completed = $process.WaitForExit($TimeoutSeconds * 1000)
                 if (-not $completed) {
                     $timedOut = $true
-                    try { $process.Kill() } catch {}
+                    try { $process.Kill() } catch { Write-Verbose "Failed to terminate timed-out AI Engine process cleanly: $($_.Exception.Message)" }
                 }
             }
             catch {
@@ -188,7 +253,7 @@ function Get-PredictiveInsights {
             }
 
             if ($timedOut) {
-                Write-Log -Message "AI Engine timed out after $TimeoutSeconds seconds (attempt $attempt/$maxAttempts, CorrelationId: $CorrelationId)" `
+                Write-PredictiveInsightsLog -Message "AI Engine timed out after $TimeoutSeconds seconds (attempt $attempt/$maxAttempts, CorrelationId: $CorrelationId)" `
                     -Level Warning -Component 'Get-PredictiveInsights'
                 if ($attempt -lt $maxAttempts) {
                     $delay = [int][Math]::Pow(2, $attempt)
@@ -201,7 +266,7 @@ function Get-PredictiveInsights {
 
             # Python exit code 5 = TRANSIENT_ERROR (resilience.py ExitCode enum)
             if ($process.ExitCode -eq 5 -and $attempt -lt $maxAttempts) {
-                Write-Log -Message "AI Engine returned transient error (exit 5), retrying (attempt $attempt/$maxAttempts, CorrelationId: $CorrelationId)" `
+                Write-PredictiveInsightsLog -Message "AI Engine returned transient error (exit 5), retrying (attempt $attempt/$maxAttempts, CorrelationId: $CorrelationId)" `
                     -Level Warning -Component 'Get-PredictiveInsights'
                 $delay = [int][Math]::Pow(2, $attempt)
                 Write-Verbose "Retrying after ${delay}s (transient, attempt $attempt/$maxAttempts)..."
@@ -213,7 +278,7 @@ function Get-PredictiveInsights {
         } while ($attempt -lt $maxAttempts)
 
         if ($process.ExitCode -ne 0) {
-            Write-Log -Message "AI Engine failed (exit $($process.ExitCode), CorrelationId: $CorrelationId)" `
+            Write-PredictiveInsightsLog -Message "AI Engine failed (exit $($process.ExitCode), CorrelationId: $CorrelationId)" `
                 -Level Error -Component 'Get-PredictiveInsights'
             Write-Error -Message "AI Engine script execution failed. Exit Code: $($process.ExitCode) (CorrelationId: $CorrelationId)"
             if (-not [string]::IsNullOrWhiteSpace($stdErr)) {
@@ -222,13 +287,13 @@ function Get-PredictiveInsights {
                 try {
                     $errorObject = $stdErr | ConvertFrom-Json -ErrorAction SilentlyContinue
                     if ($errorObject) { Write-Error "Parsed AI Engine error object: $($errorObject | ConvertTo-Json -Compress)" }
-                } catch {}
+                } catch { Write-Verbose "Failed to parse AI Engine stderr as JSON: $($_.Exception.Message)" }
             }
             throw "AI Engine script failed."
         }
 
         if ([string]::IsNullOrWhiteSpace($stdOut)) {
-            Write-Log -Message "AI Engine returned no output (CorrelationId: $CorrelationId)" `
+            Write-PredictiveInsightsLog -Message "AI Engine returned no output (CorrelationId: $CorrelationId)" `
                 -Level Error -Component 'Get-PredictiveInsights'
             Write-Error -Message "AI Engine script returned no output (CorrelationId: $CorrelationId)."
             if (-not [string]::IsNullOrWhiteSpace($stdErr)) {
@@ -248,7 +313,7 @@ function Get-PredictiveInsights {
             return $insights
         }
         catch {
-            Write-Log -Message "Failed to parse JSON response from AI Engine (CorrelationId: $CorrelationId)" `
+            Write-PredictiveInsightsLog -Message "Failed to parse JSON response from AI Engine (CorrelationId: $CorrelationId)" `
                 -Level Error -Component 'Get-PredictiveInsights'
             Write-Error -ErrorRecord $_
             throw "JSON parsing failed."

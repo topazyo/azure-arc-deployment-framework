@@ -30,7 +30,7 @@ Function Start-RemediationAction {
     )
 
     # --- Logging Function (for script activity) ---
-    function Write-Log {
+    function Write-ActivityLog {
         param (
             [string]$Message,
             [string]$Level = "INFO", # INFO, WARNING, ERROR, DEBUG
@@ -39,11 +39,11 @@ Function Start-RemediationAction {
         $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
         $logEntry = "[$timestamp] [$Level] $Message"
         $targetPath = if (-not [string]::IsNullOrWhiteSpace($Path)) { $Path } elseif (-not [string]::IsNullOrWhiteSpace($LogPath)) { $LogPath } else { $null }
-        
-        try {
-            if (-not $targetPath) { Write-Host $logEntry; return }
 
-            if ($WhatIfPreference) { Write-Host $logEntry; return }
+        try {
+            if (-not $targetPath) { Write-Verbose $logEntry; return }
+
+            if ($WhatIfPreference) { Write-Verbose $logEntry; return }
 
             $parentPath = if (-not [string]::IsNullOrWhiteSpace($targetPath)) { Split-Path -Path $targetPath -Parent } else { $null }
             if ($parentPath -and -not (Test-Path $parentPath -PathType Container)) {
@@ -53,7 +53,7 @@ Function Start-RemediationAction {
         }
         catch {
             Write-Warning "ACTIVITY_LOG_FAIL: Failed to write to activity log file $Path. Error: $($_.Exception.Message). Logging to console instead."
-            Write-Host $logEntry 
+            Write-Verbose $logEntry
         }
     }
 
@@ -65,7 +65,7 @@ Function Start-RemediationAction {
             $value = $Parameters[$key]
             # Basic quoting for values with spaces. More complex scenarios might need robust escaping.
             $formattedValue = if ("$value".Contains(" ") -and -not ("$value".StartsWith('"') -and "$value".EndsWith('"'))) { "`"$value`"" } else { "$value" }
-            
+
             # Common conventions: -Key Value or /Key:Value. Using -Key Value here.
             if ($key.Length -eq 1) { # Single char param often uses one dash
                  $argList.Add("-$key $formattedValue")
@@ -76,10 +76,10 @@ Function Start-RemediationAction {
         return $argList -join " "
     }
 
-    Write-Log "Starting Start-RemediationAction script for Action ID: '$($ApprovedAction.RemediationActionId)', Title: '$($ApprovedAction.Title)'."
+    Write-ActivityLog "Starting Start-RemediationAction script for Action ID: '$($ApprovedAction.RemediationActionId)', Title: '$($ApprovedAction.Title)'."
 
     if (-not $ApprovedAction -or -not $ApprovedAction.PSObject.Properties['RemediationActionId']) {
-        Write-Log "Input ApprovedAction is null or invalid." -Level "ERROR"
+        Write-ActivityLog "Input ApprovedAction is null or invalid." -Level "ERROR"
         return [PSCustomObject]@{
             RemediationActionId = $ApprovedAction.RemediationActionId # Or "Unknown"
             Title = $ApprovedAction.Title # Or "Unknown"
@@ -120,19 +120,19 @@ Function Start-RemediationAction {
         }
         if (Test-Path $BackupScriptPath -PathType Leaf) {
             try {
-                Write-Log "Initiating backup using '$BackupScriptPath' to '$actualBackupPath' for action '$($ApprovedAction.RemediationActionId)'."
+                Write-ActivityLog "Initiating backup using '$BackupScriptPath' to '$actualBackupPath' for action '$($ApprovedAction.RemediationActionId)'."
                 $backupParams = @{ OperationName = "Before_$($ApprovedAction.RemediationActionId)"; BackupPath = $actualBackupPath; ErrorAction = 'Stop' }
                 $backupCmd = Get-Command -Path $BackupScriptPath -ErrorAction SilentlyContinue
                 if ($backupCmd -and $backupCmd.Parameters.ContainsKey('Compress') -and $BackupCompress) { $backupParams.Compress = $true }
                 if ($backupCmd -and $backupCmd.Parameters.ContainsKey('KeepUncompressed') -and $BackupKeepUncompressed) { $backupParams.KeepUncompressed = $true }
                 & $BackupScriptPath @backupParams
                 $backupSucceeded = $true
-                Write-Log "Backup completed for action '$($ApprovedAction.RemediationActionId)' to '$actualBackupPath'."
+                Write-ActivityLog "Backup completed for action '$($ApprovedAction.RemediationActionId)' to '$actualBackupPath'."
             } catch {
-                Write-Log "Backup script failed for '$($ApprovedAction.RemediationActionId)'. Error: $($_.Exception.Message)" -Level "ERROR"
+                Write-ActivityLog "Backup script failed for '$($ApprovedAction.RemediationActionId)'. Error: $($_.Exception.Message)" -Level "ERROR"
             }
         } else {
-            Write-Log "Backup-OperationState.ps1 not found at '$BackupScriptPath'. Proceeding without backup." -Level "WARNING"
+            Write-ActivityLog "Backup-OperationState.ps1 not found at '$BackupScriptPath'. Proceeding without backup." -Level "WARNING"
         }
     }
 
@@ -142,17 +142,17 @@ Function Start-RemediationAction {
 
     # --- Execute Action based on ImplementationType ---
     if ($PSCmdlet.ShouldProcess($ApprovedAction.Title, "Execute Remediation (Type: $($ApprovedAction.ImplementationType))")) {
-        Write-Log "Executing action: '$($ApprovedAction.Title)' (Type: $($ApprovedAction.ImplementationType))."
+        Write-ActivityLog "Executing action: '$($ApprovedAction.Title)' (Type: $($ApprovedAction.ImplementationType))."
         try {
             switch ($ApprovedAction.ImplementationType) {
                 "Script" {
                     if (-not (Test-Path $ApprovedAction.TargetScriptPath -PathType Leaf)) {
                         throw "Target script not found: $($ApprovedAction.TargetScriptPath)"
                     }
-                    Write-Log "Executing script: '$($ApprovedAction.TargetScriptPath)' with params: $($ApprovedAction.ResolvedParameters | Out-String)"
+                    Write-ActivityLog "Executing script: '$($ApprovedAction.TargetScriptPath)' with params: $($ApprovedAction.ResolvedParameters | Out-String)"
                     # Using try/catch for the script execution itself to capture its specific errors
                     $scriptOutput = . $ApprovedAction.TargetScriptPath @resolvedParameters *>&1 # Merge all streams
-                    
+
                     $scriptOutput | ForEach-Object {
                         if ($_ -is [System.Management.Automation.ErrorRecord]) {
                             $actionErrors.Add($_.ToString())
@@ -170,7 +170,7 @@ Function Start-RemediationAction {
                     if (-not $functionCmd) {
                         throw "Target function not found or not a Function: '$($ApprovedAction.TargetFunction)'"
                     }
-                    Write-Log "Executing function: '$($ApprovedAction.TargetFunction)' with params: $($ApprovedAction.ResolvedParameters | Out-String)"
+                    Write-ActivityLog "Executing function: '$($ApprovedAction.TargetFunction)' with params: $($ApprovedAction.ResolvedParameters | Out-String)"
                     $funcOutput = . $ApprovedAction.TargetFunction @resolvedParameters *>&1
 
                     $funcOutput | ForEach-Object {
@@ -187,8 +187,8 @@ Function Start-RemediationAction {
                         throw "Target executable not found: $($ApprovedAction.TargetScriptPath)"
                     }
                     $argString = ConvertTo-ArgumentListString -Parameters $resolvedParameters
-                    Write-Log "Executing executable: '$($ApprovedAction.TargetScriptPath)' with args: '$argString'"
-                    
+                    Write-ActivityLog "Executing executable: '$($ApprovedAction.TargetScriptPath)' with args: '$argString'"
+
                     # For executables, capturing stdout/stderr directly while using -Wait -PassThru is tricky.
                     # Standard approach is to redirect to temp files or use $process.StandardOutput.
                     # For simplicity, we'll focus on ExitCode here. Stdout/stderr capture would be an enhancement.
@@ -198,13 +198,13 @@ Function Start-RemediationAction {
                     if ($actionExitCode -ne 0) {
                         $actionStatus = "Failed"
                         $actionErrors.Add("Executable exited with code: $actionExitCode.")
-                        Write-Log "Executable failed with ExitCode: $actionExitCode" -Level "ERROR"
+                        Write-ActivityLog "Executable failed with ExitCode: $actionExitCode" -Level "ERROR"
                     } else {
                         $actionStatus = "Success"
                     }
                 }
                 "Manual" {
-                    Write-Log "Action requires manual execution: $($ApprovedAction.Description)" -Level "INFO"
+                    Write-ActivityLog "Action requires manual execution: $($ApprovedAction.Description)" -Level "INFO"
                     $actionStatus = "ManualActionRequired"
                     $actionOutput.Add("Manual intervention required as per description.")
                 }
@@ -212,16 +212,16 @@ Function Start-RemediationAction {
                     throw "Unsupported ImplementationType: '$($ApprovedAction.ImplementationType)'"
                 }
             }
-            Write-Log "Action '$($ApprovedAction.Title)' execution finished. Status: $actionStatus."
+            Write-ActivityLog "Action '$($ApprovedAction.Title)' execution finished. Status: $actionStatus."
         } catch {
-            Write-Log "Error during execution of action '$($ApprovedAction.Title)'. Error: $($_.Exception.Message)" -Level "ERROR"
-            Write-Log "Stack Trace: $($_.ScriptStackTrace)" -Level "DEBUG"
+            Write-ActivityLog "Error during execution of action '$($ApprovedAction.Title)'. Error: $($_.Exception.Message)" -Level "ERROR"
+            Write-ActivityLog "Stack Trace: $($_.ScriptStackTrace)" -Level "DEBUG"
             $actionStatus = "Failed"
             $actionErrors.Add($_.Exception.Message)
             $actionErrors.Add($_.ScriptStackTrace)
         }
     } else {
-        Write-Log "Execution of action '$($ApprovedAction.Title)' was skipped due to ShouldProcess (e.g., -WhatIf)." -Level "INFO"
+        Write-ActivityLog "Execution of action '$($ApprovedAction.Title)' was skipped due to ShouldProcess (e.g., -WhatIf)." -Level "INFO"
         $actionStatus = "SkippedWhatIf"
         $actionOutput.Add("Execution skipped by -WhatIf or user choice.")
     }
@@ -235,8 +235,8 @@ Function Start-RemediationAction {
         ExecutionEndTime      = $executionEndTime
         DurationSeconds       = ($executionEndTime - $executionStartTime).TotalSeconds
         Status                = $actionStatus
-        Output                = $actionOutput -join [System.Environment]::NewLine 
-        Errors                = $actionErrors -join [System.Environment]::NewLine 
+        Output                = $actionOutput -join [System.Environment]::NewLine
+        Errors                = $actionErrors -join [System.Environment]::NewLine
         ExitCode              = $actionExitCode # Relevant for executables
         BackupPerformed       = $backupAttempted
         BackupSuccessful      = $backupSucceeded
@@ -244,7 +244,7 @@ Function Start-RemediationAction {
         BackupCompressRequested = [bool]$BackupCompress
         BackupKeepUncompressedRequested = [bool]$BackupKeepUncompressed
     }
-    
-    Write-Log "Start-RemediationAction script finished. Final Status: $actionStatus for Action ID '$($ApprovedAction.RemediationActionId)'."
+
+    Write-ActivityLog "Start-RemediationAction script finished. Final Status: $actionStatus for Action ID '$($ApprovedAction.RemediationActionId)'."
     return $result
 }

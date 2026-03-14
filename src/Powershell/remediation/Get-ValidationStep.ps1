@@ -17,7 +17,7 @@ Function Get-ValidationStep {
     )
 
     # --- Logging Function (for script activity) ---
-    function Write-Log {
+    function Write-ActivityLog {
         param (
             [string]$Message,
             [string]$Level = "INFO", # INFO, WARNING, ERROR, DEBUG
@@ -25,7 +25,7 @@ Function Get-ValidationStep {
         )
         $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
         $logEntry = "[$timestamp] [$Level] $Message"
-        
+
         try {
             if (-not (Test-Path (Split-Path $Path -Parent) -PathType Container)) {
                 New-Item -ItemType Directory -Path (Split-Path $Path -Parent) -Force -ErrorAction Stop | Out-Null
@@ -34,36 +34,36 @@ Function Get-ValidationStep {
         }
         catch {
             Write-Warning "ACTIVITY_LOG_FAIL: Failed to write to activity log file $Path. Error: $($_.Exception.Message). Logging to console instead."
-            Write-Host $logEntry 
+            Write-Verbose $logEntry
         }
     }
 
-    Write-Log "Starting Get-ValidationStep script for RemediationActionId: '$($RemediationAction.RemediationActionId)'."
+    Write-ActivityLog "Starting Get-ValidationStep script for RemediationActionId: '$($RemediationAction.RemediationActionId)'."
 
     $validationSteps = [System.Collections.ArrayList]::new()
     $validationRules = @()
 
     if (-not $RemediationAction -or -not $RemediationAction.PSObject.Properties['RemediationActionId']) {
-        Write-Log "Input RemediationAction is null or missing RemediationActionId. Cannot proceed." -Level "ERROR"
+        Write-ActivityLog "Input RemediationAction is null or missing RemediationActionId. Cannot proceed." -Level "ERROR"
         return $validationSteps # Return empty array
     }
 
     if (-not [string]::IsNullOrWhiteSpace($ValidationRulesPath)) {
-        Write-Log "Loading validation rules from: $ValidationRulesPath"
+        Write-ActivityLog "Loading validation rules from: $ValidationRulesPath"
         if (Test-Path $ValidationRulesPath -PathType Leaf) {
             try {
                 $jsonContent = Get-Content -Path $ValidationRulesPath -Raw | ConvertFrom-Json -ErrorAction Stop
                 if ($jsonContent.validationRules) {
                     $validationRules = $jsonContent.validationRules
-                    Write-Log "Successfully loaded $($validationRules.Count) validation rules from JSON file."
+                    Write-ActivityLog "Successfully loaded $($validationRules.Count) validation rules from JSON file."
                 } else {
-                    Write-Log "Rules file '$ValidationRulesPath' does not contain a 'validationRules' array at the root." -Level "WARNING"
+                    Write-ActivityLog "Rules file '$ValidationRulesPath' does not contain a 'validationRules' array at the root." -Level "WARNING"
                 }
             } catch {
-                Write-Log "Failed to load or parse validation rules file '$ValidationRulesPath'. Error: $($_.Exception.Message)" -Level "ERROR"
+                Write-ActivityLog "Failed to load or parse validation rules file '$ValidationRulesPath'. Error: $($_.Exception.Message)" -Level "ERROR"
             }
         } else {
-            Write-Log "Validation rules file not found at: $ValidationRulesPath" -Level "WARNING"
+            Write-ActivityLog "Validation rules file not found at: $ValidationRulesPath" -Level "WARNING"
         }
     }
 
@@ -72,7 +72,7 @@ Function Get-ValidationStep {
     $mergeBehavior = "Replace"
 
     if ($overrideRules -and $overrideRules.Count -gt 0) {
-        Write-Log "Found $($overrideRules.Count) validation rule(s) for '$($RemediationAction.RemediationActionId)'." -Level "DEBUG"
+        Write-ActivityLog "Found $($overrideRules.Count) validation rule(s) for '$($RemediationAction.RemediationActionId)'." -Level "DEBUG"
         foreach ($overrideRule in $overrideRules) {
             if ($overrideRule.PSObject.Properties['MergeBehavior']) { $mergeBehavior = $overrideRule.MergeBehavior }
 
@@ -97,15 +97,15 @@ Function Get-ValidationStep {
                 }) | Out-Null
             }
         }
-        Write-Log "Added $($validationSteps.Count) validation step(s) from rule overrides (MergeBehavior=$mergeBehavior)." -Level "DEBUG"
+        Write-ActivityLog "Added $($validationSteps.Count) validation step(s) from rule overrides (MergeBehavior=$mergeBehavior)." -Level "DEBUG"
     }
 
     if (-not $overrideRules -or $mergeBehavior -eq "AppendDerived") {
-        Write-Log "Deriving validation steps from RemediationAction.SuccessCriteria." -Level "DEBUG"
+        Write-ActivityLog "Deriving validation steps from RemediationAction.SuccessCriteria." -Level "DEBUG"
         $successCriteriaText = $RemediationAction.SuccessCriteria
-        
+
         if ([string]::IsNullOrWhiteSpace($successCriteriaText)) {
-            Write-Log "SuccessCriteria is empty for '$($RemediationAction.RemediationActionId)'. Defaulting to ManualCheck." -Level "WARNING"
+            Write-ActivityLog "SuccessCriteria is empty for '$($RemediationAction.RemediationActionId)'. Defaulting to ManualCheck." -Level "WARNING"
             $validationSteps.Add([PSCustomObject]@{
                 ValidationStepId    = "VAL_ManualCheck_$(($RemediationAction.RemediationActionId -replace '\W','_'))"
                 RemediationActionId = $RemediationAction.RemediationActionId
@@ -120,12 +120,12 @@ Function Get-ValidationStep {
         } else {
             # Heuristic parsing of SuccessCriteria
             $derivedStep = $null
-            Write-Log "Parsing SuccessCriteria: '$successCriteriaText'" -Level "DEBUG"
+            Write-ActivityLog "Parsing SuccessCriteria: '$successCriteriaText'" -Level "DEBUG"
 
             # Heuristic 1: Service State Check
             if ($successCriteriaText -match "service\s*'(.*?)'\s*should be\s*'(Running|Stopped)'" -or `
                 $successCriteriaText -match "service\s*should be\s*'(Running|Stopped)'.*name\s*'(.*?)'" ) {
-                
+
                 $serviceName = $Matches[1]
                 $expectedState = $Matches[2]
                 if ($Matches.Count -ge 3 -and -not [string]::IsNullOrWhiteSpace($Matches[3])) { # Second regex pattern
@@ -138,7 +138,7 @@ Function Get-ValidationStep {
                 } elseif (($serviceName -eq '$ServiceNameFromEvent' -or [string]::IsNullOrWhiteSpace($serviceName)) -and $RemediationAction.ResolvedParameters.ServiceNameFromEvent) {
                     $serviceName = $RemediationAction.ResolvedParameters.ServiceNameFromEvent
                 }
-                
+
                 if (-not [string]::IsNullOrWhiteSpace($serviceName)) {
                     $derivedStep = @{
                         ValidationStepId    = "VAL_ServiceCheck_$(($serviceName -replace '\W','_'))_$(($RemediationAction.RemediationActionId -replace '\W','_'))"
@@ -148,7 +148,7 @@ Function Get-ValidationStep {
                         ExpectedResult      = $expectedState
                         Parameters          = $null
                     }
-                    Write-Log "Derived ServiceStateCheck for service '$serviceName', expected state '$expectedState'."
+                    Write-ActivityLog "Derived ServiceStateCheck for service '$serviceName', expected state '$expectedState'."
                 }
             }
             # Heuristic 2: Event Log Query (very basic)
@@ -163,15 +163,15 @@ Function Get-ValidationStep {
                     ValidationType      = "EventLogQuery"
                     ValidationTarget    = $kqlQueryPlaceholder # This would be the KQL query or parameters for Get-WinEvent
                     ExpectedResult      = "EventFound"
-                          Parameters          = $null
+                    Parameters          = $null
                  }
-                 Write-Log "Derived EventLogQuery for EventID '$eventId', Source '$eventSource'."
+                  Write-ActivityLog "Derived EventLogQuery for EventID '$eventId', Source '$eventSource'."
             }
             # Add more heuristics here...
 
             # Default to ManualCheck if no specific heuristic matched or if derived step is still null
             if (-not $derivedStep) {
-                Write-Log "Could not derive specific validation step from SuccessCriteria. Defaulting to ManualCheck."
+                Write-ActivityLog "Could not derive specific validation step from SuccessCriteria. Defaulting to ManualCheck."
                 $derivedStep = @{
                     ValidationStepId    = "VAL_ManualVerify_$(($RemediationAction.RemediationActionId -replace '\W','_'))"
                     Description         = "Manual Verification: Please verify success based on criteria: '$successCriteriaText'."
@@ -195,7 +195,7 @@ Function Get-ValidationStep {
             }) | Out-Null
         }
     }
-    
-    Write-Log "Get-ValidationStep script finished. Generated $($validationSteps.Count) validation step(s)."
+
+    Write-ActivityLog "Get-ValidationStep script finished. Generated $($validationSteps.Count) validation step(s)."
     return $validationSteps
 }

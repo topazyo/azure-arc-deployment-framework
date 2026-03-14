@@ -1,5 +1,39 @@
-# Test-ConfigurationDrift.ps1
-# This script tests for configuration drift against a predefined baseline or specific checks.
+<#
+.SYNOPSIS
+Tests the local or target server for configuration drift.
+
+.DESCRIPTION
+Evaluates registry, service, firewall, and audit-policy state against either a
+JSON baseline file or the built-in baseline checks. Results are logged and
+returned as a structured drift report.
+
+.PARAMETER BaselinePath
+Optional path to a JSON drift-baseline file.
+
+.PARAMETER ServerName
+Target server name. Current implementation primarily evaluates the local machine.
+
+.PARAMETER LogPath
+Log file path for drift-check activity.
+
+.PARAMETER SkipRegistryChecks
+Skips registry-based validation.
+
+.PARAMETER SkipServiceChecks
+Skips service-based validation.
+
+.PARAMETER SkipFirewallChecks
+Skips firewall-rule validation.
+
+.PARAMETER SkipAuditPolicyChecks
+Skips audit-policy validation.
+
+.OUTPUTS
+PSCustomObject
+
+.EXAMPLE
+.\Test-ConfigurationDrift.ps1 -BaselinePath '.\tests\Powershell\fixtures\drift_baseline.json' -LogPath '.\Logs\drift.log'
+#>
 
 param (
     [Parameter(Mandatory = $false)]
@@ -38,21 +72,25 @@ $ScriptRoot = if ($PSScriptRoot) {
 if (-not (Get-Command Write-Log -ErrorAction SilentlyContinue)) {
     . (Join-Path $ScriptRoot '..\utils\Write-Log.ps1')
 }
-# Fallback stub in case the utility cannot be loaded (e.g., in constrained test sandboxes)
-if (-not (Get-Command Write-Log -ErrorAction SilentlyContinue)) {
-    function Write-Log {
-        param(
-            [string]$Message,
-            [string]$Level = "INFO",
-            [string]$Path = $LogPath
-        )
-        $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-        $logEntry = "[$timestamp] [$Level] $Message"
-        try {
-            Add-Content -Path $Path -Value $logEntry -ErrorAction SilentlyContinue
-        } catch {
-            Write-Host $logEntry
-        }
+
+function Write-DriftLog {
+    param(
+        [string]$Message,
+        [string]$Level = "INFO",
+        [string]$Path = $LogPath
+    )
+
+    if (Get-Command Write-Log -ErrorAction SilentlyContinue) {
+        Write-Log -Message $Message -Level $Level -Path $Path
+        return
+    }
+
+    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    $logEntry = "[$timestamp] [$Level] $Message"
+    try {
+        Add-Content -Path $Path -Value $logEntry -ErrorAction SilentlyContinue
+    } catch {
+        Write-Verbose $logEntry
     }
 }
 
@@ -75,12 +113,12 @@ function Add-DriftDetail {
         CurrentValue  = $CurrentValue
         Status        = $status
     }) | Out-Null
-    Write-Log "Check: [$Category] Item: $Item, Property: $Property, Expected: '$ExpectedValue', Current: '$CurrentValue', Status: $status"
+    Write-DriftLog "Check: [$Category] Item: $Item, Property: $Property, Expected: '$ExpectedValue', Current: '$CurrentValue', Status: $status"
 }
 
 # --- Main Script Logic ---
 try {
-    Write-Log "Starting configuration drift test script for server: $ServerName."
+    Write-DriftLog "Starting configuration drift test script for server: $ServerName."
 
     # Administrator check (tests may override via $Global:IsAdminContext)
     $isAdmin = $null
@@ -89,17 +127,17 @@ try {
         if ($globalAdminOverride) {
             $isAdmin = [bool]$globalAdminOverride.Value
         }
-    } catch { }
+    } catch { Write-Verbose 'Failed to read global administrator override; falling back to the current Windows principal.' }
 
     if ($null -eq $isAdmin) {
         $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
     }
     if (-not $isAdmin) {
-        Write-Log "Running without Administrator privileges. Some checks might be limited or fail." -Level "WARNING"
+        Write-DriftLog "Running without Administrator privileges. Some checks might be limited or fail." -Level "WARNING"
     }
 
     if ($ServerName -ne $env:COMPUTERNAME) {
-        Write-Log "Remote server checks are not fully implemented in this version. Forcing to local machine." -Level "WARNING"
+        Write-DriftLog "Remote server checks are not fully implemented in this version. Forcing to local machine." -Level "WARNING"
         $ServerName = $env:COMPUTERNAME # For now, focus on local machine
     }
 
@@ -114,15 +152,15 @@ try {
 
     if ($BaselinePath) {
         try {
-            Write-Log "Loading baseline from '$BaselinePath'."
+            Write-DriftLog "Loading baseline from '$BaselinePath'."
             $baselineContent = Get-Content -Path $BaselinePath -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
             if ($baselineContent.registryChecks) { $baselineRegistryChecks = $baselineContent.registryChecks }
             if ($baselineContent.serviceChecks) { $baselineServiceChecks = $baselineContent.serviceChecks }
             if ($baselineContent.firewallChecks) { $baselineFirewallChecks = $baselineContent.firewallChecks }
             if ($baselineContent.auditPolicies) { $baselineAuditPolicies = $baselineContent.auditPolicies }
-            Write-Log "Baseline loaded: RegistryChecks=$($baselineRegistryChecks.Count), ServiceChecks=$($baselineServiceChecks.Count), FirewallChecks=$($baselineFirewallChecks.Count), AuditPolicies=$($baselineAuditPolicies.Count)."
+            Write-DriftLog "Baseline loaded: RegistryChecks=$($baselineRegistryChecks.Count), ServiceChecks=$($baselineServiceChecks.Count), FirewallChecks=$($baselineFirewallChecks.Count), AuditPolicies=$($baselineAuditPolicies.Count)."
         } catch {
-            Write-Log "Failed to load baseline file '$BaselinePath'. Falling back to hardcoded checks. Error: $($_.Exception.Message)" -Level "WARNING"
+            Write-DriftLog "Failed to load baseline file '$BaselinePath'. Falling back to hardcoded checks. Error: $($_.Exception.Message)" -Level "WARNING"
         }
     }
 
@@ -143,29 +181,29 @@ try {
         )
     }
 
-    Write-Log "--- Performing Baseline Checks ---"
+    Write-DriftLog "--- Performing Baseline Checks ---"
 
     # 1. Registry Checks (from baseline)
     if ($SkipRegistryChecks) {
-        Write-Log "Skipping registry checks per configuration." -Level "INFO"
+        Write-DriftLog "Skipping registry checks per configuration." -Level "INFO"
     } else {
-        Write-Log "Checking Registry Settings..."
+        Write-DriftLog "Checking Registry Settings..."
         foreach ($regCheck in $baselineRegistryChecks) {
             $regPath = $regCheck.Path
             $keyName = $regCheck.Name
             $expectedValue = $regCheck.Expected
             try {
                 $currentValue = (Get-ItemProperty -Path $regPath -Name $keyName -ErrorAction Stop).$keyName
-                Add-DriftDetail $driftCollection "Registry" $regPath $keyName $expectedValue $currentValue
-            } catch { Add-DriftDetail $driftCollection "Registry" $regPath $keyName $expectedValue "NOT_FOUND_OR_ERROR" }
+                Add-DriftDetail -DriftDetails $driftCollection -Category "Registry" -Item $regPath -Property $keyName -ExpectedValue $expectedValue -CurrentValue $currentValue
+            } catch { Add-DriftDetail -DriftDetails $driftCollection -Category "Registry" -Item $regPath -Property $keyName -ExpectedValue $expectedValue -CurrentValue "NOT_FOUND_OR_ERROR" }
         }
     }
 
     # 2. Service State Checks
     if ($SkipServiceChecks) {
-        Write-Log "Skipping service checks per configuration." -Level "INFO"
+        Write-DriftLog "Skipping service checks per configuration." -Level "INFO"
     } else {
-        Write-Log "Checking Service States..."
+        Write-DriftLog "Checking Service States..."
         foreach ($svcCheck in $baselineServiceChecks) {
             $serviceName = $svcCheck.Name
             $hasStartup = ($svcCheck -is [hashtable] -and $svcCheck.ContainsKey('StartupType')) -or $svcCheck.PSObject.Properties['StartupType']
@@ -175,20 +213,20 @@ try {
 
             try {
                 $service = Get-Service -Name $serviceName -ErrorAction Stop
-                if ($hasStartup) { Add-DriftDetail $driftCollection "Service" $serviceName "StartupType" $expectedStartup $service.StartupType }
-                if ($hasState) { Add-DriftDetail $driftCollection "Service" $serviceName "State" $expectedState $service.Status }
+                if ($hasStartup) { Add-DriftDetail -DriftDetails $driftCollection -Category "Service" -Item $serviceName -Property "StartupType" -ExpectedValue $expectedStartup -CurrentValue $service.StartupType }
+                if ($hasState) { Add-DriftDetail -DriftDetails $driftCollection -Category "Service" -Item $serviceName -Property "State" -ExpectedValue $expectedState -CurrentValue $service.Status }
             } catch {
-                if ($hasStartup) { Add-DriftDetail $driftCollection "Service" $serviceName "StartupType" $expectedStartup "NOT_FOUND_OR_ERROR" }
-                if ($hasState) { Add-DriftDetail $driftCollection "Service" $serviceName "State" $expectedState "NOT_FOUND_OR_ERROR" }
+                if ($hasStartup) { Add-DriftDetail -DriftDetails $driftCollection -Category "Service" -Item $serviceName -Property "StartupType" -ExpectedValue $expectedStartup -CurrentValue "NOT_FOUND_OR_ERROR" }
+                if ($hasState) { Add-DriftDetail -DriftDetails $driftCollection -Category "Service" -Item $serviceName -Property "State" -ExpectedValue $expectedState -CurrentValue "NOT_FOUND_OR_ERROR" }
             }
         }
     }
 
     # 3. Firewall Rule Checks (Basic - from Set-FirewallRules.ps1)
     if ($SkipFirewallChecks) {
-        Write-Log "Skipping firewall checks per configuration." -Level "INFO"
+        Write-DriftLog "Skipping firewall checks per configuration." -Level "INFO"
     } else {
-        Write-Log "Checking Firewall Rules..."
+        Write-DriftLog "Checking Firewall Rules..."
         $firewallRulesToTest = @{}
         if ($baselineFirewallChecks -and $baselineFirewallChecks.Count -gt 0) {
             foreach ($fw in $baselineFirewallChecks) {
@@ -205,20 +243,20 @@ try {
             $expectedProps = $firewallRulesToTest[$ruleName]
             try {
                 $rule = Get-NetFirewallRule -DisplayName $ruleName -ErrorAction Stop
-                Add-DriftDetail $driftCollection "Firewall" $ruleName "Enabled" $expectedProps.Enabled $rule.Enabled
-                Add-DriftDetail $driftCollection "Firewall" $ruleName "Direction" $expectedProps.Direction $rule.Direction
-                Add-DriftDetail $driftCollection "Firewall" $ruleName "Action" $expectedProps.Action $rule.Action
+                Add-DriftDetail -DriftDetails $driftCollection -Category "Firewall" -Item $ruleName -Property "Enabled" -ExpectedValue $expectedProps.Enabled -CurrentValue $rule.Enabled
+                Add-DriftDetail -DriftDetails $driftCollection -Category "Firewall" -Item $ruleName -Property "Direction" -ExpectedValue $expectedProps.Direction -CurrentValue $rule.Direction
+                Add-DriftDetail -DriftDetails $driftCollection -Category "Firewall" -Item $ruleName -Property "Action" -ExpectedValue $expectedProps.Action -CurrentValue $rule.Action
             } catch {
-                Add-DriftDetail $driftCollection "Firewall" $ruleName "Enabled" $expectedProps.Enabled "NOT_FOUND_OR_ERROR"
+                Add-DriftDetail -DriftDetails $driftCollection -Category "Firewall" -Item $ruleName -Property "Enabled" -ExpectedValue $expectedProps.Enabled -CurrentValue "NOT_FOUND_OR_ERROR"
             }
         }
     }
 
     # 4. Audit Policy Checks (Basic - from Set-AuditPolicies.ps1)
     if ($SkipAuditPolicyChecks) {
-        Write-Log "Skipping audit policy checks per configuration." -Level "INFO"
+        Write-DriftLog "Skipping audit policy checks per configuration." -Level "INFO"
     } else {
-        Write-Log "Checking Audit Policies..."
+        Write-DriftLog "Checking Audit Policies..."
         $auditSubcategoriesToTest = @{}
         if ($baselineAuditPolicies -and $baselineAuditPolicies.Count -gt 0) {
             foreach ($ap in $baselineAuditPolicies) {
@@ -245,19 +283,19 @@ try {
                             $normalizedCurrent = $currentSetting -replace " and ", ","
                             $normalizedExpected = $expectedSetting -replace " and ", ","
 
-                            Add-DriftDetail $driftCollection "AuditPolicy" $definedSubcategoryKey "Setting" $normalizedExpected $normalizedCurrent
+                            Add-DriftDetail -DriftDetails $driftCollection -Category "AuditPolicy" -Item $definedSubcategoryKey -Property "Setting" -ExpectedValue $normalizedExpected -CurrentValue $normalizedCurrent
                         }
                     }
                 }
             }
         } catch {
-            Write-Log "Failed to retrieve or parse audit policy. Error: $($_.Exception.Message)" -Level "ERROR"
+              Write-DriftLog "Failed to retrieve or parse audit policy. Error: $($_.Exception.Message)" -Level "ERROR"
             foreach($definedSubcategoryKey in $auditSubcategoriesToTest.Keys){
-                 Add-DriftDetail $driftCollection "AuditPolicy" $definedSubcategoryKey "Setting" $auditSubcategoriesToTest[$definedSubcategoryKey] "ERROR_RETRIEVING_POLICY"
+                 Add-DriftDetail -DriftDetails $driftCollection -Category "AuditPolicy" -Item $definedSubcategoryKey -Property "Setting" -ExpectedValue $auditSubcategoriesToTest[$definedSubcategoryKey] -CurrentValue "ERROR_RETRIEVING_POLICY"
             }
         }
     }
-    
+
     # Determine overall drift status
     $overallDriftDetected = ($driftCollection | Where-Object { $_.Status -eq "Drifted" } | Measure-Object).Count -gt 0
 
@@ -268,14 +306,14 @@ try {
         DriftDetails  = $driftCollection
     }
 
-    Write-Log "Configuration drift test completed. Drift Detected: $overallDriftDetected"
+    Write-DriftLog "Configuration drift test completed. Drift Detected: $overallDriftDetected"
     return $result
 
 }
 catch {
-    Write-Log "An critical error occurred during the drift test: $($_.Exception.Message)" -Level "FATAL"
+    Write-DriftLog "An critical error occurred during the drift test: $($_.Exception.Message)" -Level "FATAL"
     if ($_.ScriptStackTrace) {
-        Write-Log "Stack Trace: $($_.ScriptStackTrace)" -Level "FATAL"
+        Write-DriftLog "Stack Trace: $($_.ScriptStackTrace)" -Level "FATAL"
     }
     # Return an error object or rethrow
     return @{

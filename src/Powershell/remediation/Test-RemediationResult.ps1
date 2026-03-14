@@ -7,6 +7,7 @@ Function Test-RemediationResult {
     [CmdletBinding()]
     param (
         [Parameter(Mandatory=$true)]
+        [AllowEmptyCollection()]
         [PSCustomObject[]]$ValidationSteps, # Array of objects from Get-ValidationStep.ps1
 
         [Parameter(Mandatory=$false)]
@@ -17,7 +18,7 @@ Function Test-RemediationResult {
     )
 
     # --- Logging Function (for script activity) ---
-    function Write-Log {
+    function Write-ActivityLog {
         param (
             [string]$Message,
             [string]$Level = "INFO", # INFO, WARNING, ERROR, DEBUG
@@ -25,7 +26,7 @@ Function Test-RemediationResult {
         )
         $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
         $logEntry = "[$timestamp] [$Level] $Message"
-        
+
         try {
             if (-not (Test-Path (Split-Path $Path -Parent) -PathType Container)) {
                 New-Item -ItemType Directory -Path (Split-Path $Path -Parent) -Force -ErrorAction Stop | Out-Null
@@ -34,11 +35,11 @@ Function Test-RemediationResult {
         }
         catch {
             Write-Warning "ACTIVITY_LOG_FAIL: Failed to write to activity log file $Path. Error: $($_.Exception.Message). Logging to console instead."
-            Write-Host $logEntry 
+            Write-Verbose $logEntry
         }
     }
 
-    Write-Log "Starting Test-RemediationResult script. Number of validation steps: $($ValidationSteps.Count)."
+    Write-ActivityLog "Starting Test-RemediationResult script. Number of validation steps: $($ValidationSteps.Count)."
 
     function Test-ExpectedOutcome {
         param(
@@ -49,13 +50,13 @@ Function Test-RemediationResult {
         )
 
         if ([string]::IsNullOrWhiteSpace($Expected)) {
-            return ($Errors -eq $null -or ($Errors | Measure-Object).Count -eq 0)
+            return ($null -eq $Errors -or ($Errors | Measure-Object).Count -eq 0)
         }
 
         switch -regex ($Expected) {
             '^\$true$' { return ($StdOutput -contains $true) }
             '^\$false$' { return ($StdOutput -contains $false) }
-            '^0$' { return (($Errors -eq $null -or ($Errors | Measure-Object).Count -eq 0)) }
+            '^0$' { return (($null -eq $Errors -or ($Errors | Measure-Object).Count -eq 0)) }
             '^Contains\s+"(.+)"$' { return (($Actual) -match $Matches[1]) }
             '^Regex\s*:(.+)$' { return (($Actual) -match $Matches[1]) }
             default { return ($Actual -eq $Expected) }
@@ -63,7 +64,7 @@ Function Test-RemediationResult {
     }
 
     if (-not $ValidationSteps -or $ValidationSteps.Count -eq 0) {
-        Write-Log "No validation steps provided. Cannot perform test." -Level "WARNING"
+        Write-ActivityLog "No validation steps provided. Cannot perform test." -Level "WARNING"
         return @{ OverallValidationStatus = "SkippedNoSteps"; ValidationStepResults = @() }
     }
 
@@ -82,10 +83,9 @@ Function Test-RemediationResult {
 
 
     foreach ($step in $modifiableValidationSteps) {
-        Write-Log "Executing Validation Step: '$($step.ValidationStepId)' - Type: '$($step.ValidationType)' - Description: '$($step.Description)'"
+        Write-ActivityLog "Executing Validation Step: '$($step.ValidationStepId)' - Type: '$($step.ValidationType)' - Description: '$($step.Description)'"
         $step.Status = "InProgress"
         $step.Timestamp = Get-Date -Format o
-        $stepOutput = $null
         $stepError = $null
 
         try {
@@ -98,39 +98,39 @@ Function Test-RemediationResult {
                 "ServiceStateCheck" {
                     $serviceName = $step.ValidationTarget
                     $expectedStatusStr = $step.ExpectedResult # e.g., "Running", "Stopped"
-                    
-                    Write-Log "ServiceStateCheck: ServiceName='$serviceName', ExpectedStatus='$expectedStatusStr'"
+
+                    Write-ActivityLog "ServiceStateCheck: ServiceName='$serviceName', ExpectedStatus='$expectedStatusStr'"
                     $actualService = Get-Service -Name $serviceName -ErrorAction SilentlyContinue # Change to Stop to catch error below
-                    
+
                     if ($actualService) {
                         $step.ActualResult = $actualService.Status.ToString()
                         if ($actualService.Status.ToString() -eq $expectedStatusStr) {
                             $step.Status = "Success"
-                            Write-Log "Service '$serviceName' is in expected state '$expectedStatusStr'."
+                            Write-ActivityLog "Service '$serviceName' is in expected state '$expectedStatusStr'."
                         } else {
                             $step.Status = "Failed"
-                            Write-Log "Service '$serviceName' is in state '$($actualService.Status)', expected '$expectedStatusStr'." -Level "WARNING"
+                            Write-ActivityLog "Service '$serviceName' is in state '$($actualService.Status)', expected '$expectedStatusStr'." -Level "WARNING"
                         }
                     } else {
                         $step.Status = "Failed"
                         $step.ActualResult = "NotFound"
                         $stepError = "Service '$serviceName' not found."
-                        Write-Log $stepError -Level "ERROR"
+                        Write-ActivityLog $stepError -Level "ERROR"
                     }
                 }
                 "EventLogQuery" {
                     $kqlQueryPlaceholder = $step.ValidationTarget
                     $expectedOutcome = $step.ExpectedResult # e.g., "EventFound"
-                    
-                    Write-Log "EventLogQuery (Simulated): TargetQuery='$kqlQueryPlaceholder', ExpectedOutcome='$expectedOutcome'." -Level "INFO"
-                    Write-Log "Actual KQL execution against Log Analytics is not implemented in this version. This step type requires manual verification or external scripting with Azure context." -Level "WARNING"
+
+                    Write-ActivityLog "EventLogQuery (Simulated): TargetQuery='$kqlQueryPlaceholder', ExpectedOutcome='$expectedOutcome'." -Level "INFO"
+                    Write-ActivityLog "Actual KQL execution against Log Analytics is not implemented in this version. This step type requires manual verification or external scripting with Azure context." -Level "WARNING"
                     $step.Status = "RequiresManualCheck" # Or "NotImplemented"
                     $step.ActualResult = "NotImplemented_AzureContextRequired"
                 }
                 "ScriptExecutionCheck" {
                     $scriptPath = $step.ValidationTarget
                     $expectedResultStr = $step.ExpectedResult # e.g., "$true", "0", "Contains 'Success'"
-                    Write-Log "ScriptExecutionCheck: Path='$scriptPath', ExpectedResultString='$expectedResultStr'"
+                    Write-ActivityLog "ScriptExecutionCheck: Path='$scriptPath', ExpectedResultString='$expectedResultStr'"
 
                     if (Test-Path $scriptPath -PathType Leaf) {
                         $scriptOutput = & $scriptPath @invocationParams *>&1 # Capture all streams
@@ -138,23 +138,23 @@ Function Test-RemediationResult {
                         $stdOutput = $scriptOutput | Where-Object { $_ -isnot [System.Management.Automation.ErrorRecord] }
                         $stdOutputArray = @($stdOutput)
                         $errorsArray = @($errorsInOutput)
-                        
+
                         $step.ActualResult = $stdOutputArray -join [System.Environment]::NewLine
                         if ($errorsInOutput) { $stepError = $errorsArray -join [System.Environment]::NewLine }
 
                         $step.Status = if (Test-ExpectedOutcome -Expected $expectedResultStr -Actual $step.ActualResult -StdOutput $stdOutputArray -Errors $errorsArray) { "Success" } else { "Failed" }
-                        Write-Log "Script execution result: Status='$($step.Status)'. Output captured. Errors: '$stepError'"
+                        Write-ActivityLog "Script execution result: Status='$($step.Status)'. Output captured. Errors: '$stepError'"
                     } else {
                         $step.Status = "Failed"
                         $step.ActualResult = "NotFound"
                         $stepError = "Validation script not found: $scriptPath"
-                        Write-Log $stepError -Level "ERROR"
+                        Write-ActivityLog $stepError -Level "ERROR"
                     }
                 }
                 "FunctionCall" { # Similar to ScriptExecutionCheck
                     $functionName = $step.ValidationTarget
                     $expectedResultStr = $step.ExpectedResult
-                    Write-Log "FunctionCall: Name='$functionName', ExpectedResultString='$expectedResultStr'"
+                    Write-ActivityLog "FunctionCall: Name='$functionName', ExpectedResultString='$expectedResultStr'"
                     $funcCmd = Get-Command -Name $functionName -CommandType Function -ErrorAction SilentlyContinue
                     if ($funcCmd) {
                         $funcOutput = & $functionName @invocationParams *>&1 # Add parameters if step defines them
@@ -165,18 +165,18 @@ Function Test-RemediationResult {
 
                         $step.ActualResult = $stdOutputArray -join [System.Environment]::NewLine
                         if ($errorsInOutput) { $stepError = $errorsArray -join [System.Environment]::NewLine }
-                        
+
                         $step.Status = if (Test-ExpectedOutcome -Expected $expectedResultStr -Actual $step.ActualResult -StdOutput $stdOutputArray -Errors $errorsArray) { "Success" } else { "Failed" }
-                        Write-Log "Function call result: Status='$($step.Status)'. Output captured. Errors: '$stepError'"
+                        Write-ActivityLog "Function call result: Status='$($step.Status)'. Output captured. Errors: '$stepError'"
                     } else {
                         $step.Status = "Failed"
                         $step.ActualResult = "NotFound"
                         $stepError = "Validation function not found: $functionName"
-                        Write-Log $stepError -Level "ERROR"
+                        Write-ActivityLog $stepError -Level "ERROR"
                     }
                 }
                 "ManualCheck" {
-                    Write-Log "ManualCheck required for StepID '$($step.ValidationStepId)': $($step.Description)" -Level "INFO"
+                    Write-ActivityLog "ManualCheck required for StepID '$($step.ValidationStepId)': $($step.Description)" -Level "INFO"
                     $step.Status = "RequiresManualConfirmation"
                     $step.ActualResult = "PendingOperatorConfirmation"
                     # Optionally prompt:
@@ -185,13 +185,13 @@ Function Test-RemediationResult {
                     # else { $step.Status = "Failed"; $step.ActualResult = "OperatorConfirmedFailure" }
                 }
                 default {
-                    Write-Log "Unsupported ValidationType: '$($step.ValidationType)' for StepID '$($step.ValidationStepId)'." -Level "WARNING"
+                    Write-ActivityLog "Unsupported ValidationType: '$($step.ValidationType)' for StepID '$($step.ValidationStepId)'." -Level "WARNING"
                     $step.Status = "NotImplemented"
                     $step.ActualResult = "UnsupportedValidationType"
                 }
             }
         } catch {
-            Write-Log "Error executing validation step '$($step.ValidationStepId)'. Error: $($_.Exception.Message)" -Level "ERROR"
+            Write-ActivityLog "Error executing validation step '$($step.ValidationStepId)'. Error: $($_.Exception.Message)" -Level "ERROR"
             $step.Status = "FailedExecutionError"
             $step.ActualResult = "ExecutionError"
             $stepError = $_.Exception.Message
@@ -215,8 +215,8 @@ Function Test-RemediationResult {
     }
 
 
-    Write-Log "Test-RemediationResult script finished. OverallValidationStatus: $overallStatus."
-    
+    Write-ActivityLog "Test-RemediationResult script finished. OverallValidationStatus: $overallStatus."
+
     return @{
         OverallValidationStatus = $overallStatus
         ValidationStepResults   = $modifiableValidationSteps

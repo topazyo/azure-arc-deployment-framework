@@ -1,3 +1,24 @@
+<#
+.SYNOPSIS
+Collects consolidated system state for troubleshooting and validation flows.
+
+.DESCRIPTION
+Builds a structured snapshot of operating system, hardware, network, security,
+agent, and performance state for a target server. Optional switches extend the
+ snapshot with AMA-specific details and broader inventory data.
+
+.PARAMETER ServerName
+Target server to inspect.
+
+.PARAMETER IncludeAMA
+Includes Azure Monitor Agent state when present.
+
+.PARAMETER DetailedScan
+Adds installed software, services, scheduled tasks, and event log context.
+
+.OUTPUTS
+PSCustomObject
+#>
 function Get-SystemState {
     [CmdletBinding()]
     param (
@@ -42,7 +63,7 @@ function Get-SystemState {
             $cpu = Get-WmiObject Win32_Processor -ComputerName $ServerName
             $memory = Get-WmiObject Win32_ComputerSystem -ComputerName $ServerName
             $disk = Get-WmiObject Win32_LogicalDisk -ComputerName $ServerName -Filter "DeviceID='C:'"
-            
+
             $systemState.Hardware = @{
                 CPU = @{
                     Name = $cpu.Name
@@ -61,7 +82,7 @@ function Get-SystemState {
             }
 
             # Network Configuration
-            $network = Get-WmiObject Win32_NetworkAdapterConfiguration -ComputerName $ServerName | 
+            $network = Get-WmiObject Win32_NetworkAdapterConfiguration -ComputerName $ServerName |
                 Where-Object { $_.IPEnabled }
             $systemState.Network = @{
                 Adapters = $network | ForEach-Object {
@@ -143,9 +164,16 @@ function Get-SystemState {
     }
 }
 
+<#
+.SYNOPSIS
+Reads SCHANNEL protocol settings from a target server.
+
+.PARAMETER ServerName
+Target server to inspect.
+#>
 function Get-TLSConfiguration {
     param ([string]$ServerName)
-    
+
     try {
         $result = Invoke-Command -ComputerName $ServerName -ScriptBlock {
             $protocols = @()
@@ -172,9 +200,16 @@ function Get-TLSConfiguration {
     }
 }
 
+<#
+.SYNOPSIS
+Retrieves firewall profile state and Azure Arc related firewall rules.
+
+.PARAMETER ServerName
+Target server to inspect.
+#>
 function Get-FirewallStatus {
     param ([string]$ServerName)
-    
+
     try {
         $firewallStatus = Invoke-Command -ComputerName $ServerName -ScriptBlock {
             $fw = New-Object -ComObject HNetCfg.FwPolicy2
@@ -182,10 +217,10 @@ function Get-FirewallStatus {
                 DomainProfile = $fw.FirewallEnabled($fw.CurrentProfileTypes -band 1)
                 PrivateProfile = $fw.FirewallEnabled($fw.CurrentProfileTypes -band 2)
                 PublicProfile = $fw.FirewallEnabled($fw.CurrentProfileTypes -band 4)
-                Rules = Get-NetFirewallRule | Where-Object { 
-                    $_.DisplayName -like "*Azure*" -or 
-                    $_.DisplayName -like "*Arc*" -or 
-                    $_.DisplayName -like "*Monitor*" 
+                Rules = Get-NetFirewallRule | Where-Object {
+                    $_.DisplayName -like "*Azure*" -or
+                    $_.DisplayName -like "*Arc*" -or
+                    $_.DisplayName -like "*Monitor*"
                 }
             }
         }
@@ -197,14 +232,21 @@ function Get-FirewallStatus {
     }
 }
 
+<#
+.SYNOPSIS
+Summarizes Azure-related machine certificates on a target server.
+
+.PARAMETER ServerName
+Target server to inspect.
+#>
 function Get-CertificateStatus {
     param ([string]$ServerName)
-    
+
     try {
         $certStatus = Invoke-Command -ComputerName $ServerName -ScriptBlock {
             Get-ChildItem Cert:\LocalMachine\My | Where-Object {
-                $_.Subject -like "*Azure*" -or 
-                $_.Subject -like "*Arc*" -or 
+                $_.Subject -like "*Azure*" -or
+                $_.Subject -like "*Arc*" -or
                 $_.Subject -like "*Monitor*"
             } | ForEach-Object {
                 @{
@@ -224,20 +266,27 @@ function Get-CertificateStatus {
     }
 }
 
+<#
+.SYNOPSIS
+Collects Windows Update history and pending-update context.
+
+.PARAMETER ServerName
+Target server to inspect.
+#>
 function Get-WindowsUpdateStatus {
     param ([string]$ServerName)
-    
+
     try {
         $updateStatus = Invoke-Command -ComputerName $ServerName -ScriptBlock {
             $session = New-Object -ComObject Microsoft.Update.Session
             $searcher = $session.CreateUpdateSearcher()
             $pendingCount = $searcher.GetTotalHistoryCount()
             $history = $searcher.QueryHistory(0, $pendingCount)
-            
+
             @{
                 LastUpdateCheck = $searcher.GetTotalHistoryCount() -gt 0 ? $history[0].Date : $null
                 PendingUpdates = @(Get-WmiObject -Class Win32_QuickFixEngineering).Count
-                LastInstalledUpdate = $history | Where-Object { $_.Operation -eq 1 } | 
+                LastInstalledUpdate = $history | Where-Object { $_.Operation -eq 1 } |
                     Select-Object -First 1 | ForEach-Object { $_.Date }
             }
         }

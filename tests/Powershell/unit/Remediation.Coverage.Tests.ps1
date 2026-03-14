@@ -825,7 +825,7 @@ Describe 'Test-RemediationResult.ps1 additional branch coverage' {
 Describe 'Invoke-TroubleshootingAnalysis.ps1 additional branch coverage' {
     BeforeAll {
         foreach ($fn in @('Find-SystemStateIssues','Find-ArcAgentIssues','Find-AMAIssues',
-                          'Find-CommonPatterns','Get-IssueRecommendation','Calculate-ImpactScore',
+                  'Find-CommonPatterns','Get-IssueRecommendation','Measure-ImpactScore',
                           'Test-OSCompatibility','Analyze-ArcHealth','Analyze-AMAHealth',
                           'Calculate-ResourceUtilization','Get-ResourceRecommendations')) {
             if (-not (Get-Command $fn -ErrorAction SilentlyContinue)) {
@@ -860,7 +860,7 @@ Describe 'Invoke-TroubleshootingAnalysis.ps1 additional branch coverage' {
         Mock Find-ArcAgentIssues    { @(@{ Type='ArcAgent'; Severity='Warning'; Component='Arc'; Description='Agent disconnected'; ImpactScore=$null }) }
         Mock Find-CommonPatterns    { @() }
         Mock Get-IssueRecommendation { 'Restart the Arc service.' }
-        Mock Calculate-ImpactScore  { 0.5 }
+        Mock Measure-ImpactScore    { 0.5 }
 
         $data = @(
             [PSCustomObject]@{ Phase='SystemState';    Data=@{ OS=@{ Version='10.0' } } },
@@ -876,7 +876,7 @@ Describe 'Invoke-TroubleshootingAnalysis.ps1 additional branch coverage' {
         Mock Find-AMAIssues         { @(@{ Type='AMA'; Severity='Warning'; Component='AMA'; Description='Not running'; ImpactScore=$null }) }
         Mock Find-CommonPatterns    { @() }
         Mock Get-IssueRecommendation { 'Restart AMA service.' }
-        Mock Calculate-ImpactScore  { 0.6 }
+        Mock Measure-ImpactScore    { 0.6 }
 
         $data = @(
             [PSCustomObject]@{ Phase='SystemState';    Data=@{ OS=@{ Version='10.0' } } },
@@ -902,8 +902,8 @@ Describe 'Invoke-TroubleshootingAnalysis.ps1 additional branch coverage' {
         Mock Find-ArcAgentIssues    { @() }
         Mock Find-CommonPatterns    { @() }
         Mock Get-IssueRecommendation { 'Fix it.' }
-        Mock Calculate-ImpactScore  { 0.9 } -ParameterFilter { $Issue.Type -eq 'B' }
-        Mock Calculate-ImpactScore  { 0.1 } -ParameterFilter { $Issue.Type -eq 'A' }
+        Mock Measure-ImpactScore    { 0.9 } -ParameterFilter { $Issue.Type -eq 'B' }
+        Mock Measure-ImpactScore    { 0.1 } -ParameterFilter { $Issue.Type -eq 'A' }
 
         $data = @([PSCustomObject]@{ Phase='SystemState'; Data=@{} })
         $result = Invoke-TroubleshootingAnalysis -Data $data

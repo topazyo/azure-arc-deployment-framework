@@ -50,7 +50,7 @@ function Get-AMAPerformanceMetrics {
                 }
 
                 $metrics.Samples += $sample
-                
+
                 if ($i -lt $SampleCount) {
                     Start-Sleep -Seconds $SampleInterval
                 }

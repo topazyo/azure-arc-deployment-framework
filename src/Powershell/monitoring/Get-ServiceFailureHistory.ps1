@@ -23,28 +23,28 @@ param (
 
 # --- Helper to Extract Service Name from Event ---
 function Get-ServiceNameFromEvent {
-    param ($Event)
+    param ($Record)
     # Event ID 7034 & 7031: Service name is often Param1 (EventData[0])
     # Event ID 7023 & 7024: Service name is often Param1 (EventData[0])
-    if ($Event.Id -in @(7034, 7031, 7023, 7024)) {
-        if ($Event.Properties.Count -ge 1) {
-            return $Event.Properties[0].Value
+    if ($Record.Id -in @(7034, 7031, 7023, 7024)) {
+        if ($Record.Properties.Count -ge 1) {
+            return $Record.Properties[0].Value
         }
     }
     # Fallback: Try to parse from the message (less reliable)
-    if ($Event.Message -match "The (.*?) service terminated unexpectedly.") { return $Matches[1] }
-    if ($Event.Message -match "The (.*?) service terminated with the following error:") { return $Matches[1] }
-    if ($Event.Message -match "The (.*?) service terminated with the following service-specific error:") { return $Matches[1] }
+    if ($Record.Message -match "The (.*?) service terminated unexpectedly.") { return $Matches[1] }
+    if ($Record.Message -match "The (.*?) service terminated with the following error:") { return $Matches[1] }
+    if ($Record.Message -match "The (.*?) service terminated with the following service-specific error:") { return $Matches[1] }
     return "Unknown"
 }
 
 # --- Helper to Extract Error Code from Event ---
 function Get-ErrorCodeFromEvent {
-    param ($Event)
+    param ($Record)
     # Event ID 7023: Error code is often Param2 (EventData[1])
-    if ($Event.Id -eq 7023) {
-        if ($Event.Properties.Count -ge 2) {
-            return $Event.Properties[1].Value
+    if ($Record.Id -eq 7023) {
+        if ($Record.Properties.Count -ge 2) {
+            return $Record.Properties[1].Value
         }
     }
     return $null # Or "N/A"
@@ -52,11 +52,11 @@ function Get-ErrorCodeFromEvent {
 
 # --- Helper to Extract Service Specific Error Code from Event ---
 function Get-ServiceSpecificErrorCodeFromEvent {
-    param ($Event)
+    param ($Record)
     # Event ID 7024: Service-specific error code is often Param2 (EventData[1])
-    if ($Event.Id -eq 7024) {
-        if ($Event.Properties.Count -ge 2) {
-            return $Event.Properties[1].Value
+    if ($Record.Id -eq 7024) {
+        if ($Record.Properties.Count -ge 2) {
+            return $Record.Properties[1].Value
         }
     }
     return $null # Or "N/A"
@@ -77,7 +77,7 @@ try {
     $serviceFailureEventIDs = @(7034, 7031, 7023, 7024)
 
     Write-Log "Querying System event log for service failures (IDs: $($serviceFailureEventIDs -join ', ')) on server '$ServerName' since '$StartTime'."
-    
+
     try {
         $filterHashtable = @{
             LogName = 'System'
@@ -97,35 +97,35 @@ try {
         } else {
             Write-Log "Targeting local server."
         }
-            
+
         $events = Get-WinEvent @getWinEventParams
 
         if ($events) {
             Write-Log "Found $($events.Count) potential service failure events in System log before filtering by service name."
-            
-            foreach ($event in $events) {
-                $eventServiceName = Get-ServiceNameFromEvent -Event $event
-                
+
+            foreach ($logRecord in $events) {
+                $serviceNameFromRecord = Get-ServiceNameFromEvent -Record $logRecord
+
                 # Filter by ServiceName if provided
                 if ($ServiceName -and $ServiceName.Count -gt 0) {
-                    if ($ServiceName -contains $eventServiceName) {
+                    if ($ServiceName -contains $serviceNameFromRecord) {
                         # Matched one of the specified services
                     } else {
                         continue # Skip this event, it's not for a service we're interested in
                     }
                 }
 
-                $errorCode = Get-ErrorCodeFromEvent -Event $event
-                $serviceSpecificErrorCode = Get-ServiceSpecificErrorCodeFromEvent -Event $event
-                
+                $errorCode = Get-ErrorCodeFromEvent -Record $logRecord
+                $serviceSpecificErrorCode = Get-ServiceSpecificErrorCodeFromEvent -Record $logRecord
+
                 $allFailureEvents.Add([PSCustomObject]@{
-                    Timestamp       = $event.TimeCreated
-                    EventId         = $event.Id
-                    ServiceName     = $eventServiceName
-                    Message         = $event.Message 
+                    Timestamp       = $logRecord.TimeCreated
+                    EventId         = $logRecord.Id
+                    ServiceName     = $serviceNameFromRecord
+                    Message         = $logRecord.Message
                     ErrorCode       = $errorCode
                     ServiceSpecificErrorCode = $serviceSpecificErrorCode
-                    MachineName     = $event.MachineName
+                    MachineName     = $logRecord.MachineName
                 }) | Out-Null
             }
             Write-Log "After filtering by ServiceName (if specified), collected $($allFailureEvents.Count) failure events."
@@ -134,13 +134,13 @@ try {
             Write-Log "No service failure events found in System log for the specified criteria."
         }
     }
-    catch [System.Diagnostics.Eventing.Reader.EventLogNotFoundException],[System.UnauthorizedAccessException] { 
+    catch [System.Diagnostics.Eventing.Reader.EventLogNotFoundException],[System.UnauthorizedAccessException] {
         Write-Log "Failed to query System log on '$ServerName'. Log might be inaccessible. Error: $($_.Exception.Message)" -Level "WARNING"
     }
-    catch { 
+    catch {
         Write-Log "An error occurred while querying System log on '$ServerName'. Error: $($_.Exception.Message)" -Level "ERROR"
     }
-    
+
 
     Write-Log "Get-ServiceFailureHistory script finished. Total events returned: $($allFailureEvents.Count)."
     return $allFailureEvents
@@ -151,5 +151,5 @@ catch {
     if ($_.ScriptStackTrace) {
         Write-Log "Stack Trace: $($_.ScriptStackTrace)" -Level "FATAL"
     }
-    return @() 
+    return @()
 }

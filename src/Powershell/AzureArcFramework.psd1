@@ -7,7 +7,7 @@
     Copyright = '(c) 2024 Your Company. All rights reserved.'
     Description = 'Azure Arc Deployment and Management Framework'
     PowerShellVersion = '5.1'
-    
+
     # NOTE: Az.* dependencies are imported on-demand by cmdlets that need them.
     # Keeping this empty allows unit tests and lightweight environments to import the module.
     RequiredModules = @()

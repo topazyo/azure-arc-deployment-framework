@@ -478,7 +478,7 @@ function Test-ArcAgentResourceUsage {
         $arcProcess = Invoke-Command -ComputerName $ServerName -ScriptBlock {
             Get-Process -Name 'himds' -ErrorAction SilentlyContinue
         } -ErrorAction SilentlyContinue
-        
+
         if (-not $arcProcess) {
             $result.Status = "Critical"
             $result.Details += "Arc agent process (himds) not found"
@@ -540,7 +540,7 @@ function Test-AMAAgentResourceUsage {
         $amaProcess = Invoke-Command -ComputerName $ServerName -ScriptBlock {
             Get-Process -Name 'AzureMonitorAgent' -ErrorAction SilentlyContinue
         } -ErrorAction SilentlyContinue
-        
+
         if (-not $amaProcess) {
             $result.Status = "Critical"
             $result.Details += "AMA agent process not found"

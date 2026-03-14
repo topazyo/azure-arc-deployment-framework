@@ -1,3 +1,27 @@
+<#
+.SYNOPSIS
+Gets Azure Monitor Agent health details for a server.
+
+.DESCRIPTION
+Collects AMA service state, data-collection status, performance metrics,
+connectivity results, and derived issue records, then computes an overall health
+classification for the monitored server.
+
+.PARAMETER ServerName
+Target server to inspect.
+
+.PARAMETER WorkspaceId
+Log Analytics workspace identifier used for AMA data checks.
+
+.PARAMETER LookbackHours
+Lookback window used when querying recent AMA data-collection status.
+
+.OUTPUTS
+PSCustomObject
+
+.EXAMPLE
+Get-AMAHealthStatus -ServerName 'SERVER01' -WorkspaceId '<workspace-id>' -LookbackHours 24
+#>
 function Get-AMAHealthStatus {
     [CmdletBinding()]
     param (
@@ -126,11 +150,11 @@ function Get-AMADataCollectionStatus {
             union *
             | where TimeGenerated > ago($LookbackHours h)
             | where Computer == '$ServerName'
-            | summarize 
+            | summarize
                 LastIngestionTime = max(TimeGenerated),
                 RecordCount = count(),
                 DataTypes = make_set(Type)
-            | extend 
+            | extend
                 IngestionStatus = iff(LastIngestionTime > ago(15m), 'Active', 'Inactive'),
                 IngestionDelay = datetime_diff('minute', now(), LastIngestionTime)
 "@
@@ -156,7 +180,7 @@ function Get-AMADataCollectionStatus {
         }
     }
     catch {
-        Write-Error "Failed to get data collection status: $_"
+        Write-Warning "Failed to get data collection status: $($_.Exception.Message)"
         return $null
     }
 }
@@ -249,7 +273,7 @@ function Test-WorkspaceConnectivity {
     try {
         # Get workspace details
         $workspace = Get-AzOperationalInsightsWorkspace -ResourceId $WorkspaceId
-        
+
         return @{
             Success = $true
             Name = $workspace.Name

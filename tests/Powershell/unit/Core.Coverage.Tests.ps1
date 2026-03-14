@@ -1537,6 +1537,9 @@ Describe 'Start-ArcDiagnostics.ps1 Coverage' {
                 Set-Item "Function:global:$fn" -Value { param() @{} }
             }
         }
+        if (-not (Get-Command Get-LastHeartbeat -ErrorAction SilentlyContinue)) {
+            Set-Item 'Function:global:Get-LastHeartbeat' -Value { param([string]$ServerName) [PSCustomObject]@{ Timestamp = Get-Date } }
+        }
         . (Join-Path $script:SrcRoot 'core\Start-ArcDiagnostics.ps1')
     }
 
@@ -2036,6 +2039,9 @@ Describe 'Start-ArcTroubleshooter.ps1 Coverage' {
                 Set-Item "Function:global:$fn" -Value { param() @{ Status = 'Success'; Data = @{}; SessionId = 'test' } }
             }
         }
+        if (-not (Get-Command Start-ArcDiagnostics -ErrorAction SilentlyContinue)) {
+            Set-Item 'Function:global:Start-ArcDiagnostics' -Value { param() [PSCustomObject]@{ ArcStatus = @{}; SessionId = 'diag-seeded' } }
+        }
         . (Join-Path $script:SrcRoot 'core\Start-ArcTroubleshooter.ps1')
     }
 
@@ -2501,9 +2507,9 @@ Describe 'Test-ValidationMatrix.ps1 extra branch coverage' {
 # ---------------------------------------------------------------------------
 Describe 'Invoke-ArcAnalysis.ps1 additional branch coverage' {
     BeforeAll {
-        if (-not (Get-Command Invoke-ArcAnalysis -ErrorAction SilentlyContinue)) {
-            . (Join-Path $script:SrcRoot 'core\Invoke-ArcAnalysis.ps1')
-        }
+        Remove-Item Function:\global:Invoke-ArcAnalysis -ErrorAction SilentlyContinue
+        Remove-Item Function:\Invoke-ArcAnalysis -ErrorAction SilentlyContinue
+        . (Join-Path $script:SrcRoot 'core\Invoke-ArcAnalysis.ps1')
     }
 
     BeforeEach {
@@ -2842,33 +2848,33 @@ Describe 'Invoke-TroubleshootingAnalysis.ps1 additional branches' {
         $result.Actions | Should -Not -BeNullOrEmpty
     }
 
-    It 'Calculate-ImpactScore returns positive value for Critical ArcAgent service issue' {
+    It 'Measure-ImpactScore returns positive value for Critical ArcAgent service issue' {
         $issue = [PSCustomObject]@{ Type = 'Service'; Component = 'ArcAgent'; Severity = 'Critical' }
-        $result = Calculate-ImpactScore -Issue $issue
+        $result = Measure-ImpactScore -Issue $issue
         $result | Should -BeGreaterThan 0
     }
 
-    It 'Calculate-ImpactScore caps score at 200' {
+    It 'Measure-ImpactScore caps score at 200' {
         $issue = [PSCustomObject]@{ Type = 'SystemRequirement'; Component = 'ArcAgent'; Severity = 'Critical' }
-        $result = Calculate-ImpactScore -Issue $issue
+        $result = Measure-ImpactScore -Issue $issue
         $result | Should -BeLessOrEqual 200
     }
 
-    It 'Calculate-ImpactScore returns lower score for Low vs Critical severity' {
+    It 'Measure-ImpactScore returns lower score for Low vs Critical severity' {
         $lowIssue  = [PSCustomObject]@{ Type = 'Resource'; Component = 'DiskSpace'; Severity = 'Low' }
         $highIssue = [PSCustomObject]@{ Type = 'Resource'; Component = 'DiskSpace'; Severity = 'Critical' }
-        (Calculate-ImpactScore -Issue $lowIssue) | Should -BeLessThan (Calculate-ImpactScore -Issue $highIssue)
+        (Measure-ImpactScore -Issue $lowIssue) | Should -BeLessThan (Measure-ImpactScore -Issue $highIssue)
     }
 
-    It 'Calculate-ImpactScore handles default component multiplier (no special component)' {
+    It 'Measure-ImpactScore handles default component multiplier (no special component)' {
         $issue = [PSCustomObject]@{ Type = 'Connectivity'; Component = 'Network'; Severity = 'Warning' }
-        $result = Calculate-ImpactScore -Issue $issue
+        $result = Measure-ImpactScore -Issue $issue
         $result | Should -BeGreaterThan 0
     }
 
-    It 'Calculate-ImpactScore returns score for Information severity' {
+    It 'Measure-ImpactScore returns score for Information severity' {
         $issue = [PSCustomObject]@{ Type = 'DataCollection'; Component = 'AMA'; Severity = 'Information' }
-        $result = Calculate-ImpactScore -Issue $issue
+        $result = Measure-ImpactScore -Issue $issue
         $result | Should -BeGreaterThan 0
     }
 
@@ -3251,12 +3257,12 @@ Describe 'ArcDeploymentFramework.psm1 module coverage' {
             $module = Import-Module $script:FrameworkModulePath -Force -PassThru -ErrorAction Stop
 
             & $module {
-                function Deploy-ArcAgent {
+                $script:DeployArcAgentOverride = {
                     param($ServerName)
                     New-Object psobject -Property @{ Status = 'Success'; ServerName = $ServerName; Validation = $null }
                 }
 
-                function Test-DeploymentHealth {
+                $script:TestDeploymentHealthOverride = {
                     param($ServerName, [switch]$ValidateAMA)
                     [PSCustomObject]@{ Status = 'Healthy'; AMAValidated = $ValidateAMA.IsPresent; ServerName = $ServerName }
                 }

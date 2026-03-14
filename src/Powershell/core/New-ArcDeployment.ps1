@@ -1,3 +1,49 @@
+<#
+.SYNOPSIS
+Builds the Azure Arc onboarding command for a target server.
+
+.DESCRIPTION
+Prepares deployment metadata, optionally validates service-principal onboarding
+inputs, and returns the azcmagent connect command string that operators execute on
+the target machine. The cmdlet does not perform the onboarding connection itself.
+
+.PARAMETER ServerName
+Server name used for tracking and deployment output.
+
+.PARAMETER ResourceGroupName
+Target resource group for the Arc server resource.
+
+.PARAMETER SubscriptionId
+Target Azure subscription identifier.
+
+.PARAMETER Location
+Azure location for the Arc server resource.
+
+.PARAMETER TenantId
+Target Microsoft Entra tenant identifier.
+
+.PARAMETER CorrelationId
+Optional correlation identifier appended to the onboarding command.
+
+.PARAMETER ProxyUrl
+Optional proxy URL passed to azcmagent.
+
+.PARAMETER ServicePrincipalAppId
+Optional service principal application identifier for non-interactive onboarding.
+
+.PARAMETER ServicePrincipalSecret
+Secure string secret paired with ServicePrincipalAppId.
+
+.OUTPUTS
+PSCustomObject
+
+.EXAMPLE
+New-ArcDeployment -ServerName 'SERVER01' -ResourceGroupName 'arc-rg' -SubscriptionId '<subscription-id>' -Location 'eastus' -TenantId '<tenant-id>'
+
+.NOTES
+The returned onboarding command is operational evidence and should be preserved
+with the deployment record.
+#>
 function New-ArcDeployment {
     [CmdletBinding(SupportsShouldProcess = $true, ConfirmImpact = 'High')]
     param (
@@ -135,13 +181,13 @@ function New-ArcDeployment {
         Write-Information $connectCommand
 
         if ($PSCmdlet.ShouldProcess("Execute the azcmagent connect command on server '$ServerName' (locally)", "Execute Onboarding Command")) {
-            Write-Host "Please execute the above command on the server '$ServerName' to complete Arc onboarding."
+            Write-Information "Please execute the above command on the server '$ServerName' to complete Arc onboarding." -InformationAction Continue
             Write-Warning "This script will not execute the command directly in this version. Manual execution is required."
             # In a future version, this could use Invoke-Command for remote execution or Start-Process for local.
             # For example (local execution):
             # try {
             #     Invoke-Expression -Command $connectCommand -ErrorAction Stop
-            #     Write-Host "azcmagent connect command executed. Check agent status with '$AzcmagentPath show'."
+            #     Write-Information "azcmagent connect command executed. Check agent status with '$AzcmagentPath show'." -InformationAction Continue
             # } catch {
             #     Write-Error "Error executing azcmagent connect: $($_.Exception.Message)"
             #     throw "azcmagent connect command failed."

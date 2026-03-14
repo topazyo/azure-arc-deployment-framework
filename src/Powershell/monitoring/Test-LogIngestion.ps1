@@ -88,7 +88,7 @@ function Test-LogIngestion {
         catch {
             $ingestionStatus.Status = "Error"
             $ingestionStatus.Error = $_.Exception.Message
-            Write-Error $_
+            Write-Warning "Log ingestion test failed: $($_.Exception.Message)"
         }
     }
 

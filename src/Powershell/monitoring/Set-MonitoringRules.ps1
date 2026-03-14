@@ -10,7 +10,7 @@ function Set-MonitoringRules {
     )
 
     begin {
-        $monitoringRules = Get-Content $RulesPath | ConvertFrom-Json
+        $monitoringRules = $null
         $results = @{
             ServerName = $ServerName
             RulesApplied = @()
@@ -21,6 +21,10 @@ function Set-MonitoringRules {
 
     process {
         try {
+            if (-not $monitoringRules) {
+                $monitoringRules = Get-Content $RulesPath | ConvertFrom-Json
+            }
+
             foreach ($rule in $monitoringRules.Rules) {
                 $ruleResult = @{
                     Name = $rule.Name
@@ -67,15 +71,17 @@ function Set-MonitoringRules {
             }
 
             # Verify rules application
-            $verificationResults = Test-MonitoringRules -ServerName $ServerName
-            foreach ($verify in $verificationResults) {
-                if (-not $verify.Success) {
-                    $results.Warnings += "Rule verification failed: $($verify.Name)"
+            if (Get-Command Test-MonitoringRules -ErrorAction SilentlyContinue) {
+                $verificationResults = Test-MonitoringRules -ServerName $ServerName
+                foreach ($verify in $verificationResults) {
+                    if (-not $verify.Success) {
+                        $results.Warnings += "Rule verification failed: $($verify.Name)"
+                    }
                 }
             }
         }
         catch {
-            Write-Error "Failed to apply monitoring rules: $_"
+            Write-Warning "Failed to apply monitoring rules: $($_.Exception.Message)"
             $results.Errors += $_.Exception.Message
         }
     }

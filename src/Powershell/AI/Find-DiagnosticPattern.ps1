@@ -10,8 +10,8 @@ param(
     [Parameter()] [string]$LogPath = "C:\ProgramData\AzureArcFramework\Logs\FindDiagnosticPattern_Activity.log"
 )
 
-if (-not (Get-Command -Name Write-Log -ErrorAction SilentlyContinue)) {
-    function Write-Log {
+if (-not (Get-Command -Name Write-ActivityLog -ErrorAction SilentlyContinue)) {
+    function Write-ActivityLog {
         param (
             [string]$Message,
             [string]$Level = "INFO",
@@ -26,8 +26,86 @@ if (-not (Get-Command -Name Write-Log -ErrorAction SilentlyContinue)) {
             Add-Content -Path $Path -Value $logEntry -ErrorAction Stop
         } catch {
             Write-Warning "Failed to write to activity log file $Path. Error: $($_.Exception.Message). Logging to console instead."
-            Write-Host $logEntry
+            Write-Verbose $logEntry
         }
+    }
+}
+
+function ConvertTo-NormalizedDiagnosticPattern {
+    param(
+        [Parameter(Mandatory = $true)]
+        [object]$Pattern
+    )
+
+    $patternName = if ($Pattern.PSObject.Properties.Name -contains 'PatternName') {
+        $Pattern.PatternName
+    }
+    elseif ($Pattern.PSObject.Properties.Name -contains 'Name') {
+        $Pattern.Name
+    }
+    elseif ($Pattern.PSObject.Properties.Name -contains 'PatternId') {
+        $Pattern.PatternId
+    }
+    else {
+        $null
+    }
+
+    $description = if ($Pattern.PSObject.Properties.Name -contains 'Description') {
+        $Pattern.Description
+    }
+    else {
+        $patternName
+    }
+
+    $patternType = if ($Pattern.PSObject.Properties.Name -contains 'Type') {
+        $Pattern.Type
+    }
+    elseif ($Pattern.PSObject.Properties.Name -contains 'Condition' -and $Pattern.Condition.PSObject.Properties.Name -contains 'Type') {
+        $Pattern.Condition.Type
+    }
+    else {
+        'KeywordMatch'
+    }
+
+    $rawConditions = if ($Pattern.PSObject.Properties.Name -contains 'Conditions') {
+        @($Pattern.Conditions)
+    }
+    elseif ($Pattern.PSObject.Properties.Name -contains 'Condition') {
+        @($Pattern.Condition)
+    }
+    else {
+        @()
+    }
+
+    $conditions = @(
+        foreach ($condition in $rawConditions) {
+            $eventProperty = if ($condition.PSObject.Properties.Name -contains 'EventProperty') {
+                $condition.EventProperty
+            }
+            elseif ($condition.PSObject.Properties.Name -contains 'Field') {
+                $condition.Field
+            }
+            else {
+                'Message'
+            }
+
+            [PSCustomObject]@{
+                EventProperty = $eventProperty
+                Keywords = @($condition.Keywords)
+                MinOccurrences = if ($condition.PSObject.Properties.Name -contains 'MinOccurrences') { [int]$condition.MinOccurrences } else { 1 }
+            }
+        }
+    )
+
+    if ([string]::IsNullOrWhiteSpace($patternName) -or $conditions.Count -eq 0) {
+        return $null
+    }
+
+    return [PSCustomObject]@{
+        PatternName = $patternName
+        Description = $description
+        Type = $patternType
+        Conditions = $conditions
     }
 }
 
@@ -47,13 +125,13 @@ function Find-DiagnosticPattern {
         [string]$LogPath = "C:\ProgramData\AzureArcFramework\Logs\FindDiagnosticPattern_Activity.log"
     )
 
-    Write-Log -Message "Starting Find-DiagnosticPattern script." -Path $LogPath
-    Write-Log -Message "InputData count: $($InputData.Count). MaxPatternsToReturn: $MaxPatternsToReturn." -Path $LogPath
+    Write-ActivityLog -Message "Starting Find-DiagnosticPattern script." -Path $LogPath
+    Write-ActivityLog -Message "InputData count: $($InputData.Count). MaxPatternsToReturn: $MaxPatternsToReturn." -Path $LogPath
 
     $patterns = @()
 
     if (-not [string]::IsNullOrWhiteSpace($PatternDefinitionPath)) {
-        Write-Log -Message "Loading pattern definitions from: $PatternDefinitionPath" -Path $LogPath
+        Write-ActivityLog -Message "Loading pattern definitions from: $PatternDefinitionPath" -Path $LogPath
         if (Test-Path $PatternDefinitionPath -PathType Leaf) {
             try {
                 $jsonContent = Get-Content -Path $PatternDefinitionPath -Raw | ConvertFrom-Json -ErrorAction Stop
@@ -65,22 +143,45 @@ function Find-DiagnosticPattern {
                 }
 
                 if ($parsedPatterns) {
-                    $patterns = @($parsedPatterns)
-                    Write-Log -Message "Successfully loaded $($patterns.Count) patterns from JSON file." -Path $LogPath
+                    $patterns = @(
+                        foreach ($parsedPattern in @($parsedPatterns)) {
+                            $normalizedPattern = ConvertTo-NormalizedDiagnosticPattern -Pattern $parsedPattern
+                            if ($normalizedPattern) {
+                                $normalizedPattern
+                            }
+                        }
+                    )
+                    Write-ActivityLog -Message "Successfully loaded $($patterns.Count) patterns from JSON file." -Path $LogPath
                 } else {
-                    Write-Log -Message "Pattern file '$PatternDefinitionPath' does not contain a 'patterns' array at the root." -Level "WARNING" -Path $LogPath
+                    Write-ActivityLog -Message "Pattern file '$PatternDefinitionPath' does not contain a 'patterns' array at the root." -Level "WARNING" -Path $LogPath
                 }
             } catch {
-                Write-Log -Message "Failed to load or parse pattern definition file '$PatternDefinitionPath'. Error: $($_.Exception.Message)" -Level "ERROR" -Path $LogPath
+                Write-ActivityLog -Message "Failed to load or parse pattern definition file '$PatternDefinitionPath'. Error: $($_.Exception.Message)" -Level "ERROR" -Path $LogPath
             }
         } else {
-            Write-Log -Message "Pattern definition file not found at: $PatternDefinitionPath" -Level "WARNING" -Path $LogPath
+            Write-ActivityLog -Message "Pattern definition file not found at: $PatternDefinitionPath" -Level "WARNING" -Path $LogPath
         }
     }
 
     if ($patterns.Count -eq 0) {
-        Write-Log -Message "Using hardcoded pattern definitions." -Path $LogPath
+        Write-ActivityLog -Message "Using hardcoded pattern definitions." -Path $LogPath
         $patterns = @(
+            [PSCustomObject]@{
+                PatternName = 'HimdsServiceFailure'
+                Description = 'Messages showing himds service failures or stoppages.'
+                Type = 'KeywordMatch'
+                Conditions = @(
+                    [PSCustomObject]@{ EventProperty = 'Message'; Keywords = @('himds', 'service'); MinOccurrences = 1 }
+                )
+            },
+            [PSCustomObject]@{
+                PatternName = 'TlsHandshakeFailure'
+                Description = 'Messages showing TLS handshake failures.'
+                Type = 'KeywordMatch'
+                Conditions = @(
+                    [PSCustomObject]@{ EventProperty = 'Message'; Keywords = @('tls', 'handshake'); MinOccurrences = 1 }
+                )
+            },
             @{
                 PatternName = "ServiceTerminatedUnexpectedly"
                 Description = "Events indicating a service terminated unexpectedly (e.g., Event ID 7034 or similar)."
@@ -106,20 +207,20 @@ function Find-DiagnosticPattern {
                 )
             }
         )
-        Write-Log -Message "Loaded $($patterns.Count) hardcoded patterns." -Path $LogPath
+        Write-ActivityLog -Message "Loaded $($patterns.Count) hardcoded patterns." -Path $LogPath
     }
 
     $matchedPatternsOutput = [System.Collections.ArrayList]::new()
 
     foreach ($pattern in $patterns) {
         if ($matchedPatternsOutput.Count -ge $MaxPatternsToReturn) {
-            Write-Log "Reached MaxPatternsToReturn ($MaxPatternsToReturn). Stopping pattern search." -Path $LogPath
+            Write-ActivityLog "Reached MaxPatternsToReturn ($MaxPatternsToReturn). Stopping pattern search." -Path $LogPath
             break
         }
 
-        Write-Log -Message "Processing pattern: '$($pattern.PatternName)' of Type: '$($pattern.Type)'" -Path $LogPath
+        Write-ActivityLog -Message "Processing pattern: '$($pattern.PatternName)' of Type: '$($pattern.Type)'" -Path $LogPath
         if ($pattern.Type -ne "KeywordMatch") {
-            Write-Log -Message "Skipping pattern '$($pattern.PatternName)' as its type '$($pattern.Type)' is not supported in this version." -Level "WARNING" -Path $LogPath
+            Write-ActivityLog -Message "Skipping pattern '$($pattern.PatternName)' as its type '$($pattern.Type)' is not supported in this version." -Level "WARNING" -Path $LogPath
             continue
         }
 
@@ -128,20 +229,20 @@ function Find-DiagnosticPattern {
 
         foreach ($condition in $pattern.Conditions) {
             if ($condition.EventProperty -ne "Message") {
-                Write-Log "Skipping condition for pattern '$($pattern.PatternName)' as EventProperty '$($condition.EventProperty)' is not 'Message' (only 'Message' supported for KeywordMatch)." -Level "WARNING" -Path $LogPath
+                Write-ActivityLog "Skipping condition for pattern '$($pattern.PatternName)' as EventProperty '$($condition.EventProperty)' is not 'Message' (only 'Message' supported for KeywordMatch)." -Level "WARNING" -Path $LogPath
                 continue
             }
 
             $keywords = @($condition.Keywords)
             $minOccurrences = if ($condition.PSObject.Properties.Name -contains 'MinOccurrences') { $condition.MinOccurrences } else { 1 }
-            
+
             $conditionMatchingItems = [System.Collections.ArrayList]::new()
 
             foreach ($item in $InputData) {
                 if (-not ($item.PSObject.Properties.Name -contains $condition.EventProperty)) {
                     continue
                 }
-                
+
                 $propertyValue = $item.($condition.EventProperty)
                 if (-not ($propertyValue -is [string])) {
                     continue
@@ -159,21 +260,21 @@ function Find-DiagnosticPattern {
                     $conditionMatchingItems.Add($item) | Out-Null
                 }
             }
-            
-            Write-Log -Message "Pattern '$($pattern.PatternName)', Condition (Keywords: $($keywords -join ', ')): Found $($conditionMatchingItems.Count) items." -Path $LogPath
+
+            Write-ActivityLog -Message "Pattern '$($pattern.PatternName)', Condition (Keywords: $($keywords -join ', ')): Found $($conditionMatchingItems.Count) items." -Path $LogPath
             if ($conditionMatchingItems.Count -lt $minOccurrences) {
                 $allConditionsMetForPattern = $false
-                Write-Log -Message "Pattern '$($pattern.PatternName)' did not meet MinOccurrences ($minOccurrences) for a condition. Required: $minOccurrences, Found: $($conditionMatchingItems.Count)." -Path $LogPath
+                Write-ActivityLog -Message "Pattern '$($pattern.PatternName)' did not meet MinOccurrences ($minOccurrences) for a condition. Required: $minOccurrences, Found: $($conditionMatchingItems.Count)." -Path $LogPath
                 break
             }
-            
+
             $overallMatchingItems.AddRange($conditionMatchingItems)
         }
 
         if ($allConditionsMetForPattern -and $overallMatchingItems.Count -gt 0) {
             $distinctMatchingItems = $overallMatchingItems
-            Write-Log -Message "Pattern '$($pattern.PatternName)' MATCHED with $($distinctMatchingItems.Count) distinct items." -Level "INFO" -Path $LogPath
-            
+            Write-ActivityLog -Message "Pattern '$($pattern.PatternName)' MATCHED with $($distinctMatchingItems.Count) distinct items." -Level "INFO" -Path $LogPath
+
             $exampleItems = $distinctMatchingItems | Select-Object -First 5
 
             $matchedPatternsOutput.Add([PSCustomObject]@{
@@ -185,7 +286,7 @@ function Find-DiagnosticPattern {
         }
     }
 
-    Write-Log -Message "Pattern search completed with $($matchedPatternsOutput.Count) matched patterns." -Path $LogPath
+    Write-ActivityLog -Message "Pattern search completed with $($matchedPatternsOutput.Count) matched patterns." -Path $LogPath
     return ,$matchedPatternsOutput
 }
 

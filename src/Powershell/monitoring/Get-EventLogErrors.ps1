@@ -4,14 +4,15 @@
 param (
     [Parameter(Mandatory = $false)]
     [string[]]$LogName = @(
-        'Application', 
-        'System', 
-        'Microsoft-Windows-AzureConnectedMachineAgent/Operational', 
+        'Application',
+        'System',
+        'Microsoft-Windows-AzureConnectedMachineAgent/Operational',
         'Microsoft-Windows-GuestAgent/Operational', # Azure VM Guest Agent log
         'Microsoft-AzureArc-GuestConfig/Operational' # Guest Configuration log
     ),
 
     [Parameter(Mandatory = $false)]
+    [Alias('MaxEventsPerLog')]
     [int]$MaxEvents = 100,
 
     [Parameter(Mandatory = $false)]
@@ -62,20 +63,20 @@ try {
             } else {
                 Write-Log "Targeting local server."
             }
-            
+
             $events = Get-WinEvent @getWinEventParams
 
             if ($events) {
                 Write-Log "Found $($events.Count) error events in '$singleLogName'."
-                foreach ($event in $events) {
+                foreach ($inputEvent in $events) {
                     $allErrorEvents.Add([PSCustomObject]@{
-                        Timestamp    = $event.TimeCreated
-                        LogName      = $event.LogName
-                        EventId      = $event.Id
-                        Level        = $event.LevelDisplayName
-                        Source       = $event.ProviderName
-                        Message      = $event.Message # Keep it concise, full message can be long
-                        MachineName  = $event.MachineName
+                        Timestamp    = $inputEvent.TimeCreated
+                        LogName      = $inputEvent.LogName
+                        EventId      = $inputEvent.Id
+                        Level        = $inputEvent.LevelDisplayName
+                        Source       = $inputEvent.ProviderName
+                        Message      = $inputEvent.Message # Keep it concise, full message can be long
+                        MachineName  = $inputEvent.MachineName
                     }) | Out-Null
                 }
             } else {
@@ -93,7 +94,7 @@ try {
 
     Write-Log "Total error events retrieved: $($allErrorEvents.Count)."
     Write-Log "Get-EventLogErrors script finished."
-    
+
     return $allErrorEvents
 
 }
@@ -103,5 +104,5 @@ catch {
         Write-Log "Stack Trace: $($_.ScriptStackTrace)" -Level "FATAL"
     }
     # Return an empty array or rethrow, depending on desired behavior for critical failure
-    return @() 
+    return @()
 }

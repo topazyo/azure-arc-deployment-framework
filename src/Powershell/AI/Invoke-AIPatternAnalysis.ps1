@@ -1,3 +1,36 @@
+<#
+.SYNOPSIS
+Analyzes log data for recurring diagnostic patterns.
+
+.DESCRIPTION
+Reads log content from a file or direct input, extracts pattern records across the
+requested time window, calculates summary statistics, optionally uses cloud
+analysis, and can generate remediation-oriented recommendations.
+
+.PARAMETER LogPath
+Path to the log file to analyze when LogContent is not supplied.
+
+.PARAMETER DaysToAnalyze
+Time window in days for filtering log records.
+
+.PARAMETER OutputPath
+Optional directory for writing the analysis report JSON.
+
+.PARAMETER GenerateRecommendations
+Generates recommendations from the discovered patterns.
+
+.PARAMETER UseCloudAnalysis
+Uses cloud analysis when the required command is available.
+
+.PARAMETER LogContent
+Optional in-memory log lines to analyze instead of reading from disk.
+
+.OUTPUTS
+PSCustomObject
+
+.EXAMPLE
+Invoke-AIPatternAnalysis -LogPath '.\Logs\agent.log' -DaysToAnalyze 14 -GenerateRecommendations
+#>
 function Invoke-AIPatternAnalysis {
     [CmdletBinding()]
     param (
@@ -215,7 +248,7 @@ function Get-SeverityScore {
         [Parameter(Mandatory)]
         [hashtable]$Impact
     )
-    
+
     $weights = @{
         ServiceDisruption = 0.4
         SecurityIssues = 0.3

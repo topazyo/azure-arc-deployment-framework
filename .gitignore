@@ -427,3 +427,9 @@ fix_flake8*.py
 
 # JetBrains Rider
 *.sln.iml
+
+# Architectural Decision Records (ADR)
+docs/adr/
+
+# Diagnostics output
+Diagnostics/

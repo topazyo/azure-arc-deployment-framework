@@ -20,7 +20,7 @@ Function Get-AIRecommendations {
     )
 
     # --- Logging Function (for script activity) ---
-    function Write-Log {
+    function Write-ActivityLog {
         param (
             [string]$Message,
             [string]$Level = "INFO", # INFO, WARNING, ERROR
@@ -28,7 +28,7 @@ Function Get-AIRecommendations {
         )
         $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
         $logEntry = "[$timestamp] [$Level] $Message"
-        
+
         try {
             if (-not (Test-Path (Split-Path $Path -Parent) -PathType Container)) {
                 New-Item -ItemType Directory -Path (Split-Path $Path -Parent) -Force -ErrorAction Stop | Out-Null
@@ -37,11 +37,11 @@ Function Get-AIRecommendations {
         }
         catch {
             Write-Warning "ACTIVITY_LOG_FAIL: Failed to write to activity log file $Path. Error: $($_.Exception.Message). Logging to console instead."
-            Write-Host $logEntry 
+            Write-Verbose $logEntry
         }
     }
 
-    Write-Log "Starting Get-AIRecommendations script. InputFeatures count: $($InputFeatures.Count)."
+    Write-ActivityLog "Starting Get-AIRecommendations script. InputFeatures count: $($InputFeatures.Count)."
 
     function Test-Condition {
         param(
@@ -108,26 +108,26 @@ Function Get-AIRecommendations {
     $recommendationRules = @()
 
     if (-not [string]::IsNullOrWhiteSpace($RecommendationRulesPath)) {
-        Write-Log "Loading recommendation rules from: $RecommendationRulesPath"
+        Write-ActivityLog "Loading recommendation rules from: $RecommendationRulesPath"
         if (Test-Path $RecommendationRulesPath -PathType Leaf) {
             try {
                 $jsonContent = Get-Content -Path $RecommendationRulesPath -Raw | ConvertFrom-Json -ErrorAction Stop
                 if ($jsonContent.rules) {
                     $recommendationRules = $jsonContent.rules
-                    Write-Log "Successfully loaded $($recommendationRules.Count) rules from JSON file."
+                    Write-ActivityLog "Successfully loaded $($recommendationRules.Count) rules from JSON file."
                 } else {
-                    Write-Log "Rules file '$RecommendationRulesPath' does not contain a 'rules' array at the root." -Level "WARNING"
+                    Write-ActivityLog "Rules file '$RecommendationRulesPath' does not contain a 'rules' array at the root." -Level "WARNING"
                 }
             } catch {
-                Write-Log "Failed to load or parse rules file '$RecommendationRulesPath'. Error: $($_.Exception.Message)" -Level "ERROR"
+                Write-ActivityLog "Failed to load or parse rules file '$RecommendationRulesPath'. Error: $($_.Exception.Message)" -Level "ERROR"
             }
         } else {
-            Write-Log "Recommendation rules file not found at: $RecommendationRulesPath" -Level "WARNING"
+            Write-ActivityLog "Recommendation rules file not found at: $RecommendationRulesPath" -Level "WARNING"
         }
     }
 
     if ($recommendationRules.Count -eq 0) {
-        Write-Log "Using hardcoded recommendation rules."
+        Write-ActivityLog "Using hardcoded recommendation rules."
         $recommendationRules = @(
             @{
                 RuleName = "ServiceUnexpectedTerminationRule"
@@ -161,14 +161,14 @@ Function Get-AIRecommendations {
                 )
             }
         )
-        Write-Log "Loaded $($recommendationRules.Count) hardcoded rules."
+        Write-ActivityLog "Loaded $($recommendationRules.Count) hardcoded rules."
     }
 
     $results = [System.Collections.ArrayList]::new()
 
     foreach ($inputItem in $InputFeatures) {
         $itemRecommendations = [System.Collections.ArrayList]::new()
-        Write-Log "Processing input item: $($inputItem | Out-String -Width 200)" -Level "DEBUG"
+        Write-ActivityLog "Processing input item: $($inputItem | Out-String -Width 200)" -Level "DEBUG"
 
         foreach ($rule in $recommendationRules) {
             if ($itemRecommendations.Count -ge $MaxRecommendationsPerInput) {
@@ -197,7 +197,7 @@ Function Get-AIRecommendations {
             }
 
             if ($conditionMet) {
-                Write-Log "Rule '$($rule.RuleName)' matched for an input item."
+                Write-ActivityLog "Rule '$($rule.RuleName)' matched for an input item."
                 foreach($rec in $rule.ThenRecommend){
                     if ($itemRecommendations.Count -lt $MaxRecommendationsPerInput) {
                         $itemRecommendations.Add($rec) | Out-Null
@@ -208,13 +208,13 @@ Function Get-AIRecommendations {
 
         if ($itemRecommendations.Count -gt 0) {
             $results.Add([PSCustomObject]@{
-                InputItem       = $inputItem 
+                InputItem       = $inputItem
                 Recommendations = $itemRecommendations
             }) | Out-Null
-            Write-Log "Added $($itemRecommendations.Count) recommendations for an input item."
+            Write-ActivityLog "Added $($itemRecommendations.Count) recommendations for an input item."
         }
     }
 
-    Write-Log "Get-AIRecommendations script finished. Generated recommendations for $($results.Count) input items."
+    Write-ActivityLog "Get-AIRecommendations script finished. Generated recommendations for $($results.Count) input items."
     return $results
 }

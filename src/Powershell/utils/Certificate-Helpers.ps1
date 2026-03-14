@@ -76,7 +76,7 @@ function Test-CertificateRequirements {
     catch {
         $results.Success = $false
         $results.Error = $_.Exception.Message
-        Write-Error "Certificate validation failed: $_"
+        Write-Warning "Certificate validation failed: $($_.Exception.Message)"
     }
     finally {
         $results.EndTime = Get-Date
@@ -89,7 +89,7 @@ function Test-CertificateRequirements {
 function Test-RootCertificates {
     [CmdletBinding()]
     param ([string]$ServerName)
-    
+
     try {
         $requiredRoots = @(
             "Baltimore CyberTrust Root",
@@ -98,19 +98,17 @@ function Test-RootCertificates {
         )
 
         $results = Invoke-Command -ComputerName $ServerName -ScriptBlock {
-            param ($roots)
-            
-            $certs = Get-ChildItem -Path 'Cert:\LocalMachine\Root' | 
-                Where-Object { $_.Subject -match ($roots -join '|') }
-            
+            $certs = Get-ChildItem -Path 'Cert:\LocalMachine\Root' |
+                Where-Object { $_.Subject -match ($using:requiredRoots -join '|') }
+
             return @{
                 Found = $certs | Select-Object -Property Subject, Thumbprint, NotAfter
-                Missing = $roots | Where-Object { 
+                Missing = $using:requiredRoots | Where-Object {
                     $root = $_
                     -not ($certs | Where-Object { $_.Subject -match $root })
                 }
             }
-        } -ArgumentList $requiredRoots
+        }
 
         return @{
             Valid = $results.Missing.Count -eq 0
@@ -121,7 +119,7 @@ function Test-RootCertificates {
         }
     }
     catch {
-        Write-Error "Root certificate validation failed: $_"
+        Write-Warning "Root certificate validation failed: $($_.Exception.Message)"
         return @{
             Valid = $false
             Details = $_.Exception.Message
@@ -132,17 +130,17 @@ function Test-RootCertificates {
 function Test-CertificateChain {
     [CmdletBinding()]
     param ([string]$ServerName)
-    
+
     try {
         $results = Invoke-Command -ComputerName $ServerName -ScriptBlock {
-            $certs = Get-ChildItem -Path 'Cert:\LocalMachine\My' | 
+            $certs = Get-ChildItem -Path 'Cert:\LocalMachine\My' |
                 Where-Object { $_.Subject -match 'Azure|Arc|Monitor' }
-            
+
             $chainResults = @()
             foreach ($cert in $certs) {
                 $chain = New-Object -TypeName System.Security.Cryptography.X509Certificates.X509Chain
                 $chain.Build($cert) | Out-Null
-                
+
                 $chainElements = $chain.ChainElements | ForEach-Object {
                     @{
                         Certificate = $_.Certificate.Subject
@@ -150,17 +148,17 @@ function Test-CertificateChain {
                         StatusInformation = $_.StatusInformation
                     }
                 }
-                
+
                 $chainResults += @{
                     Certificate = $cert.Subject
                     ChainValid = $chain.ChainStatus.Length -eq 0
                     ChainElements = $chainElements
                     Errors = $chain.ChainStatus | ForEach-Object { $_.StatusInformation }
                 }
-                
+
                 $chain.Dispose()
             }
-            
+
             return $chainResults
         }
 
@@ -170,7 +168,7 @@ function Test-CertificateChain {
         }
     }
     catch {
-        Write-Error "Certificate chain validation failed: $_"
+        Write-Warning "Certificate chain validation failed: $($_.Exception.Message)"
         return @{
             Valid = $false
             Details = $_.Exception.Message

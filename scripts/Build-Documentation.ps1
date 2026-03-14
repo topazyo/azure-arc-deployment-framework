@@ -8,6 +8,9 @@ param (
     [switch]$GeneratePDF
 )
 
+$script:SphinxVersion = '8.2.3'
+$script:SphinxThemeVersion = '3.0.2'
+
 function Build-PowerShellDocs {
     [CmdletBinding()]
     param (
@@ -50,9 +53,9 @@ function Build-PythonDocs {
     try {
         Write-Information "Generating Python documentation..."
 
-        # Ensure Sphinx is installed
-        pip install sphinx sphinx-rtd-theme
-        if ($LASTEXITCODE -ne 0) { throw "pip install sphinx sphinx-rtd-theme failed with exit code $LASTEXITCODE" }
+        # Ensure Sphinx is installed with pinned versions.
+        python -m pip install "sphinx==$script:SphinxVersion" "sphinx-rtd-theme==$script:SphinxThemeVersion"
+        if ($LASTEXITCODE -ne 0) { throw "pip install pinned sphinx packages failed with exit code $LASTEXITCODE" }
 
         # Create Sphinx configuration
         $sphinxPath = Join-Path $OutputPath "Python"
