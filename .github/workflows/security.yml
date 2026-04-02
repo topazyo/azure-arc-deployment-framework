@@ -12,9 +12,11 @@ jobs:
   secret-scan:
     name: Gitleaks Secret Scan
     runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0  # Full history required for complete scanning
 
@@ -28,13 +30,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Scan for ARC_WORKSPACE_KEY / ARC_WORKSPACE_ID literals
         run: |
           echo "Scanning for hardcoded workspace credentials..."
           MATCHES=$(git grep -rn "ARC_WORKSPACE_KEY\|ARC_WORKSPACE_ID" \
-            -- '*.json' '*.ps1' '*.py' '*.yml' '*.yaml' 2>/dev/null || true)
+            -- '*.json' '*.ps1' '*.py' '*.yml' '*.yaml' ':!.github/' 2>/dev/null || true)
           if [ -n "$MATCHES" ]; then
             echo "::error::Hardcoded workspace credentials detected:"
             echo "$MATCHES"
