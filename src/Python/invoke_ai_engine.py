@@ -361,9 +361,10 @@ def normalize_json_payload(value):
     return str(value)
 
 
-def emit_json(payload, file=sys.stdout):
+def emit_json(payload, file=None):
     """Write a normalized JSON payload to stdout or stderr."""
-    print(json.dumps(normalize_json_payload(payload), indent=4), file=file)
+    target = sys.stdout if file is None else file
+    print(json.dumps(normalize_json_payload(payload), indent=4), file=target)
 
 
 def main():

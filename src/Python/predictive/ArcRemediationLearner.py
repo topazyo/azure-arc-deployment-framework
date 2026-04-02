@@ -336,16 +336,21 @@ class ArcRemediationLearner:
             }
 
         try:
-            directory = os.path.dirname(output_path)
-            if directory:
-                os.makedirs(directory, exist_ok=True)
-
             payload = {
                 "pending_retrain_requests": queue_snapshot,
                 "exported_at": datetime.now().isoformat(),
             }
-            with open(output_path, "w", encoding="utf-8") as handle:
-                json.dump(payload, handle, indent=2)
+
+            try:
+                with open(output_path, "w", encoding="utf-8") as handle:
+                    json.dump(payload, handle, indent=2)
+            except FileNotFoundError:
+                directory = os.path.dirname(output_path)
+                if not directory:
+                    raise
+                os.makedirs(directory, exist_ok=True)
+                with open(output_path, "w", encoding="utf-8") as handle:
+                    json.dump(payload, handle, indent=2)
 
             self.logger.info(
                 "Exported %s pending retrain requests to %s (consume=%s)",
