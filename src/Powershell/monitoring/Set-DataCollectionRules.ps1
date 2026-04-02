@@ -40,23 +40,87 @@ function Set-DataCollectionRules {
             # Create DCR
             $dcrParams = @{
                 Name = "DCR-$ServerName-$RuleType"
-                ResourceGroup = $baseConfig.resourceGroup
                 Location = $baseConfig.location
-                DataSources = $baseConfig.dataSources
-                Destinations = @{
-                    LogAnalytics = @(
-                        @{
-                            WorkspaceResourceId = $WorkspaceId
-                            Name = "LA-Destination"
-                        }
-                    )
+            }
+
+            $dcrCommand = Get-Command New-AzDataCollectionRule -ErrorAction SilentlyContinue
+            $dcrParameterNames = if ($dcrCommand) { @($dcrCommand.Parameters.Keys) } else { @() }
+
+            if ($dcrParameterNames -contains 'ResourceGroupName') {
+                $dcrParams.ResourceGroupName = $baseConfig.resourceGroup
+            }
+            else {
+                $dcrParams.ResourceGroup = $baseConfig.resourceGroup
+            }
+
+            $dataSources = ConvertTo-HashtableSafe $baseConfig.dataSources
+            $destinations = ConvertTo-HashtableSafe $baseConfig.destinations
+            $streams = @($baseConfig.streams)
+
+            if ($dcrParameterNames -contains 'DataSources') {
+                $dcrParams.DataSources = $dataSources
+            }
+            else {
+                if ($dataSources.ContainsKey('syslog')) {
+                    $syslogSources = @(ConvertTo-ArraySafe $dataSources.syslog)
+                    if ($syslogSources.Count -gt 0) {
+                        $dcrParams.DataSourceSyslog = $syslogSources
+                    }
                 }
-                DataFlows = @(
-                    @{
-                        Streams = $baseConfig.streams
-                        Destinations = @("LA-Destination")
+
+                if ($dataSources.ContainsKey('performanceCounters')) {
+                    $performanceCounters = @(ConvertTo-ArraySafe $dataSources.performanceCounters)
+                    if ($performanceCounters.Count -gt 0) {
+                        $dcrParams.DataSourcePerformanceCounter = $performanceCounters
+                    }
+                }
+
+                if ($dataSources.ContainsKey('windowsEventLogs')) {
+                    $eventLogs = @(ConvertTo-ArraySafe $dataSources.windowsEventLogs)
+                    if ($eventLogs.Count -gt 0) {
+                        $dcrParams.DataSourceWindowsEventLog = $eventLogs
+                    }
+                }
+            }
+
+            $logAnalyticsDestinations = @(
+                [PSCustomObject]@{
+                    WorkspaceResourceId = $WorkspaceId
+                    Name = 'LA-Destination'
+                }
+            )
+
+            if ($dcrParameterNames -contains 'Destinations') {
+                $dcrParams.Destinations = if ($destinations.Count -gt 0) {
+                    $destinations
+                }
+                else {
+                    @{ LogAnalytics = $logAnalyticsDestinations }
+                }
+            }
+            elseif ($dcrParameterNames -contains 'DestinationLogAnalytic') {
+                $dcrParams.DestinationLogAnalytic = $logAnalyticsDestinations
+            }
+
+            $dataFlows = if ($streams.Count -gt 0) {
+                @(
+                    [PSCustomObject]@{
+                        Streams = $streams
+                        Destinations = @('LA-Destination')
                     }
                 )
+            }
+            else {
+                @()
+            }
+
+            if ($dataFlows.Count -gt 0) {
+                if ($dcrParameterNames -contains 'DataFlows') {
+                    $dcrParams.DataFlows = $dataFlows
+                }
+                elseif ($dcrParameterNames -contains 'DataFlow') {
+                    $dcrParams.DataFlow = $dataFlows
+                }
             }
 
             if ($PSCmdlet.ShouldProcess($ServerName, "Create Data Collection Rule")) {
@@ -99,4 +163,47 @@ function Set-DataCollectionRules {
     end {
         return [PSCustomObject]$dcrState
     }
+}
+
+function ConvertTo-ArraySafe {
+    [CmdletBinding()]
+    param([Parameter()][object]$Value)
+
+    if ($null -eq $Value) {
+        return @()
+    }
+
+    if ($Value -is [string] -and [string]::IsNullOrWhiteSpace($Value)) {
+        return @()
+    }
+
+    if ($Value -is [System.Collections.IEnumerable] -and -not ($Value -is [string]) -and -not ($Value -is [System.Collections.IDictionary])) {
+        return @($Value)
+    }
+
+    if ($Value.PSObject.Properties.Count -eq 0) {
+        return @()
+    }
+
+    return @($Value)
+}
+
+function ConvertTo-HashtableSafe {
+    [CmdletBinding()]
+    param([Parameter()][object]$Value)
+
+    if ($null -eq $Value) {
+        return @{}
+    }
+
+    if ($Value -is [System.Collections.IDictionary]) {
+        return @{} + $Value
+    }
+
+    $result = @{}
+    foreach ($property in $Value.PSObject.Properties) {
+        $result[$property.Name] = $property.Value
+    }
+
+    return $result
 }

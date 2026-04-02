@@ -70,6 +70,9 @@ function Test-ExtensionHealth {
                     Issues = @()
                 }
 
+                $resourceGroupName = Get-ExtensionResourceGroupName -ArcServer $arcServer
+                $extensionIdentifiers = @($extension.Name, $extension.ExtensionType) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+
                 # Check provisioning state
                 if ($extension.ProvisioningState -eq "Succeeded") {
                     $extHealth.Status = "Healthy"
@@ -88,51 +91,47 @@ function Test-ExtensionHealth {
 
                 # Get detailed status
                 if ($IncludeDetails) {
-                    $detailedStatus = Get-ExtensionDetailedStatus -ResourceGroupName $arcServer.ResourceGroupName -MachineName $ServerName -ExtensionName $extension.Name
+                    $detailedStatus = Get-ExtensionDetailedStatus -ResourceGroupName $resourceGroupName -MachineName $ServerName -ExtensionName $extension.Name
 
                     if ($detailedStatus) {
                         $extHealth.DetailedStatus = $detailedStatus
 
                         # Update status based on detailed information
                         if ($detailedStatus.Status -eq "Failed") {
+                            $previousStatus = $extHealth.Status
                             $extHealth.Status = "Unhealthy"
-                            $extensionHealth.Summary.Healthy--
-                            $extensionHealth.Summary.Unhealthy++
+                            Update-ExtensionSummaryCounters -Summary $extensionHealth.Summary -PreviousStatus $previousStatus -NewStatus $extHealth.Status
                             $extHealth.Issues += $detailedStatus.Error
                         }
                     }
                 }
 
                 # Check agent service for specific extensions
-                if ($extension.Name -eq "AzureMonitorWindowsAgent") {
+                if ($extensionIdentifiers -contains "AzureMonitorWindowsAgent") {
                     $serviceStatus = Get-ServiceStatus -ServerName $ServerName -ServiceName "AzureMonitorAgent"
                     $extHealth.ServiceStatus = $serviceStatus
 
                     if ($serviceStatus.Status -ne "Running") {
+                        $previousStatus = $extHealth.Status
                         $extHealth.Status = "Unhealthy"
-                        if ($extHealth.Status -eq "Healthy") {
-                            $extensionHealth.Summary.Healthy--
-                            $extensionHealth.Summary.Unhealthy++
-                        }
+                        Update-ExtensionSummaryCounters -Summary $extensionHealth.Summary -PreviousStatus $previousStatus -NewStatus $extHealth.Status
                         $extHealth.Issues += "Service not running"
                     }
                 }
-                elseif ($extension.Name -eq "GuestConfigurationForWindows") {
+                elseif ($extensionIdentifiers -contains "GuestConfigurationForWindows") {
                     $serviceStatus = Get-ServiceStatus -ServerName $ServerName -ServiceName "GCService"
                     $extHealth.ServiceStatus = $serviceStatus
 
                     if ($serviceStatus.Status -ne "Running") {
+                        $previousStatus = $extHealth.Status
                         $extHealth.Status = "Unhealthy"
-                        if ($extHealth.Status -eq "Healthy") {
-                            $extensionHealth.Summary.Healthy--
-                            $extensionHealth.Summary.Unhealthy++
-                        }
+                        Update-ExtensionSummaryCounters -Summary $extensionHealth.Summary -PreviousStatus $previousStatus -NewStatus $extHealth.Status
                         $extHealth.Issues += "Service not running"
                     }
                 }
 
                 # Get last operation
-                $extHealth.LastOperation = Get-ExtensionLastOperation -ResourceGroupName $arcServer.ResourceGroupName -MachineName $ServerName -ExtensionName $extension.Name
+                $extHealth.LastOperation = Get-ExtensionLastOperation -ResourceGroupName $resourceGroupName -MachineName $ServerName -ExtensionName $extension.Name
 
                 # Add to results
                 $extensionHealth.Extensions += $extHealth
@@ -367,6 +366,53 @@ function Get-ExtensionRecommendations {
     return $recommendations
 }
 
+function Get-ExtensionResourceGroupName {
+    [CmdletBinding()]
+    param([Parameter()][object]$ArcServer)
+
+    if ($ArcServer) {
+        if ($ArcServer.PSObject.Properties.Name -contains 'ResourceGroupName' -and $ArcServer.ResourceGroupName) {
+            return $ArcServer.ResourceGroupName
+        }
+
+        if ($ArcServer.PSObject.Properties.Name -contains 'Id' -and $ArcServer.Id) {
+            $idSegments = $ArcServer.Id -split '/'
+            if ($idSegments.Count -gt 4) {
+                return $idSegments[4]
+            }
+        }
+    }
+
+    return $null
+}
+
+function Update-ExtensionSummaryCounters {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][hashtable]$Summary,
+        [Parameter(Mandatory)][string]$PreviousStatus,
+        [Parameter(Mandatory)][string]$NewStatus
+    )
+
+    if ($PreviousStatus -eq $NewStatus) {
+        return
+    }
+
+    switch ($PreviousStatus) {
+        'Healthy' { $Summary.Healthy = [Math]::Max(0, $Summary.Healthy - 1) }
+        'Unhealthy' { $Summary.Unhealthy = [Math]::Max(0, $Summary.Unhealthy - 1) }
+        'Warning' { $Summary.Warning = [Math]::Max(0, $Summary.Warning - 1) }
+        'Unknown' { $Summary.Unknown = [Math]::Max(0, $Summary.Unknown - 1) }
+    }
+
+    switch ($NewStatus) {
+        'Healthy' { $Summary.Healthy++ }
+        'Unhealthy' { $Summary.Unhealthy++ }
+        'Warning' { $Summary.Warning++ }
+        'Unknown' { $Summary.Unknown++ }
+    }
+}
+
 function Get-ExtensionArcMachine {
     [CmdletBinding()]
     param([Parameter(Mandatory)][string]$ServerName)
@@ -391,18 +437,7 @@ function Get-ExtensionArcMachineRecords {
         [Parameter()][string]$Name
     )
 
-    $resourceGroupName = $null
-    if ($ArcServer) {
-        if ($ArcServer.PSObject.Properties.Name -contains 'ResourceGroupName' -and $ArcServer.ResourceGroupName) {
-            $resourceGroupName = $ArcServer.ResourceGroupName
-        }
-        elseif ($ArcServer.PSObject.Properties.Name -contains 'Id' -and $ArcServer.Id) {
-            $idSegments = $ArcServer.Id -split '/'
-            if ($idSegments.Count -gt 4) {
-                $resourceGroupName = $idSegments[4]
-            }
-        }
-    }
+    $resourceGroupName = Get-ExtensionResourceGroupName -ArcServer $ArcServer
 
     try {
         if ($resourceGroupName) {

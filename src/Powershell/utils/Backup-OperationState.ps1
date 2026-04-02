@@ -187,7 +187,7 @@ Function Backup-OperationState {
         if ($MaxBackupVersions -gt 0) {
             Write-ActivityLog "Managing backup versions for OperationId '$OperationId'. Max versions: $MaxBackupVersions."
             $existingVersions = if (Test-Path -Path $targetOperationBackupDir -PathType Container) {
-                Get-ChildItem -Path $targetOperationBackupDir -Directory | Sort-Object Name
+                @(Get-ChildItem -Path $targetOperationBackupDir -Directory -ErrorAction SilentlyContinue) | Sort-Object Name
             }
             else {
                 @()

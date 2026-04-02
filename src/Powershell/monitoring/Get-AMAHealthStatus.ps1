@@ -271,8 +271,8 @@ function Test-WorkspaceConnectivity {
     )
 
     try {
-        # Get workspace details
-        $workspace = Get-AzOperationalInsightsWorkspace -ResourceId $WorkspaceId
+        # Support either a workspace resource ID or a plain workspace name.
+        $workspace = Get-OperationalInsightsWorkspaceRecord -WorkspaceId $WorkspaceId
 
         return @{
             Success = $true
@@ -287,4 +287,34 @@ function Test-WorkspaceConnectivity {
             Error = $_.Exception.Message
         }
     }
+}
+
+function Get-OperationalInsightsWorkspaceRecord {
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory)]
+        [string]$WorkspaceId
+    )
+
+    $command = Get-Command Get-AzOperationalInsightsWorkspace -ErrorAction Stop
+    $parameterNames = @($command.Parameters.Keys)
+
+    if ($WorkspaceId -match '/resourceGroups/([^/]+)/providers/.+/workspaces/([^/]+)$') {
+        $resourceGroupName = $matches[1]
+        $workspaceName = $matches[2]
+
+        if ($parameterNames -contains 'ResourceGroupName' -and $parameterNames -contains 'Name') {
+            return Get-AzOperationalInsightsWorkspace -ResourceGroupName $resourceGroupName -Name $workspaceName -ErrorAction Stop
+        }
+    }
+
+    if ($parameterNames -contains 'ResourceId') {
+        return Get-AzOperationalInsightsWorkspace -ResourceId $WorkspaceId -ErrorAction Stop
+    }
+
+    if ($parameterNames -contains 'Name') {
+        return Get-AzOperationalInsightsWorkspace -Name $WorkspaceId -ErrorAction Stop
+    }
+
+    return Get-AzOperationalInsightsWorkspace -ErrorAction Stop
 }
