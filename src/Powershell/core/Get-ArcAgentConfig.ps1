@@ -204,7 +204,7 @@ function Get-ArcAgentConfig {
                     MachineName = $agentConfig.machineName
                     Tags = $agentConfig.tags
                     LastHeartbeat = if (Test-Path "\\$ServerName\c$\Program Files\Azure Connected Machine Agent\config\state\heartbeat") {
-                        (Get-Item "\\$ServerName\c$\Program Files\Azure Connected Machine Agent\config\state\heartbeat").LastWriteTime
+                        (Get-Item "\\$ServerName\c$\Program Files\Azure Connected Machine Agent\config\state\heartbeat" -ErrorAction SilentlyContinue).LastWriteTime
                     } else { $null }
                 }
             }

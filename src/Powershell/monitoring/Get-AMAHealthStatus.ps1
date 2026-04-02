@@ -123,7 +123,7 @@ function Get-AMAHealthStatus {
             }
         }
         catch {
-            Write-Error "Failed to get AMA health status: $_"
+            Write-Verbose "Failed to get AMA health status: $($_.Exception.Message)"
             $healthStatus.Error = $_.Exception.Message
         }
     }

@@ -92,7 +92,7 @@ function Get-LastHeartbeat {
             $heartbeatInfo.Combined = Get-CombinedHeartbeatStatus -ArcStatus $heartbeatInfo.Arc.Status -AMAStatus $heartbeatInfo.AMA.Status
         }
         catch {
-            Write-Error "Failed to retrieve heartbeat information: $_"
+            Write-Verbose "Failed to retrieve heartbeat information: $($_.Exception.Message)"
             $heartbeatInfo.Error = $_.Exception.Message
         }
     }

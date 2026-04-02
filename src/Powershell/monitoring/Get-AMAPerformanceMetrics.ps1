@@ -84,7 +84,7 @@ function Get-AMAPerformanceMetrics {
             $metrics.Recommendations = Get-PerformanceRecommendations -Metrics $metrics.Summary
         }
         catch {
-            Write-Error "Failed to collect performance metrics: $_"
+            Write-Verbose "Failed to collect performance metrics: $($_.Exception.Message)"
             $metrics.Error = $_.Exception.Message
         }
     }
