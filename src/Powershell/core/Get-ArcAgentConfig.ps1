@@ -211,7 +211,7 @@ function Get-ArcAgentConfig {
         }
         catch {
             $configResult.Error = $_.Exception.Message
-            Write-Error "Failed to retrieve Arc agent configuration: $_"
+            Write-Verbose "Failed to retrieve Arc agent configuration: $($_.Exception.Message)"
         }
     }
 
@@ -261,7 +261,7 @@ function Get-NetworkConfiguration {
         return $networkConfig
     }
     catch {
-        Write-Error "Failed to get network configuration: $_"
+        Write-Verbose "Failed to get network configuration: $($_.Exception.Message)"
         return $null
     }
 }

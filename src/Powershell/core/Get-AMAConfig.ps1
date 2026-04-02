@@ -197,7 +197,7 @@ function Get-AMAConfig {
         }
         catch {
             $configResult.Error = $_.Exception.Message
-            Write-Error "Failed to retrieve AMA configuration: $_"
+            Write-Verbose "Failed to retrieve AMA configuration: $($_.Exception.Message)"
             Write-Log -Message "Failed to retrieve AMA configuration: $_" -Level Error
         }
     }

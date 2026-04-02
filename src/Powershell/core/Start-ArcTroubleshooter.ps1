@@ -133,7 +133,7 @@ function Start-ArcTroubleshooter {
                 Timestamp = Get-Date
             }
             Write-Log -Message "Troubleshooting session failed: $($_.Exception.Message)" -Level Error -Component 'Start-ArcTroubleshooter'
-            Write-Error -ErrorRecord $_
+            Write-Verbose "Start-ArcTroubleshooter caught error: $($_.Exception.Message)"
         }
     }
 

@@ -150,7 +150,7 @@ function Get-SystemState {
             }
         }
         catch {
-            Write-Error "Failed to collect system state: $_"
+            Write-Verbose "Failed to collect system state: $($_.Exception.Message)"
             $systemState.Error = @{
                 Message = $_.Exception.Message
                 Time = Get-Date

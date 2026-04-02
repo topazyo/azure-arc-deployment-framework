@@ -136,7 +136,7 @@ function Initialize-AIComponents {
         return $aiComponents
     }
     catch {
-        Write-Error "Failed to initialize AI components: $_"
+        Write-Verbose "Failed to initialize AI components: $($_.Exception.Message)"
         throw
     }
 }

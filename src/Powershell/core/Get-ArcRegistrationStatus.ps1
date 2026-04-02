@@ -26,7 +26,7 @@ function Get-ArcRegistrationStatus {
     process {
         try {
             # Check if server exists in Azure
-            $arcServer = Get-AzConnectedMachine -Name $ServerName -ErrorAction SilentlyContinue
+            $arcServer = Get-ArcMachineStatusRecord -ServerName $ServerName
 
             if ($arcServer) {
                 $registrationStatus.Status = $arcServer.Status
@@ -97,7 +97,7 @@ function Get-ArcRegistrationStatus {
         catch {
             $registrationStatus.Status = "Error"
             $registrationStatus.Error = $_.Exception.Message
-            Write-Error "Failed to get Arc registration status: $_"
+            Write-Verbose "Failed to get Arc registration status: $($_.Exception.Message)"
         }
     }
 
@@ -105,6 +105,70 @@ function Get-ArcRegistrationStatus {
         $registrationStatus.EndTime = Get-Date
         $registrationStatus.Duration = $registrationStatus.EndTime - $registrationStatus.Timestamp
         return [PSCustomObject]$registrationStatus
+    }
+}
+
+function Get-ArcMachineStatusRecord {
+    [CmdletBinding()]
+    param ([string]$ServerName)
+
+    try {
+        return Get-AzConnectedMachine -Name $ServerName -ErrorAction Stop
+    }
+    catch {
+        if ($_.Exception.Message -match 'ResourceGroupName') {
+            return $null
+        }
+
+        throw
+    }
+}
+
+function Get-ArcMachineExtensionRecords {
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory)]
+        [string]$ServerName,
+        [Parameter()]
+        [object]$ArcServer,
+        [Parameter()]
+        [string]$Name
+    )
+
+    $resourceGroupName = $null
+    if ($ArcServer) {
+        if ($ArcServer.PSObject.Properties.Name -contains 'ResourceGroupName' -and $ArcServer.ResourceGroupName) {
+            $resourceGroupName = $ArcServer.ResourceGroupName
+        }
+        elseif ($ArcServer.PSObject.Properties.Name -contains 'Id' -and $ArcServer.Id) {
+            $idSegments = $ArcServer.Id -split '/'
+            if ($idSegments.Count -gt 4) {
+                $resourceGroupName = $idSegments[4]
+            }
+        }
+    }
+
+    try {
+        if ($resourceGroupName) {
+            if ($PSBoundParameters.ContainsKey('Name')) {
+                return Get-AzConnectedMachineExtension -ResourceGroupName $resourceGroupName -MachineName $ServerName -Name $Name -ErrorAction Stop
+            }
+
+            return Get-AzConnectedMachineExtension -ResourceGroupName $resourceGroupName -MachineName $ServerName -ErrorAction Stop
+        }
+
+        if ($PSBoundParameters.ContainsKey('Name')) {
+            return Get-AzConnectedMachineExtension -MachineName $ServerName -Name $Name -ErrorAction Stop
+        }
+
+        return Get-AzConnectedMachineExtension -MachineName $ServerName -ErrorAction Stop
+    }
+    catch {
+        if ($_.Exception.Message -match 'ResourceGroupName') {
+            return $null
+        }
+
+        throw
     }
 }
 
@@ -190,7 +254,8 @@ function Get-ArcExtensions {
     param ([string]$ServerName)
 
     try {
-        $extensions = Get-AzConnectedMachineExtension -MachineName $ServerName -ErrorAction SilentlyContinue
+        $arcServer = Get-ArcMachineStatusRecord -ServerName $ServerName
+        $extensions = Get-ArcMachineExtensionRecords -ServerName $ServerName -ArcServer $arcServer
 
         return $extensions | ForEach-Object {
             @{
@@ -206,7 +271,7 @@ function Get-ArcExtensions {
         }
     }
     catch {
-        Write-Error "Failed to get Arc extensions: $_"
+        Write-Verbose "Failed to get Arc extensions: $($_.Exception.Message)"
         return $null
     }
 }
@@ -216,7 +281,7 @@ function Get-ArcResourceHealth {
     param ([string]$ServerName)
 
     try {
-        $arcServer = Get-AzConnectedMachine -Name $ServerName -ErrorAction SilentlyContinue
+        $arcServer = Get-ArcMachineStatusRecord -ServerName $ServerName
 
         if ($arcServer) {
             $resourceId = $arcServer.Id
@@ -237,7 +302,7 @@ function Get-ArcResourceHealth {
         return $null
     }
     catch {
-        Write-Error "Failed to get Arc resource health: $_"
+        Write-Verbose "Failed to get Arc resource health: $($_.Exception.Message)"
         return $null
     }
 }
@@ -247,7 +312,7 @@ function Get-ArcComplianceStatus {
     param ([string]$ServerName)
 
     try {
-        $arcServer = Get-AzConnectedMachine -Name $ServerName -ErrorAction SilentlyContinue
+        $arcServer = Get-ArcMachineStatusRecord -ServerName $ServerName
 
         if ($arcServer) {
             $resourceId = $arcServer.Id
@@ -268,7 +333,7 @@ function Get-ArcComplianceStatus {
         return $null
     }
     catch {
-        Write-Error "Failed to get Arc compliance status: $_"
+        Write-Verbose "Failed to get Arc compliance status: $($_.Exception.Message)"
         return $null
     }
 }
@@ -278,7 +343,7 @@ function Get-ArcRegistrationHistory {
     param ([string]$ServerName)
 
     try {
-        $arcServer = Get-AzConnectedMachine -Name $ServerName -ErrorAction SilentlyContinue
+        $arcServer = Get-ArcMachineStatusRecord -ServerName $ServerName
 
         if ($arcServer) {
             $resourceId = $arcServer.Id
@@ -301,7 +366,7 @@ function Get-ArcRegistrationHistory {
         return $null
     }
     catch {
-        Write-Error "Failed to get Arc registration history: $_"
+        Write-Verbose "Failed to get Arc registration history: $($_.Exception.Message)"
         return $null
     }
 }

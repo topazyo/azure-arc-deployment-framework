@@ -74,7 +74,7 @@ function Invoke-TroubleshootingAnalysis {
                 Sort-Object -Property ImpactScore -Descending
         }
         catch {
-            Write-Error "Analysis failed: $_"
+            Write-Verbose "Analysis failed: $($_.Exception.Message)"
             $analysisResults.Error = $_.Exception.Message
         }
     }

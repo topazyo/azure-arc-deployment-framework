@@ -119,6 +119,73 @@ function Get-HeartbeatService {
     return Get-Service -Name $Name -ErrorAction SilentlyContinue
 }
 
+function Get-ArcMachineRecord {
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory)]
+        [string]$ServerName
+    )
+
+    try {
+        return Get-AzConnectedMachine -Name $ServerName -ErrorAction Stop
+    }
+    catch {
+        if ($_.Exception.Message -match 'ResourceGroupName') {
+            return $null
+        }
+
+        throw
+    }
+}
+
+function Get-ArcMachineExtensions {
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory)]
+        [string]$ServerName,
+        [Parameter()]
+        [object]$ArcMachine,
+        [Parameter()]
+        [string]$Name
+    )
+
+    $resourceGroupName = $null
+    if ($ArcMachine) {
+        if ($ArcMachine.PSObject.Properties.Name -contains 'ResourceGroupName' -and $ArcMachine.ResourceGroupName) {
+            $resourceGroupName = $ArcMachine.ResourceGroupName
+        }
+        elseif ($ArcMachine.PSObject.Properties.Name -contains 'Id' -and $ArcMachine.Id) {
+            $idSegments = $ArcMachine.Id -split '/'
+            if ($idSegments.Count -gt 4) {
+                $resourceGroupName = $idSegments[4]
+            }
+        }
+    }
+
+    try {
+        if ($resourceGroupName) {
+            if ($PSBoundParameters.ContainsKey('Name')) {
+                return Get-AzConnectedMachineExtension -ResourceGroupName $resourceGroupName -MachineName $ServerName -Name $Name -ErrorAction Stop
+            }
+
+            return Get-AzConnectedMachineExtension -ResourceGroupName $resourceGroupName -MachineName $ServerName -ErrorAction Stop
+        }
+
+        if ($PSBoundParameters.ContainsKey('Name')) {
+            return Get-AzConnectedMachineExtension -MachineName $ServerName -Name $Name -ErrorAction Stop
+        }
+
+        return Get-AzConnectedMachineExtension -MachineName $ServerName -ErrorAction Stop
+    }
+    catch {
+        if ($_.Exception.Message -match 'ResourceGroupName') {
+            return $null
+        }
+
+        throw
+    }
+}
+
 <#
 .SYNOPSIS
 Determines Arc heartbeat recency and health classification.
@@ -187,7 +254,7 @@ function Get-ArcAgentHeartbeat {
 
         # If we still don't have a heartbeat, try to get it from the Azure API
         if (-not $result.LastHeartbeat) {
-            $arcMachine = Get-AzConnectedMachine -Name $ServerName -ErrorAction SilentlyContinue
+            $arcMachine = Get-ArcMachineRecord -ServerName $ServerName
             if ($arcMachine) {
                 $result.LastHeartbeat = $arcMachine.LastStatusChange
 
@@ -208,7 +275,7 @@ function Get-ArcAgentHeartbeat {
         }
     }
     catch {
-        Write-Error "Failed to get Arc agent heartbeat: $_"
+        Write-Verbose "Failed to get Arc agent heartbeat: $($_.Exception.Message)"
         $result.Status = "Error"
         $result.Error = $_.Exception.Message
     }
@@ -237,20 +304,20 @@ function Get-ArcAgentHeartbeatDetails {
 
     try {
         # Get Arc machine details from Azure
-        $arcMachine = Get-AzConnectedMachine -Name $ServerName -ErrorAction SilentlyContinue
+        $arcMachine = Get-ArcMachineRecord -ServerName $ServerName
         if ($arcMachine) {
             $details.ConnectionStatus = $arcMachine.Status
             $details.AgentVersion = $arcMachine.AgentVersion
             $details.LastOperationResult = $arcMachine.LastStatusChange
 
             # Get configuration status
-            $guestConfig = Get-AzConnectedMachineExtension -MachineName $ServerName -Name "GuestConfigurationForLinux" -ErrorAction SilentlyContinue
+            $guestConfig = Get-ArcMachineExtensions -ServerName $ServerName -ArcMachine $arcMachine -Name "GuestConfigurationForLinux"
             if ($guestConfig) {
                 $details.ConfigurationStatus = $guestConfig.ProvisioningState
             }
 
             # Get all extensions
-            $extensions = Get-AzConnectedMachineExtension -MachineName $ServerName -ErrorAction SilentlyContinue
+            $extensions = Get-ArcMachineExtensions -ServerName $ServerName -ArcMachine $arcMachine
             if ($extensions) {
                 $details.ExtensionStatus = $extensions | ForEach-Object {
                     @{
@@ -281,7 +348,7 @@ function Get-ArcAgentHeartbeatDetails {
         }
     }
     catch {
-        Write-Error "Failed to get Arc agent heartbeat details: $_"
+        Write-Verbose "Failed to get Arc agent heartbeat details: $($_.Exception.Message)"
         $details.Error = $_.Exception.Message
     }
 
@@ -382,7 +449,7 @@ function Get-AMAHeartbeat {
         }
     }
     catch {
-        Write-Error "Failed to get AMA heartbeat: $_"
+        Write-Verbose "Failed to get AMA heartbeat: $($_.Exception.Message)"
         $result.Status = "Error"
         $result.Error = $_.Exception.Message
     }
@@ -480,7 +547,7 @@ function Get-AMAHeartbeatDetails {
         }
     }
     catch {
-        Write-Error "Failed to get AMA heartbeat details: $_"
+        Write-Verbose "Failed to get AMA heartbeat details: $($_.Exception.Message)"
         $details.Error = $_.Exception.Message
     }
 

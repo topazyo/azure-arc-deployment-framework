@@ -52,18 +52,18 @@ function Initialize-ArcDeployment {
 
         # Check for Az.Accounts and Az.Resources modules
         if (-not (Get-Module -Name Az.Accounts -ListAvailable)) {
-            Write-Error "Az.Accounts module is required. Please install it first."
+            Write-Verbose "Az.Accounts module is required. Please install it first."
             throw "Az.Accounts module not found."
         }
         if (-not (Get-Module -Name Az.Resources -ListAvailable)) {
-            Write-Error "Az.Resources module is required. Please install it first."
+            Write-Verbose "Az.Resources module is required. Please install it first."
             throw "Az.Resources module not found."
         }
 
         # Check Azure Login Status
         $currentContext = Get-AzContext
         if (-not $currentContext) {
-            Write-Error "Not logged into Azure. Please run Connect-AzAccount first."
+            Write-Verbose "Not logged into Azure. Please run Connect-AzAccount first."
             throw "Azure login required."
         }
 
@@ -77,7 +77,7 @@ function Initialize-ArcDeployment {
                 Write-Verbose "Successfully set Azure context to subscription '$SubscriptionId'."
             }
             catch {
-                Write-Error "Failed to set Azure context to subscription '$SubscriptionId'. Please ensure you have access and the subscription ID is correct."
+                Write-Verbose "Failed to set Azure context to subscription '$SubscriptionId'. Please ensure you have access and the subscription ID is correct."
                 throw "Failed to set Azure context."
             }
         } else {
@@ -116,7 +116,7 @@ function Initialize-ArcDeployment {
                     $resourceGroup = Get-AzResourceGroup -Name $ResourceGroupName
                 }
                 catch {
-                    Write-Error "Failed to create resource group '$ResourceGroupName'. Error: $($_.Exception.Message)"
+                    Write-Verbose "Failed to create resource group '$ResourceGroupName'. Error: $($_.Exception.Message)"
                     throw "Resource group creation failed."
                 }
             } else {
@@ -138,7 +138,7 @@ function Initialize-ArcDeployment {
                     $resourceGroup = Get-AzResourceGroup -Name $ResourceGroupName # Refresh to get updated tags
                     Write-Verbose "Tags updated successfully for resource group '$ResourceGroupName'."
                 } catch {
-                    Write-Error "Failed to update tags for resource group '$ResourceGroupName'. Error: $($_.Exception.Message)"
+                    Write-Verbose "Failed to update tags for resource group '$ResourceGroupName'. Error: $($_.Exception.Message)"
                     # Non-critical, so just warn
                     Write-Warning "Tag update failed for existing resource group."
                 }
