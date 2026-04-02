@@ -17,6 +17,10 @@ if (-not (Get-Command -Name Write-ActivityLog -ErrorAction SilentlyContinue)) {
             [string]$Level = "INFO",
             [string]$Path = $LogPath
         )
+        if (Get-Command -Name Write-Log -ErrorAction SilentlyContinue) {
+            Write-Log -Message $Message -Level $Level -Path $Path
+            return
+        }
         $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
         $logEntry = "[$timestamp] [$Level] $Message"
         try {

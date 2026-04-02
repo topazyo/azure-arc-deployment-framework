@@ -129,7 +129,7 @@ def mock_azure_client():
         def get_metrics(self, *args, **kwargs):
             self.calls.append(('get_metrics', args, kwargs))
             return pd.DataFrame({
-                'timestamp': pd.date_range(start='2024-01-01', periods=24, freq='H'),
+                'timestamp': pd.date_range(start='2024-01-01', periods=24, freq='h'),
                 'value': np.random.uniform(0, 100, 24)
             })
         

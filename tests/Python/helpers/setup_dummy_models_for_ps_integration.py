@@ -47,7 +47,7 @@ def create_dummy_models(model_output_dir: str, config_file_path: str):
 
     num_samples = 20 # Increased samples for better training stability with small estimators
     base_data_dict = {
-        'timestamp': pd.to_datetime(pd.date_range(start='2023-01-01', periods=num_samples, freq='H'))
+        'timestamp': pd.to_datetime(pd.date_range(start='2023-01-01', periods=num_samples, freq='h'))
     }
 
     # Populate features based on fe_config + model_config target columns

@@ -5,6 +5,12 @@ Import-Module Pester -MinimumVersion 5.0 -ErrorAction Stop
 
 $script:TestScriptRootSafe = if ($PSCommandPath) { Split-Path $PSCommandPath -Parent } elseif ($PSScriptRoot) { $PSScriptRoot } elseif ($MyInvocation.MyCommand.Path) { Split-Path $MyInvocation.MyCommand.Path -Parent } else { (Get-Location).Path }
 
+if (-not (Get-Command Write-Log -ErrorAction SilentlyContinue)) {
+    Set-Item -Path Function:global:Write-Log -Value {
+        param([string]$Message, [string]$Level = 'INFO', [string]$Path)
+    }
+}
+
 Describe 'Find-DiagnosticPattern.ps1 Tests' {
     BeforeAll {
         if (-not $script:TestScriptRootSafe) {
