@@ -77,6 +77,11 @@ jobs:
       - name: Run Pester tests
         shell: pwsh
         run: |
+          # GitHub Actions wraps pwsh steps with ErrorActionPreference=Stop, which
+          # changes non-terminating error behavior compared to local Pester runs.
+          # Reset it here so the suite exercises the intended PowerShell contracts.
+          $ErrorActionPreference = 'Continue'
+          Import-Module Pester -MinimumVersion 5.0 -ErrorAction Stop
           $configuration = New-PesterConfiguration
           $configuration.Run.Path = './tests/PowerShell'
           $configuration.Run.PassThru = $true
