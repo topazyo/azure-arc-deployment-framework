@@ -223,7 +223,7 @@ function Test-ArcPrerequisites {
             $results.Success = $false
             $results.Error = $_.Exception.Message
             Write-Log -Message "Arc prerequisites check failed: $($_.Exception.Message)" -Level Error -Component 'Test-ArcPrerequisites'
-            Write-Error -ErrorRecord $_
+            Write-Verbose "Test-ArcPrerequisites caught error: $($_.Exception.Message)"
         }
     }
 

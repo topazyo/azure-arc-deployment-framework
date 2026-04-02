@@ -69,7 +69,7 @@ function Test-Prerequisite {
             }
         }
         catch {
-            Write-Error $_
+            Write-Verbose "Test-Prerequisite caught error: $($_.Exception.Message)"
             Write-Log -Message "Prerequisite check failed: $_" -Level Error
         }
     }

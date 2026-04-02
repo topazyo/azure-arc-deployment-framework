@@ -53,8 +53,10 @@ function Test-DeploymentValidation {
             [void](Get-Content $ConfigPath | ConvertFrom-Json)
         }
         catch {
-            Write-Error "Failed to load validation configuration: $_"
-            return
+            Write-Verbose "Failed to load validation configuration: $($_.Exception.Message)"
+            $validationResults.OverallStatus = 'Error'
+            $validationResults.Error = $_.Exception.Message
+            return [PSCustomObject]$validationResults
         }
 
         Write-Log -Message "Starting deployment validation for $ServerName" -Level Information
@@ -161,7 +163,7 @@ function Test-DeploymentValidation {
         catch {
             $validationResults.OverallStatus = "Error"
             $validationResults.Error = $_.Exception.Message
-            Write-Error "Validation failed: $_"
+            Write-Verbose "Validation failed: $($_.Exception.Message)"
         }
     }
 

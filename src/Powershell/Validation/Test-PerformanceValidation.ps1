@@ -148,7 +148,7 @@ function Test-PerformanceValidation {
         catch {
             $validationResults.Status = "Error"
             $validationResults.Error = $_.Exception.Message
-            Write-Error "Performance validation failed: $_"
+            Write-Verbose "Performance validation failed: $($_.Exception.Message)"
         }
     }
 
@@ -264,7 +264,7 @@ function Get-ServerPerformanceMetrics {
         }
     }
     catch {
-        Write-Error "Failed to collect performance metrics: $_"
+        Write-Verbose "Failed to collect performance metrics: $($_.Exception.Message)"
         throw
     }
 
@@ -516,7 +516,7 @@ function Test-ArcAgentResourceUsage {
     catch {
         $result.Status = "Error"
         $result.Error = $_.Exception.Message
-        Write-Error "Failed to check Arc agent resource usage: $_"
+        Write-Verbose "Failed to check Arc agent resource usage: $($_.Exception.Message)"
     }
 
     return $result
@@ -578,7 +578,7 @@ function Test-AMAAgentResourceUsage {
     catch {
         $result.Status = "Error"
         $result.Error = $_.Exception.Message
-        Write-Error "Failed to check AMA agent resource usage: $_"
+        Write-Verbose "Failed to check AMA agent resource usage: $($_.Exception.Message)"
     }
 
     return $result

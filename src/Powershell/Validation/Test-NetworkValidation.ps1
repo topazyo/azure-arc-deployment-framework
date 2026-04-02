@@ -64,7 +64,7 @@ function Test-NetworkValidation {
             }
         }
         catch {
-            Write-Error "Failed to load network validation configuration: $_"
+            Write-Verbose "Failed to load network validation configuration: $($_.Exception.Message)"
             $validationResults.Status = "Error"
             $validationResults.Error = "Configuration load failure: $($_.Exception.Message)"
             return [PSCustomObject]$validationResults
@@ -159,7 +159,7 @@ function Test-NetworkValidation {
         catch {
             $validationResults.Status = "Error"
             $validationResults.Error = $_.Exception.Message
-            Write-Error "Network validation failed: $_"
+            Write-Verbose "Network validation failed: $($_.Exception.Message)"
         }
     }
 

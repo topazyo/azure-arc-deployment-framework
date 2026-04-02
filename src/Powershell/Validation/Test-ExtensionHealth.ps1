@@ -32,7 +32,7 @@ function Test-ExtensionHealth {
     process {
         try {
             # Get Arc server resource
-            $arcServer = Get-AzConnectedMachine -Name $ServerName -ErrorAction Stop
+            $arcServer = Get-ExtensionArcMachine -ServerName $ServerName
 
             if (-not $arcServer) {
                 throw "Server $ServerName not found as an Arc-enabled server"
@@ -40,12 +40,12 @@ function Test-ExtensionHealth {
 
             # Get all extensions if not specified
             if (-not $ExtensionNames) {
-                $extensions = Get-AzConnectedMachineExtension -ResourceGroupName $arcServer.ResourceGroupName -MachineName $ServerName
+                $extensions = @(Get-ExtensionArcMachineRecords -ServerName $ServerName -ArcServer $arcServer)
             }
             else {
                 $extensions = @()
                 foreach ($extName in $ExtensionNames) {
-                    $ext = Get-AzConnectedMachineExtension -ResourceGroupName $arcServer.ResourceGroupName -MachineName $ServerName -Name $extName -ErrorAction SilentlyContinue
+                    $ext = Get-ExtensionArcMachineRecords -ServerName $ServerName -ArcServer $arcServer -Name $extName
                     if ($ext) {
                         $extensions += $ext
                     }
@@ -158,7 +158,7 @@ function Test-ExtensionHealth {
         catch {
             $extensionHealth.Status = "Error"
             $extensionHealth.Error = $_.Exception.Message
-            Write-Error "Extension health check failed: $_"
+            Write-Verbose "Extension health check failed: $($_.Exception.Message)"
         }
     }
 
@@ -365,4 +365,65 @@ function Get-ExtensionRecommendations {
     }
 
     return $recommendations
+}
+
+function Get-ExtensionArcMachine {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][string]$ServerName)
+
+    try {
+        return Get-AzConnectedMachine -Name $ServerName -ErrorAction Stop
+    }
+    catch {
+        if ($_.Exception.Message -match 'ResourceGroupName') {
+            return $null
+        }
+
+        throw
+    }
+}
+
+function Get-ExtensionArcMachineRecords {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$ServerName,
+        [Parameter()][object]$ArcServer,
+        [Parameter()][string]$Name
+    )
+
+    $resourceGroupName = $null
+    if ($ArcServer) {
+        if ($ArcServer.PSObject.Properties.Name -contains 'ResourceGroupName' -and $ArcServer.ResourceGroupName) {
+            $resourceGroupName = $ArcServer.ResourceGroupName
+        }
+        elseif ($ArcServer.PSObject.Properties.Name -contains 'Id' -and $ArcServer.Id) {
+            $idSegments = $ArcServer.Id -split '/'
+            if ($idSegments.Count -gt 4) {
+                $resourceGroupName = $idSegments[4]
+            }
+        }
+    }
+
+    try {
+        if ($resourceGroupName) {
+            if ($PSBoundParameters.ContainsKey('Name')) {
+                return Get-AzConnectedMachineExtension -ResourceGroupName $resourceGroupName -MachineName $ServerName -Name $Name -ErrorAction Stop
+            }
+
+            return Get-AzConnectedMachineExtension -ResourceGroupName $resourceGroupName -MachineName $ServerName -ErrorAction Stop
+        }
+
+        if ($PSBoundParameters.ContainsKey('Name')) {
+            return Get-AzConnectedMachineExtension -MachineName $ServerName -Name $Name -ErrorAction Stop
+        }
+
+        return Get-AzConnectedMachineExtension -MachineName $ServerName -ErrorAction Stop
+    }
+    catch {
+        if ($_.Exception.Message -match 'ResourceGroupName') {
+            return $null
+        }
+
+        throw
+    }
 }

@@ -269,7 +269,7 @@ function Test-ArcAgentValidation {
         catch {
             $validationResults.Status = "Error"
             $validationResults.Error = $_.Exception.Message
-            Write-Error "Arc agent validation failed: $_"
+            Write-Verbose "Arc agent validation failed: $($_.Exception.Message)"
             Write-Log -Message "Arc agent validation failed: $_" -Level Error
         }
     }
@@ -647,7 +647,7 @@ function Get-ArcValidationRecommendations {
                     Component = $component
                     Priority = "High"
                     Action = "Restart the Arc agent service"
-                    Details = "Run 'Restart-Service -Name himds' or use azcmagent to restart the service"
+                    Details = "Restart the himds service and review Arc agent startup dependencies"
                 }
             }
             "Configuration" {

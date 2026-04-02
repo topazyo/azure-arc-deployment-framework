@@ -186,7 +186,12 @@ Function Backup-OperationState {
         # --- Manage Backup Versions ---
         if ($MaxBackupVersions -gt 0) {
             Write-ActivityLog "Managing backup versions for OperationId '$OperationId'. Max versions: $MaxBackupVersions."
-            $existingVersions = Get-ChildItem -Path $targetOperationBackupDir -Directory | Sort-Object Name # Name is YYYYMMDD_HHMMSS
+            $existingVersions = if (Test-Path -Path $targetOperationBackupDir -PathType Container) {
+                Get-ChildItem -Path $targetOperationBackupDir -Directory | Sort-Object Name
+            }
+            else {
+                @()
+            }
             $versionsToDeleteCount = $existingVersions.Count - $MaxBackupVersions
 
             if ($versionsToDeleteCount -gt 0) {

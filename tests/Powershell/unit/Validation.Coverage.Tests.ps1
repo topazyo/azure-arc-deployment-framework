@@ -2608,9 +2608,9 @@ Describe 'Test-SecurityValidation.ps1 additional branches' {
                 return @{
                     Profiles = @{ Domain = $true; Private = $true; Public = $true }
                     ArcRules = @(
-                        [PSCustomObject]@{ DisplayName = 'Azure Arc Rule'; Enabled = $true; Direction = 'Outbound'; Action = 'Allow' },
-                        [PSCustomObject]@{ DisplayName = 'Azure Monitor Rule'; Enabled = $true; Direction = 'Outbound'; Action = 'Allow' },
-                        [PSCustomObject]@{ DisplayName = 'Azure Connected Machine Rule'; Enabled = $true; Direction = 'Outbound'; Action = 'Allow' }
+                        [PSCustomObject]@{ DisplayName = 'Azure Arc Rule'; Enabled = $true; Direction = 'Outbound'; Action = 'Allow'; PortFilters = @([PSCustomObject]@{ RemotePort = @(443, 80); Protocol = 'TCP' }) },
+                        [PSCustomObject]@{ DisplayName = 'Azure Monitor Rule'; Enabled = $true; Direction = 'Outbound'; Action = 'Allow'; PortFilters = @([PSCustomObject]@{ RemotePort = @(443); Protocol = 'TCP' }) },
+                        [PSCustomObject]@{ DisplayName = 'Azure Connected Machine Rule'; Enabled = $true; Direction = 'Outbound'; Action = 'Allow'; PortFilters = @([PSCustomObject]@{ RemotePort = @('Any'); Protocol = 'TCP' }) }
                     )
                 }
             }
@@ -2879,32 +2879,24 @@ Describe 'Test-SecurityValidation.ps1 additional branches' {
     }
 
     It 'Test-FirewallConfiguration executes firewall profile and port inspection locally' {
-        Mock Invoke-Command { & $ScriptBlock @ArgumentList } -ParameterFilter { $ComputerName -ne $null }
-        Mock New-Object {
-            $fw = [PSCustomObject]@{ CurrentProfileTypes = 7 }
-            $fw | Add-Member -MemberType ScriptMethod -Name FirewallEnabled -Value {
-                param($profile)
-                if ($profile -in 1, 4) { return $false }
-                return $true
-            } -Force
-            $fw
-        } -ParameterFilter { $ComObject -eq 'HNetCfg.FwPolicy2' }
-        Mock Get-NetFirewallRule {
-            if ($PSBoundParameters.ContainsKey('Direction')) {
-                return @([PSCustomObject]@{ DisplayName = 'Allow 443' })
+        $script:securityLocalFirewallCallCount = 0
+        Mock Invoke-Command {
+            $script:securityLocalFirewallCallCount++
+            if ($script:securityLocalFirewallCallCount -eq 1) {
+                return @{
+                    Profiles = @{ Domain = $false; Private = $true; Public = $false }
+                    ArcRules = @(
+                        [PSCustomObject]@{ DisplayName = 'Azure Arc Rule'; Enabled = $true; Direction = 'Outbound'; Action = 'Allow'; PortFilters = @() },
+                        [PSCustomObject]@{ DisplayName = 'Azure Monitor Rule'; Enabled = $true; Direction = 'Outbound'; Action = 'Allow'; PortFilters = @() }
+                    )
+                }
             }
 
             return @(
-                [PSCustomObject]@{ DisplayName = 'Azure Arc Rule'; Enabled = $true; Direction = 'Outbound'; Action = 'Allow' },
-                [PSCustomObject]@{ DisplayName = 'Azure Monitor Rule'; Enabled = $true; Direction = 'Outbound'; Action = 'Allow' }
+                @{ Port = 443; Protocol = 'TCP'; Description = 'HTTPS'; HasRule = $false },
+                @{ Port = 80; Protocol = 'TCP'; Description = 'HTTP'; HasRule = $false }
             )
-        }
-        Mock Get-NetFirewallPortFilter {
-            param([Parameter(ValueFromPipeline = $true)]$InputObject)
-            process {
-                return
-            }
-        }
+        } -ParameterFilter { $ComputerName -ne $null }
 
         $result = Test-FirewallConfiguration -ServerName 'TEST-SRV'
 

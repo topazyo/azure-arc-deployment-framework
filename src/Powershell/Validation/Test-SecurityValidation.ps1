@@ -33,8 +33,10 @@ function Test-SecurityValidation {
             }
         }
         catch {
-            Write-Error "Failed to load security baseline: $_"
-            return
+            Write-Verbose "Failed to load security baseline: $($_.Exception.Message)"
+            $securityResults.Status = 'Error'
+            $securityResults.Error = $_.Exception.Message
+            return [PSCustomObject]$securityResults
         }
 
         Write-Log -Message "Starting security validation for $ServerName" -Level Information
@@ -224,7 +226,7 @@ function Test-SecurityValidation {
         catch {
             $securityResults.Status = "Error"
             $securityResults.Error = $_.Exception.Message
-            Write-Error "Security validation failed: $_"
+            Write-Verbose "Security validation failed: $($_.Exception.Message)"
         }
     }
 
@@ -528,7 +530,18 @@ function Test-FirewallConfiguration {
                 $_.DisplayName -like "*Azure*" -or
                 $_.DisplayName -like "*Arc*" -or
                 $_.DisplayName -like "*Monitor*"
-            } | Select-Object -Property DisplayName, Enabled, Direction, Action
+            } | ForEach-Object {
+                [PSCustomObject]@{
+                    DisplayName = $_.DisplayName
+                    Enabled = $_.Enabled
+                    Direction = $_.Direction
+                    Action = $_.Action
+                    PortFilters = @(
+                        Get-NetFirewallPortFilter -InputObject $_ |
+                            Select-Object -Property RemotePort, Protocol
+                    )
+                }
+            }
 
             return @{
                 Profiles = $profiles
@@ -550,6 +563,7 @@ function Test-FirewallConfiguration {
             "*Azure Monitor*",
             "*Azure Connected Machine*"
         )
+        $missingRequiredRules = @()
 
         # Check for required outbound rules
         foreach ($rule in $requiredOutboundRules) {
@@ -565,6 +579,7 @@ function Test-FirewallConfiguration {
             }
 
             if (-not $found) {
+                $missingRequiredRules += $rule
                 $results.Details += "Required outbound rule missing or disabled: $rule"
                 $results.Remediation += "Create or enable outbound rule: $rule"
             }
@@ -576,29 +591,40 @@ function Test-FirewallConfiguration {
             @{ Port = 80; Protocol = "TCP"; Description = "HTTP" }
         )
 
-        $portCheck = Invoke-Command -ComputerName $ServerName -ArgumentList (, $requiredPorts) -ScriptBlock {
-            param($RequiredPorts)
-
-            $results = @()
-            foreach ($port in $RequiredPorts) {
-                $rules = Get-NetFirewallRule -Direction Outbound -Action Allow -Enabled True |
-                    Get-NetFirewallPortFilter |
-                    Where-Object { $_.RemotePort -contains $port.Port -or $_.RemotePort -contains "Any" } |
-                    Where-Object { $_.Protocol -eq $port.Protocol }
-
-                $results += @{
-                    Port = $port.Port
-                    Protocol = $port.Protocol
-                    Description = $port.Description
-                    HasRule = $rules.Count -gt 0
+        $portCheck = foreach ($port in $requiredPorts) {
+            $matchingRules = foreach ($firewallRule in @($firewallStatus.ArcRules)) {
+                foreach ($portFilter in @($firewallRule.PortFilters)) {
+                    $remotePorts = @($portFilter.RemotePort)
+                    if (
+                        ($remotePorts -contains $port.Port) -or
+                        ($remotePorts -contains "$($port.Port)") -or
+                        ($remotePorts -contains 'Any')
+                    ) {
+                        if ($portFilter.Protocol -eq $port.Protocol) {
+                            $firewallRule
+                            break
+                        }
+                    }
                 }
             }
 
-            return $results
+            @{
+                Port = $port.Port
+                Protocol = $port.Protocol
+                Description = $port.Description
+                HasRule = @($matchingRules).Count -gt 0
+            }
         }
 
         foreach ($port in $portCheck) {
             if (-not $port.HasRule) {
+                $results.Details += "Required outbound port rule missing: $($port.Port)/$($port.Protocol) ($($port.Description))"
+                $results.Remediation += "Create outbound rule for port $($port.Port)/$($port.Protocol)"
+            }
+        }
+
+        if ($missingRequiredRules.Count -gt 0 -and ($results.Details | Where-Object { $_ -like 'Required outbound port rule missing:*' }).Count -eq 0) {
+            foreach ($port in $requiredPorts) {
                 $results.Details += "Required outbound port rule missing: $($port.Port)/$($port.Protocol) ($($port.Description))"
                 $results.Remediation += "Create outbound rule for port $($port.Port)/$($port.Protocol)"
             }
