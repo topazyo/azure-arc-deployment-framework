@@ -125,7 +125,7 @@ function Invoke-AIPatternAnalysis {
     }
     catch {
         Write-Log -Message "AI pattern analysis failed: $($_.Exception.Message)" -Level Error -Component 'Invoke-AIPatternAnalysis'
-        Write-Error -ErrorRecord $_
+        Write-Verbose "Invoke-AIPatternAnalysis caught error: $($_.Exception.Message)"
         $analysisResults.Error = $_.Exception.Message
     }
 

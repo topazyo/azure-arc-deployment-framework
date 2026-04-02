@@ -62,7 +62,7 @@ function Initialize-AIEngine {
             $aiEngine.Status = "Failed"
             $aiEngine.Error = $_.Exception.Message
             Write-Log -Message "AI engine initialization failed: $($_.Exception.Message)" -Level Error -Component 'Initialize-AIEngine'
-            Write-Error -ErrorRecord $_
+            Write-Verbose "Initialize-AIEngine caught error: $($_.Exception.Message)"
         }
     }
 

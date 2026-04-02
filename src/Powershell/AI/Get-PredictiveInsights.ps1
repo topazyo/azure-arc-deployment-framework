@@ -103,7 +103,8 @@ function Get-PredictiveInsights {
         $aiEngineScript = $ScriptPath
         if ($aiEngineScript) {
             if (-not (Test-Path $aiEngineScript)) {
-                Write-Error "AI Engine script 'invoke_ai_engine.py' not found at '$aiEngineScript'. Please specify correct path via -ScriptPath."
+                Write-PredictiveInsightsLog -Message "AI Engine script 'invoke_ai_engine.py' not found at '$aiEngineScript'. Please specify correct path via -ScriptPath." `
+                    -Level Error -Component 'Get-PredictiveInsights'
                 throw "AI Engine script not found."
             }
         }
@@ -117,7 +118,8 @@ function Get-PredictiveInsights {
             $aiEngineScript = [System.IO.Path]::GetFullPath($aiEngineScript) # Resolve relative path
 
             if (-not (Test-Path $aiEngineScript)) {
-                Write-Error "AI Engine script 'invoke_ai_engine.py' not found at '$aiEngineScript'. Please specify correct path via -ScriptPath."
+                Write-PredictiveInsightsLog -Message "AI Engine script 'invoke_ai_engine.py' not found at '$aiEngineScript'. Please specify correct path via -ScriptPath." `
+                    -Level Error -Component 'Get-PredictiveInsights'
                 throw "AI Engine script not found."
             }
         }
@@ -139,7 +141,8 @@ function Get-PredictiveInsights {
         if ($forcePythonFail) {
             try { & $PythonExecutable --version 2>$null | Out-Null } catch { Write-Verbose "Python probe failed during forced failure path for '$PythonExecutable'." }
             try { & python3 --version 2>$null | Out-Null } catch { Write-Verbose "Fallback python3 probe failed during forced failure path." }
-            Write-Error "Python executable '$PythonExecutable' (and 'python3' if default) not found or not working. Please ensure Python is installed and in PATH, or specify the full path."
+            Write-PredictiveInsightsLog -Message "Python executable '$PythonExecutable' (and 'python3' if default) not found or not working. Please ensure Python is installed and in PATH, or specify the full path." `
+                -Level Error -Component 'Get-PredictiveInsights'
             throw "Python executable not found."
         }
 
@@ -162,7 +165,8 @@ function Get-PredictiveInsights {
         }
 
         if (-not $pythonFound) {
-            Write-Error "Python executable '$PythonExecutable' (and 'python3' if default) not found or not working. Please ensure Python is installed and in PATH, or specify the full path."
+            Write-PredictiveInsightsLog -Message "Python executable '$PythonExecutable' (and 'python3' if default) not found or not working. Please ensure Python is installed and in PATH, or specify the full path." `
+                -Level Error -Component 'Get-PredictiveInsights'
             throw "Python executable not found."
         }
         Write-Verbose "Using Python executable '$PythonExecutable'."
@@ -279,13 +283,12 @@ function Get-PredictiveInsights {
         if ($process.ExitCode -ne 0) {
             Write-PredictiveInsightsLog -Message "AI Engine failed (exit $($process.ExitCode), CorrelationId: $CorrelationId)" `
                 -Level Error -Component 'Get-PredictiveInsights'
-            Write-Error -Message "AI Engine script execution failed. Exit Code: $($process.ExitCode) (CorrelationId: $CorrelationId)"
             if (-not [string]::IsNullOrWhiteSpace($stdErr)) {
-                Write-Error -Message "Error details from AI Engine: $stdErr"
+                Write-Verbose "Error details from AI Engine: $stdErr"
                 # Attempt to parse stderr as JSON if it might contain structured error from Python
                 try {
                     $errorObject = $stdErr | ConvertFrom-Json -ErrorAction SilentlyContinue
-                    if ($errorObject) { Write-Error "Parsed AI Engine error object: $($errorObject | ConvertTo-Json -Compress)" }
+                    if ($errorObject) { Write-Verbose "Parsed AI Engine error object: $($errorObject | ConvertTo-Json -Compress)" }
                 } catch { Write-Verbose "Failed to parse AI Engine stderr as JSON: $($_.Exception.Message)" }
             }
             throw "AI Engine script failed."
@@ -294,7 +297,6 @@ function Get-PredictiveInsights {
         if ([string]::IsNullOrWhiteSpace($stdOut)) {
             Write-PredictiveInsightsLog -Message "AI Engine returned no output (CorrelationId: $CorrelationId)" `
                 -Level Error -Component 'Get-PredictiveInsights'
-            Write-Error -Message "AI Engine script returned no output (CorrelationId: $CorrelationId)."
             if (-not [string]::IsNullOrWhiteSpace($stdErr)) {
                 Write-Warning "Error stream from AI Engine (though exit code was 0): $stdErr"
             }
@@ -314,7 +316,7 @@ function Get-PredictiveInsights {
         catch {
             Write-PredictiveInsightsLog -Message "Failed to parse JSON response from AI Engine (CorrelationId: $CorrelationId)" `
                 -Level Error -Component 'Get-PredictiveInsights'
-            Write-Error -ErrorRecord $_
+            Write-Verbose "JSON parsing details: $($_.Exception.Message)"
             throw "JSON parsing failed."
         }
     }

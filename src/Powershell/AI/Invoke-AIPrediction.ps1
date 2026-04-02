@@ -55,7 +55,7 @@ function Invoke-AIPrediction {
         }
         catch {
             Write-Log -Message "AI prediction failed: $($_.Exception.Message)" -Level Error -Component 'Invoke-AIPrediction'
-            Write-Error -ErrorRecord $_
+            Write-Verbose "Invoke-AIPrediction caught error: $($_.Exception.Message)"
             $predictionResults.Error = $_.Exception.Message
         }
     }

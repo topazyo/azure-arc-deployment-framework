@@ -85,13 +85,18 @@ function Write-FrameworkLog {
     process {
         try {
             # Write to log file
-            Write-LogSink -Path $LogPath -Value $logEntry
+            if (Get-Command -Name Write-LogSink -ErrorAction SilentlyContinue) {
+                Write-LogSink -Path $LogPath -Value $logEntry
+            }
+            else {
+                Add-Content -Path $LogPath -Value $logEntry
+            }
 
             # Write to appropriate output stream
             switch ($Level) {
                 'Error' {
-                    Write-Error $Message
-                    $host.UI.WriteErrorLine($logEntry)
+                    Write-Warning $Message
+                    Write-Information $logEntry -InformationAction Continue
                 }
                 'Warning' { Write-Warning $Message }
                 'Debug' { Write-Debug $Message }
@@ -104,12 +109,10 @@ function Write-FrameworkLog {
             }
         }
         catch {
-            Write-Error "Failed to write log entry: $_"
+            Write-Warning "Failed to write log entry: $($_.Exception.Message)"
         }
     }
 }
-
-Set-Item -Path Function:Write-Log -Value ${function:Write-FrameworkLog}
 
 function Write-LogSink {
     [CmdletBinding()]
@@ -122,6 +125,8 @@ function Write-LogSink {
 
     Add-Content -Path $Path -Value $Value
 }
+
+Set-Item -Path Function:Write-Log -Value ${function:Write-FrameworkLog}
 
 function Write-StructuredLog {
     [CmdletBinding()]
