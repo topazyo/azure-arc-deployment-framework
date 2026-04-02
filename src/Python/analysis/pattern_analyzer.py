@@ -236,9 +236,9 @@ class PatternAnalyzer:
             # Ensure enough samples for DBSCAN
             if features_array.size == 0 or features_array.shape[0] < self.dbscan_min_samples :
                 self.logger.warning(
-    f"Not enough samples ({
-        features_array.shape[0]}) or features for behavioral pattern analysis. Min samples: {
-            self.dbscan_min_samples}")
+                    f"Not enough samples ({features_array.shape[0]}) or features for behavioral pattern analysis. "
+                    f"Min samples: {self.dbscan_min_samples}"
+                )
                 return results
 
             scaled_features = self.scaler.fit_transform(features_array)
@@ -628,7 +628,16 @@ class PatternAnalyzer:
             self.logger.warning("DataFrame is empty for performance trend analysis.")
             return results
         try:
-            df = data.sort_values(by='timestamp').copy()
+            df = data.copy()
+            df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
+            df = df.dropna(subset=['timestamp']).sort_values(by='timestamp')
+
+            if len(df) < 3:
+                self.logger.warning(
+                    "Not enough valid timestamp samples for performance trend analysis."
+                )
+                return results
+
             time_numeric = (df['timestamp'] - df['timestamp'].min()).dt.total_seconds()
 
             performance_metrics = self.config.get('performance_metrics', ['cpu_usage', 'memory_usage', 'response_time'])

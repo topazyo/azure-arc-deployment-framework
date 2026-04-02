@@ -576,9 +576,11 @@ function Test-FirewallConfiguration {
             @{ Port = 80; Protocol = "TCP"; Description = "HTTP" }
         )
 
-        $portCheck = Invoke-Command -ComputerName $ServerName -ScriptBlock {
+        $portCheck = Invoke-Command -ComputerName $ServerName -ArgumentList (, $requiredPorts) -ScriptBlock {
+            param($RequiredPorts)
+
             $results = @()
-            foreach ($port in $using:requiredPorts) {
+            foreach ($port in $RequiredPorts) {
                 $rules = Get-NetFirewallRule -Direction Outbound -Action Allow -Enabled True |
                     Get-NetFirewallPortFilter |
                     Where-Object { $_.RemotePort -contains $port.Port -or $_.RemotePort -contains "Any" } |

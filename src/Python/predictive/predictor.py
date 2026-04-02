@@ -77,8 +77,7 @@ class ArcPredictor:
             #   'importances': model.feature_importances_.tolist()
             # }
             # So we load this dict.
-            feature_info_path = f"{
-                self.model_dir}/{model_type}_feature_importance.pkl"
+            feature_info_path = f"{self.model_dir}/{model_type}_feature_importance.pkl"
 
             # Always initialize feature_info for the type so downstream code
             # can be defensive.
@@ -127,10 +126,10 @@ class ArcPredictor:
                         self.feature_info[model_type]['importances_map'] = None
 
                     self.logger.info(
-                        f"Loaded feature info for {model_type}. Algorithm: {
-                            self.feature_info[model_type]['algorithm']}. " f"Features: {
-                            len(
-                                self.feature_info[model_type]['ordered_features'])}.")
+                        f"Loaded feature info for {model_type}. Algorithm: "
+                        f"{self.feature_info[model_type]['algorithm']}. Features: "
+                        f"{len(self.feature_info[model_type]['ordered_features'])}."
+                    )
                 else:
                     self.logger.warning(
                         f"Feature info file at {feature_info_path} for {model_type} is not a dictionary. Cannot parse.")
@@ -378,8 +377,7 @@ class ArcPredictor:
 
         except Exception as e:
             self.logger.error(
-                f"Feature preparation failed for {model_type}: {
-                    str(e)}", exc_info=True)
+                f"Feature preparation failed for {model_type}: {str(e)}", exc_info=True)
             return None
 
     def calculate_feature_impacts(self,
@@ -403,9 +401,9 @@ class ArcPredictor:
         # ordered names list
         if len(scaled_features_array_1d) != len(ordered_feature_names):
             self.logger.error(
-                f"Mismatch in length between scaled_features_array_1d ({
-                    len(scaled_features_array_1d)}) and ordered_feature_names ({
-                    len(ordered_feature_names)}). Cannot calculate impacts.")
+                f"Mismatch in length between scaled_features_array_1d ({len(scaled_features_array_1d)}) "
+                f"and ordered_feature_names ({len(ordered_feature_names)}). Cannot calculate impacts."
+            )
             return impacts
 
         for i, feature_name in enumerate(ordered_feature_names):

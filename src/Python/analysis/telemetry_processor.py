@@ -23,8 +23,7 @@ class TelemetryProcessor:
         logging.basicConfig(
             level=logging.INFO,
             format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-            filename=f'telemetry_processor_{
-                datetime.now().strftime("%Y%m%d")}.log')
+            filename=f'telemetry_processor_{datetime.now().strftime("%Y%m%d")}.log')
         self.logger = logging.getLogger('TelemetryProcessor')
 
     def process_telemetry(
@@ -286,8 +285,7 @@ class TelemetryProcessor:
                 return None, []
 
             self.logger.debug(
-                f"Prepared feature matrix with {
-                    len(feature_names_used)} features: {feature_names_used}")
+                f"Prepared feature matrix with {len(feature_names_used)} features: {feature_names_used}")
             # Return 2D array (1 sample, N features)
             return np.array([feature_values]), feature_names_used
         except Exception as e:
@@ -317,8 +315,7 @@ class TelemetryProcessor:
             return anomalous_feature_values
         except Exception as e:
             self.logger.error(
-                f"Anomalous feature value extraction failed: {
-                    str(e)}")
+                f"Anomalous feature value extraction failed: {str(e)}")
             return {"error": str(e)}
 
     def _detect_anomalies(
@@ -369,15 +366,15 @@ class TelemetryProcessor:
                 and scaled_features.shape[1] < 2
             ):
                 self.logger.warning(
-                    f"PCA n_components is {
-                        self.pca.n_components} but only {
-                        scaled_features.shape[1]} feature(s) available. Skipping PCA.")
+                    f"PCA n_components is {self.pca.n_components} but only {scaled_features.shape[1]} "
+                    f"feature(s) available. Skipping PCA."
+                )
                 pca_features = scaled_features
             elif isinstance(self.pca.n_components, int) and self.pca.n_components > scaled_features.shape[1]:
                 self.logger.warning(
-                    f"PCA n_components ({
-                        self.pca.n_components}) is greater than number of features ({
-                        scaled_features.shape[1]}). Adjusting n_components.")
+                    f"PCA n_components ({self.pca.n_components}) is greater than number of features "
+                    f"({scaled_features.shape[1]}). Adjusting n_components."
+                )
                 # Adjust n_components
                 self.pca.n_components = scaled_features.shape[1]
                 pca_features = self.pca.fit_transform(scaled_features)
@@ -419,8 +416,7 @@ class TelemetryProcessor:
             return anomalies
         except Exception as e:
             self.logger.error(
-                f"Anomaly detection failed: {
-                    str(e)}", exc_info=True)
+                f"Anomaly detection failed: {str(e)}", exc_info=True)
             return {'detected': False, 'details': [{'error': str(e)}]}
 
     def _calculate_period_trends(
@@ -428,8 +424,7 @@ class TelemetryProcessor:
         """Calculate trends for specified numerical columns in a given DataFrame period."""
         try:
             self.logger.info(
-                f"Calculating period trends for a dataframe with shape {
-                    df_period.shape}...")
+                f"Calculating period trends for a dataframe with shape {df_period.shape}...")
             trends = {}
             if df_period.empty:
                 self.logger.warning(
@@ -482,8 +477,9 @@ class TelemetryProcessor:
                         'significant': False,
                         'direction': 'stable'}
                     self.logger.debug(
-                        f"Skipping trend for column '{col_name}' due to insufficient data points ({
-                            valid_indices.sum()}).")
+                        f"Skipping trend for column '{col_name}' due to insufficient data points "
+                        f"({valid_indices.sum()})."
+                    )
                     continue
 
                 current_time_numeric = time_numeric[valid_indices]
@@ -517,12 +513,10 @@ class TelemetryProcessor:
                         'direction': direction
                     }
                     self.logger.debug(
-                        f"Calculated trend for column '{col_name}': {
-                            trends[col_name]}")
+                        f"Calculated trend for column '{col_name}': {trends[col_name]}")
                 except Exception as e_linregress:
                     self.logger.error(
-                        f"Linregress failed for column '{col_name}': {
-                            str(e_linregress)}")
+                        f"Linregress failed for column '{col_name}': {str(e_linregress)}")
                     trends[col_name] = {
                         'slope': 0.0,
                         'intercept': 0.0,
@@ -534,8 +528,7 @@ class TelemetryProcessor:
             return trends
         except Exception as e:
             self.logger.error(
-                f"Period trend calculation failed: {
-                    str(e)}", exc_info=True)
+                f"Period trend calculation failed: {str(e)}", exc_info=True)
             return {}
 
     def _analyze_trends(self, df: pd.DataFrame) -> Dict[str, Any]:
@@ -584,8 +577,7 @@ class TelemetryProcessor:
             return trends
         except Exception as e:
             self.logger.error(
-                f"Trend analysis failed: {
-                    str(e)}", exc_info=True)
+                f"Trend analysis failed: {str(e)}", exc_info=True)
             return trends  # Return default empty trends on error
 
     def _generate_anomaly_insights(
@@ -616,20 +608,16 @@ class TelemetryProcessor:
                         {
                             'type': 'anomaly',
                             'priority': 'high',
-                            'message': f"Anomaly detected with score {
-                                detail.get(
-                                    'distance_score',
-                                    0):.2f} (threshold: {
-                                detail.get(
-                                    'threshold_value',
-                                    0):.2f}).",
-                            'details': f"Contributing feature values: {
-                                feature_summary if feature_summary else 'N/A'}. Raw data: {feature_values}"})
+                            'message':
+                            f"Anomaly detected with score {detail.get('distance_score', 0):.2f} "
+                            f"(threshold: {detail.get('threshold_value', 0):.2f}).",
+                            'details':
+                            f"Contributing feature values: {feature_summary if feature_summary else 'N/A'}. "
+                            f"Raw data: {feature_values}"})
             return insights
         except Exception as e:
             self.logger.error(
-                f"Anomaly insight generation failed: {
-                    str(e)}", exc_info=True)
+                f"Anomaly insight generation failed: {str(e)}", exc_info=True)
             return [{'type': 'error',
                      'priority': 'high',
                      'message': 'Anomaly insight generation failed',
@@ -673,8 +661,7 @@ class TelemetryProcessor:
             return insights
         except Exception as e:
             self.logger.error(
-                f"Trend insight generation failed: {
-                    str(e)}", exc_info=True)
+                f"Trend insight generation failed: {str(e)}", exc_info=True)
             return [{'type': 'error',
                      'priority': 'high',
                      'message': 'Trend insight generation failed',
@@ -720,8 +707,7 @@ class TelemetryProcessor:
 
         except Exception as e:
             self.logger.error(
-                f"Insight generation failed: {
-                    str(e)}", exc_info=True)
+                f"Insight generation failed: {str(e)}", exc_info=True)
             return [{'type': 'error',
                      'priority': 'high',
                      'message': 'Insight generation failed',
@@ -774,8 +760,7 @@ class TelemetryProcessor:
             }
         except Exception as e:
             self.logger.error(
-                f"Error in _calculate_trend for series of length {
-                    len(series)}: {e}", exc_info=True)
+                f"Error in _calculate_trend for series of length {len(series)}: {e}", exc_info=True)
             return {
                 'slope': 0.0,
                 'intercept': 0.0,
@@ -825,13 +810,11 @@ class TelemetryProcessor:
             return np.array(distances)
         except np.linalg.LinAlgError as e:
             self.logger.error(
-                f"Linear algebra error in Mahalanobis calculation: {
-                    str(e)}. Returning zero distances.")
+                f"Linear algebra error in Mahalanobis calculation: {str(e)}. Returning zero distances.")
             return np.zeros(features.shape[0])
         except Exception as e:
             self.logger.error(
-                f"Unexpected error in Mahalanobis calculation: {
-                    str(e)}. Returning zero distances.")
+                f"Unexpected error in Mahalanobis calculation: {str(e)}. Returning zero distances.")
             return np.zeros(features.shape[0])
 
     def _detect_periodic_patterns(self, df: pd.DataFrame) -> Dict[str, Any]:
@@ -858,8 +841,7 @@ class TelemetryProcessor:
             return patterns
         except Exception as e:
             self.logger.error(
-                f"Periodic pattern detection failed: {
-                    str(e)}", exc_info=True)
+                f"Periodic pattern detection failed: {str(e)}", exc_info=True)
             return {}
 
     def _prepare_fft_frame(
@@ -1028,8 +1010,7 @@ class TelemetryProcessor:
 
             if numerical_df.shape[1] < 2:
                 self.logger.info(
-                    f"Not enough numerical columns ({
-                        numerical_df.shape[1]}) to calculate correlations.")
+                    f"Not enough numerical columns ({numerical_df.shape[1]}) to calculate correlations.")
                 return correlations_output
 
             corr_matrix = numerical_df.corr(method='pearson')
@@ -1061,8 +1042,7 @@ class TelemetryProcessor:
             return correlations_output
         except Exception as e:
             self.logger.error(
-                f"Correlation detection failed: {
-                    str(e)}", exc_info=True)
+                f"Correlation detection failed: {str(e)}", exc_info=True)
             return {"significant_pairs": []}  # Return default on error
 
     def _detect_anomalous_patterns(self, df: pd.DataFrame) -> Dict[str, Any]:
@@ -1099,8 +1079,7 @@ class TelemetryProcessor:
             return detected_patterns
         except Exception as e:
             self.logger.error(
-                f"Anomalous pattern detection failed: {
-                    str(e)}", exc_info=True)
+                f"Anomalous pattern detection failed: {str(e)}", exc_info=True)
             return {}
 
     def _evaluate_anomalous_rule(

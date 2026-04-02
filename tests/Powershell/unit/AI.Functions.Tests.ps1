@@ -87,7 +87,7 @@ Describe "Get-PredictiveInsights AI Function" {
         $result.PSAnalysisType | Should -Be $analysis
 
         Should -Invoke -CommandName Start-Process -Times 1 -ParameterFilter {
-            $ArgumentList[2] -eq "--servername" -and $ArgumentList[3] -eq "`"$server`"" -and $ArgumentList[4] -eq "--analysistype" -and $ArgumentList[5] -eq "`"$analysis`""
+            $ArgumentList[1] -eq "--servername" -and $ArgumentList[2] -eq "`"$server`"" -and $ArgumentList[3] -eq "--analysistype" -and $ArgumentList[4] -eq "`"$analysis`""
         }
         Should -Invoke -CommandName Remove-Item -Times 2 # For stdout and stderr temp files
     }
@@ -158,7 +158,7 @@ Describe "Get-PredictiveInsights AI Function" {
             # Reset Start-Process mock for verification if it's not in BeforeEach for parameter filter
             Mock Start-Process {
                 param($FilePath, $ArgumentList, $Wait, $NoNewWindow, $PassThru, $RedirectStandardOutput, $RedirectStandardError)
-                Set-Content -Path $RedirectStandardOutput -Value ('{"overall_risk": {"score": 0.3, "level": "Low"}, "analysis_type_processed": "' + $ArgumentList[5].Trim('"') + '" }')
+                Set-Content -Path $RedirectStandardOutput -Value ('{"overall_risk": {"score": 0.3, "level": "Low"}, "analysis_type_processed": "' + $ArgumentList[4].Trim('"') + '" }')
                 Set-Content -Path $RedirectStandardError -Value ""
                 $mockProc = [pscustomobject]@{ ExitCode = 0 }
                 $mockProc | Add-Member -MemberType ScriptMethod -Name 'WaitForExit' -Value { param($ms) return $true }
@@ -169,7 +169,7 @@ Describe "Get-PredictiveInsights AI Function" {
             $result = Get-PredictiveInsights -ServerName $server -AnalysisType $aType
             $result.analysis_type_processed | Should -Be $aType
             Should -Invoke -CommandName Start-Process -Times 1 -ParameterFilter {
-                  $ArgumentList[2] -eq "--servername" -and $ArgumentList[3] -eq "`"$server`"" -and $ArgumentList[4] -eq "--analysistype" -and $ArgumentList[5] -eq "`"$aType`""
+                $ArgumentList[1] -eq "--servername" -and $ArgumentList[2] -eq "`"$server`"" -and $ArgumentList[3] -eq "--analysistype" -and $ArgumentList[4] -eq "`"$aType`""
             }
         }
     }

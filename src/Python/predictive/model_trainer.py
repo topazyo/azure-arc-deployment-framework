@@ -61,10 +61,9 @@ class ArcModelTrainer:
             if len(actual_features_to_use) != len(
                     feature_config['required_features']):
                 self.logger.warning(
-                    f"Not all required_features for {model_type} found in input data columns. " f"Missing: {
-                        set(
-                            feature_config['required_features']) -
-                        set(actual_features_to_use)}")
+                    f"Not all required_features for {model_type} found in input data columns. "
+                    f"Missing: {set(feature_config['required_features']) - set(actual_features_to_use)}"
+                )
 
             if not actual_features_to_use:
                 raise ValueError(
@@ -86,8 +85,7 @@ class ArcModelTrainer:
             if model_type != 'anomaly_detection':
                 if feature_config['target_column'] not in data.columns:
                     raise ValueError(
-                        f"Target column '{
-                            feature_config['target_column']}' for {model_type} not found in data")
+                        f"Target column '{feature_config['target_column']}' for {model_type} not found in data")
                 target = data[feature_config['target_column']]
                 return scaled_features, target, actual_features_to_use
 
@@ -95,8 +93,7 @@ class ArcModelTrainer:
 
         except Exception as e:
             self.logger.error(
-                f"Data preparation failed for {model_type}: {
-                    str(e)}", exc_info=True)
+                f"Data preparation failed for {model_type}: {str(e)}", exc_info=True)
             raise
 
     def handle_missing_values(
@@ -138,8 +135,7 @@ class ArcModelTrainer:
         elif strategy == 'dropna':  # Not generally recommended for feature sets unless handled carefully
             df = df.dropna()
             self.logger.info(
-                f"Dropped rows with NaNs for {model_type}. Original rows: {original_nan_counts}, After drop: {
-                    len(df)}")
+                f"Dropped rows with NaNs for {model_type}. Original rows: {original_nan_counts}, After drop: {len(df)}")
         else:
             self.logger.warning(
                 f"Unknown missing value strategy '{strategy}' for {model_type}. Not handling NaNs.")
@@ -243,20 +239,15 @@ class ArcModelTrainer:
 
             y_pred = model.predict(X_test)
             self.logger.info(
-                f"{model_type} Model Performance:\n{
-                    classification_report(
-                        y_test, y_pred)}")
+                f"{model_type} Model Performance:\n{classification_report(y_test, y_pred)}")
             self.logger.info(
-                f"{model_type} Confusion Matrix:\n{
-                    confusion_matrix(
-                        y_test, y_pred)}")
+                f"{model_type} Confusion Matrix:\n{confusion_matrix(y_test, y_pred)}")
             self.logger.info(
                 f"{model_type} model training completed successfully.")
 
         except Exception as e:
             self.logger.error(
-                f"{model_type} model training failed: {
-                    str(e)}", exc_info=True)
+                f"{model_type} model training failed: {str(e)}", exc_info=True)
             raise
 
     def train_anomaly_detection_model(self, data: pd.DataFrame) -> None:
@@ -293,16 +284,15 @@ class ArcModelTrainer:
 
             scores = model.score_samples(X_scaled)
             self.logger.info(
-                f"{model_type} Model trained. Anomaly scores range: {
-                    scores.min():.2f} to {
-                    scores.max():.2f} (lower is more anomalous).")
+                f"{model_type} Model trained. Anomaly scores range: {scores.min():.2f} to {scores.max():.2f} "
+                f"(lower is more anomalous)."
+            )
             self.logger.info(
                 f"{model_type} model training completed successfully.")
 
         except Exception as e:
             self.logger.error(
-                f"{model_type} model training failed: {
-                    str(e)}", exc_info=True)
+                f"{model_type} model training failed: {str(e)}", exc_info=True)
             raise
 
     def train_failure_prediction_model(self, data: pd.DataFrame) -> None:
@@ -354,20 +344,15 @@ class ArcModelTrainer:
 
             y_pred = model.predict(X_test)
             self.logger.info(
-                f"{model_type} Model Performance:\n{
-                    classification_report(
-                        y_test, y_pred)}")
+                f"{model_type} Model Performance:\n{classification_report(y_test, y_pred)}")
             self.logger.info(
-                f"{model_type} Confusion Matrix:\n{
-                    confusion_matrix(
-                        y_test, y_pred)}")
+                f"{model_type} Confusion Matrix:\n{confusion_matrix(y_test, y_pred)}")
             self.logger.info(
                 f"{model_type} model training completed successfully.")
 
         except Exception as e:
             self.logger.error(
-                f"{model_type} model training failed: {
-                    str(e)}", exc_info=True)
+                f"{model_type} model training failed: {str(e)}", exc_info=True)
             raise
 
     def save_models(self, output_dir: str) -> None:
@@ -407,8 +392,7 @@ class ArcModelTrainer:
 
         except Exception as e:
             self.logger.error(
-                f"Failed to save models: {
-                    str(e)}", exc_info=True)
+                f"Failed to save models: {str(e)}", exc_info=True)
             raise  # Re-raise to indicate failure in saving
 
     def update_models_with_remediation(
@@ -496,8 +480,7 @@ class ArcModelTrainer:
 
         except Exception as e:
             self.logger.error(
-                f"Failed to process remediation data for model update: {
-                    str(e)}", exc_info=True)
+                f"Failed to process remediation data for model update: {str(e)}", exc_info=True)
             response["status"] = "error"
             response["reason"] = str(e)
             return response

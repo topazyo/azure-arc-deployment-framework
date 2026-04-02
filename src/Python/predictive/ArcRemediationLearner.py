@@ -68,8 +68,7 @@ class ArcRemediationLearner:
                 "AI components (Trainer, Predictor) initialized successfully for RemediationLearner.")
         except Exception as e:
             self.logger.error(
-                f"Failed to initialize AI components: {
-                    str(e)}", exc_info=True)
+                f"Failed to initialize AI components: {str(e)}", exc_info=True)
             # Decide if to raise or handle (e.g., operate without AI components
             # if possible)
             raise
@@ -128,9 +127,10 @@ class ArcRemediationLearner:
                     -max_contexts_to_store:]
 
             self.logger.info(
-                f"Updated success pattern for ({error_type}, {action_taken}): " f"{
-                    current_pattern['success_count']}/{
-                    current_pattern['total_attempts']} successes. " f"Context: {context_summary}")
+                f"Updated success pattern for ({error_type}, {action_taken}): "
+                f"{current_pattern['success_count']}/{current_pattern['total_attempts']} successes. "
+                f"Context: {context_summary}"
+            )
 
             # Call trainer to potentially update models (trainer decides if/how). Pass through the
             # original payload to keep contract aligned with existing tests and trainer's flexible parsing
@@ -152,13 +152,14 @@ class ArcRemediationLearner:
                 self.new_data_counter[data_category_key] = self.new_data_counter.get(
                     data_category_key, 0) + 1
                 self.logger.debug(
-                    f"New data point for '{data_category_key}', count: {
-                        self.new_data_counter[data_category_key]}")
+                    f"New data point for '{data_category_key}', count: "
+                    f"{self.new_data_counter[data_category_key]}"
+                )
 
                 if self.new_data_counter[data_category_key] >= self.retraining_threshold:
                     self.logger.info(
-                        f"Sufficient new data ({
-    self.new_data_counter[data_category_key]} points) gathered for '{data_category_key}'. "
+                        f"Sufficient new data ({self.new_data_counter[data_category_key]} points) gathered for "
+                        f"'{data_category_key}'. "
                         f"Consider retraining the relevant predictive models."
                     )
                     # Reset counter
@@ -166,17 +167,15 @@ class ArcRemediationLearner:
 
         except Exception as e:
             self.logger.error(
-                f"Failed to learn from remediation: {
-                    str(e)}", exc_info=True)
+                f"Failed to learn from remediation: {str(e)}", exc_info=True)
             # Do not re-raise, allow learner to continue if one entry fails
 
     def get_recommendation(
             self, error_context: Dict[str, Any]) -> Dict[str, Any]:
         """Generate remediation recommendations based on learned success patterns and AI predictions."""
         self.logger.info(
-            f"Getting recommendation for error_context: {
-                error_context.get(
-                    'error_type', 'Unknown')}")
+            f"Getting recommendation for error_context: {error_context.get('error_type', 'Unknown')}"
+        )
         recommendations = []
 
         error_type = error_context.get('error_type')
@@ -199,9 +198,9 @@ class ArcRemediationLearner:
                                 'recommended_action': action_pattern,
                                 'confidence_score': stats['success_rate'],
                                 'source': 'SuccessPattern',
-                                'details': f"Action '{action_pattern}' has a {
-                                    stats['success_rate']:.2%} success rate over {
-                                    stats['total_attempts']} attempts for error '{error_type}'.",
+                                    'details':
+                                    f"Action '{action_pattern}' has a {stats['success_rate']:.2%} success rate "
+                                    f"over {stats['total_attempts']} attempts for error '{error_type}'.",
                                 'supporting_evidence': {
                                     'error_type': error_type,
                                     **stats}})
@@ -241,22 +240,16 @@ class ArcRemediationLearner:
                                 'prediction',
                                 {}).get('failure_probability'),
                             'source': 'AIPredictor',
-                            'details': f"AI Predictor suggests high failure probability ({
-                                ai_prediction_output.get(
-                                    'prediction',
-                                    {}).get(
-                                    'failure_probability',
-                                    0):.2%}). Risk Level: {
-                                ai_prediction_output.get(
-                                    'risk_level',
-                                    'N/A')}",
+                            'details':
+                            f"AI Predictor suggests high failure probability ("
+                            f"{ai_prediction_output.get('prediction', {}).get('failure_probability', 0):.2%}). "
+                            f"Risk Level: {ai_prediction_output.get('risk_level', 'N/A')}",
                             'supporting_evidence': ai_prediction_output.get(
                                 'feature_impacts',
                                 {})})
             except Exception as e_predictor:
                 self.logger.error(
-                    f"Error calling ArcPredictor: {
-                        str(e_predictor)}", exc_info=True)
+                    f"Error calling ArcPredictor: {str(e_predictor)}", exc_info=True)
 
         recommendations.extend(ai_recommendations)
 
@@ -303,8 +296,7 @@ class ArcRemediationLearner:
             return context_summary
         except Exception as e:
             self.logger.error(
-                f"Feature extraction for context summary failed: {
-                    str(e)}", exc_info=True)
+                f"Feature extraction for context summary failed: {str(e)}", exc_info=True)
             return {"error": "context summarization failed"}
 
     # _calculate_success_rate is now integrated into learn_from_remediation's success_patterns update.
@@ -405,16 +397,18 @@ class ArcRemediationLearner:
                 'received_at': datetime.now().isoformat(),
             })
             self.logger.info(
-                f"Trainer signaled retrain_required for {model_type} " f"(queued={
-                    trainer_response.get('queued_count')}, threshold={
-                    trainer_response.get('threshold')}).")
+                f"Trainer signaled retrain_required for {model_type} "
+                f"(queued={trainer_response.get('queued_count')}, "
+                f"threshold={trainer_response.get('threshold')})."
+            )
             return
 
         if status == 'queued':
             self.logger.info(
-                f"Trainer buffered remediation sample for {model_type} " f"(queued={
-                    trainer_response.get('queued_count')}, threshold={
-                    trainer_response.get('threshold')}).")
+                f"Trainer buffered remediation sample for {model_type} "
+                f"(queued={trainer_response.get('queued_count')}, "
+                f"threshold={trainer_response.get('threshold')})."
+            )
             return
 
         # Unknown but non-error statuses: log and ignore

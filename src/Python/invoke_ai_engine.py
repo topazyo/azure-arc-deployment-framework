@@ -2,7 +2,11 @@ import json
 import argparse
 import sys
 import os
-from datetime import datetime
+import math
+from datetime import date, datetime
+
+import numpy as np
+import pandas as pd
 
 # Add src to path to allow direct import if called from elsewhere
 sys.path.insert(
@@ -316,6 +320,52 @@ def finalize_results(args, results):
     return results
 
 
+def normalize_json_payload(value):
+    """Convert numpy/pandas values into strict JSON-safe native types."""
+    if value is None:
+        return None
+
+    if isinstance(value, np.generic):
+        return normalize_json_payload(value.item())
+
+    if isinstance(value, np.ndarray):
+        return [normalize_json_payload(item) for item in value.tolist()]
+
+    if isinstance(value, pd.Timestamp):
+        return value.isoformat()
+
+    if isinstance(value, pd.Timedelta):
+        return value.total_seconds()
+
+    if isinstance(value, dict):
+        return {
+            str(key): normalize_json_payload(item)
+            for key, item in value.items()
+        }
+
+    if isinstance(value, (list, tuple, set)):
+        return [normalize_json_payload(item) for item in value]
+
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
+
+    if isinstance(value, float):
+        return value if math.isfinite(value) else None
+
+    if isinstance(value, (str, bool, int)):
+        return value
+
+    if pd.isna(value):
+        return None
+
+    return str(value)
+
+
+def emit_json(payload, file=sys.stdout):
+    """Write a normalized JSON payload to stdout or stderr."""
+    print(json.dumps(normalize_json_payload(payload), indent=4), file=file)
+
+
 def main():
     """
     Main entry point for the Azure Arc AI Engine script.
@@ -346,7 +396,7 @@ def main():
         apply_remediation_options(engine, args, results)
         results = finalize_results(args, results)
 
-        print(json.dumps(results, indent=4))
+        emit_json(results)
         sys.exit(ExitCode.SUCCESS)
 
     except SystemExit:
@@ -377,7 +427,7 @@ def main():
             server_name=servername_for_error,
             analysis_type=analysistype_for_error
         )
-        print(json.dumps(error_response, indent=4), file=sys.stderr)
+        emit_json(error_response, file=sys.stderr)
         sys.exit(ExitCode.GENERAL_ERROR)
 
 

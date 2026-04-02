@@ -35,25 +35,45 @@ Describe "Get-PredictiveInsights - Python Integration Tests" {
             $Global:ModelSetupSucceeded = $true
         }
 
-        # Determine Python executable
-        $PythonCandidates = if ($IsCoreCLR) { @('python3', 'python') } else { @('python', 'python3') }
+        # Determine a runnable Python executable and avoid Windows Store aliases that fail under Start-Process.
+        $PythonCandidates = if ($IsWindows) { @('python', 'python3') } elseif ($IsCoreCLR) { @('python3', 'python') } else { @('python', 'python3') }
         foreach ($pyCmd in $PythonCandidates) {
             try {
-                Get-Command $pyCmd -ErrorAction SilentlyContinue -OutVariable pythonCmdInfo | Out-Null
+                $pythonCmdInfo = Get-Command $pyCmd -ErrorAction SilentlyContinue
                 if ($pythonCmdInfo) {
-                    $Global:PythonExePath = $pythonCmdInfo.Source
-                    Write-Information "Using Python executable at: $($Global:PythonExePath)"
-                    break
+                    $candidatePath = $pythonCmdInfo.Source
+                    if ($candidatePath -like '*\WindowsApps\*.exe') {
+                        continue
+                    }
+
+                    & $candidatePath -c "import sys; print(sys.executable)" | Out-Null
+                    if ($LASTEXITCODE -eq 0) {
+                        $Global:PythonExePath = $candidatePath
+                        Write-Information "Using Python executable at: $($Global:PythonExePath)"
+                        break
+                    }
                 }
             } catch {}
         }
-        if (-not $Global:PythonExePath) { # Fallback if Get-Command fails but it's in PATH
+        if (-not $Global:PythonExePath) { # Fallback if Get-Command path discovery fails but the command is still runnable
+            foreach ($pyCmd_fallback in $PythonCandidates) {
+                try {
+                    & $pyCmd_fallback -c "import sys; print(sys.executable)" | Out-Null
+                    if ($LASTEXITCODE -eq 0) {
+                        $Global:PythonExePath = $pyCmd_fallback
+                        Write-Information "Using Python command (in PATH): $($Global:PythonExePath)"
+                        break
+                    }
+                } catch {}
+            }
+        }
+        if (-not $Global:PythonExePath) {
             foreach ($pyCmd_fallback in $PythonCandidates) {
                 try {
                     & $pyCmd_fallback --version -ErrorAction SilentlyContinue | Out-Null
                     if ($LASTEXITCODE -eq 0) {
-                        $Global:PythonExePath = $pyCmd_fallback # Use command name if full path not resolved but works
-                        Write-Information "Using Python command (in PATH): $($Global:PythonExePath)"
+                        $Global:PythonExePath = $pyCmd_fallback
+                        Write-Information "Using Python command (version probe fallback): $($Global:PythonExePath)"
                         break
                     }
                 } catch {}
@@ -135,6 +155,40 @@ Describe "Get-PredictiveInsights - Python Integration Tests" {
             $Global:PythonExePath = 'mock-python'
             Write-Warning "ARC_AI_INTEGRATION_MOCK auto-enabled because model setup failed (likely missing Python deps such as pandas)."
         }
+
+        # Confirm the real engine can complete a minimal invocation and return JSON before running the
+        # integration assertions. Do not silently fall back to mock mode here; surface real-engine failures.
+        if (-not $script:UseMockIntegration -and $Global:PythonExePath -and (Test-Path $Global:PythonAIScriptPath)) {
+            $smokeStdOutPath = Join-Path $env:TEMP ("ai_integration_smoke_stdout_{0}.txt" -f ([guid]::NewGuid().ToString('N')))
+            $smokeStdErrPath = Join-Path $env:TEMP ("ai_integration_smoke_stderr_{0}.txt" -f ([guid]::NewGuid().ToString('N')))
+            $smokeArgs = @(
+                "`"$($Global:PythonAIScriptPath)`"",
+                "--servername", "`"IntegrationSmoke`"",
+                "--analysistype", "`"Health`"",
+                "--modeldir", "`"$($Global:TempModelDir)`"",
+                "--configpath", "`"$($Global:ConfigFilePath)`"",
+                "--correlation-id", "`"integration-smoke`""
+            )
+
+            try {
+                $smokeProc = Start-Process -FilePath $Global:PythonExePath -ArgumentList $smokeArgs -Wait -PassThru -NoNewWindow -RedirectStandardOutput $smokeStdOutPath -RedirectStandardError $smokeStdErrPath
+                $smokeStdOut = Get-Content $smokeStdOutPath -Raw -ErrorAction SilentlyContinue
+                $smokeStdErr = Get-Content $smokeStdErrPath -Raw -ErrorAction SilentlyContinue
+
+                if ($smokeProc.ExitCode -ne 0) {
+                    throw "Real AI engine smoke test failed with exit code $($smokeProc.ExitCode). StdErr: $smokeStdErr"
+                }
+
+                $null = $smokeStdOut | ConvertFrom-Json -ErrorAction Stop
+            }
+            catch {
+                throw "Real AI engine smoke test failed before integration tests could run. $($_.Exception.Message)"
+            }
+            finally {
+                Remove-Item $smokeStdOutPath -ErrorAction SilentlyContinue
+                Remove-Item $smokeStdErrPath -ErrorAction SilentlyContinue
+            }
+        }
     }
 
     AfterAll {
@@ -177,8 +231,8 @@ Describe "Get-PredictiveInsights - Python Integration Tests" {
                 # Simulate successful python execution for success paths
                 Mock Start-Process {
                     param($FilePath, $ArgumentList, $Wait, $PassThru, $NoNewWindow, $RedirectStandardOutput, $RedirectStandardError)
-                    $analysisType = $ArgumentList[5].Trim('"')
-                    $serverName = $ArgumentList[3].Trim('"')
+                    $analysisType = $ArgumentList[4].Trim('"')
+                    $serverName = $ArgumentList[2].Trim('"')
                     $mockOut = @"
 {
     "overall_risk": { "score": 0.4, "level": "Low" },

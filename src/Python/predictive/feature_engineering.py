@@ -57,8 +57,7 @@ class FeatureEngineer:
 
         try:
             self.logger.info(
-                f"Starting feature engineering. Initial data shape: {
-                    data.shape}")
+                f"Starting feature engineering. Initial data shape: {data.shape}")
 
             # 1. Identify original features to keep based on config
             original_numerical_features = self.config.get(
@@ -95,10 +94,10 @@ class FeatureEngineer:
             statistical_features_df = self._create_statistical_features(data)
             interaction_features_df = self._create_interaction_features(data)
             self.logger.debug(
-                f"Created temporal features: {
-                    temporal_features_df.shape[1]}, statistical: {
-                    statistical_features_df.shape[1]}, interaction: {
-                    interaction_features_df.shape[1]}")
+                f"Created temporal features: {temporal_features_df.shape[1]}, "
+                f"statistical: {statistical_features_df.shape[1]}, "
+                f"interaction: {interaction_features_df.shape[1]}"
+            )
 
             # 3. Combine: original selected + new features
             # Ensure all parts have the same index as original_selected_df
@@ -122,8 +121,7 @@ class FeatureEngineer:
             # generated feature has same name as an original one)
             combined_df = combined_df.loc[:, ~combined_df.columns.duplicated()]
             self.logger.info(
-                f"Combined features. Shape before NaN handling: {
-                    combined_df.shape}")
+                f"Combined features. Shape before NaN handling: {combined_df.shape}")
 
             # 4. Handle Missing Values for the entire combined_df
             # Pass copy to avoid modifying combined_df inplace if
@@ -166,14 +164,12 @@ class FeatureEngineer:
             feature_metadata = self._create_feature_metadata(
                 selected_features_df)
             self.logger.info(
-                f"Feature engineering complete. Final features shape: {
-                    selected_features_df.shape}")
+                f"Feature engineering complete. Final features shape: {selected_features_df.shape}")
             return selected_features_df, feature_metadata
 
         except Exception as e:
             self.logger.error(
-                f"Feature engineering failed: {
-                    str(e)}", exc_info=True)
+                f"Feature engineering failed: {str(e)}", exc_info=True)
             raise
 
     def _create_temporal_features(self, data: pd.DataFrame) -> pd.DataFrame:
@@ -212,8 +208,7 @@ class FeatureEngineer:
 
         except Exception as e:
             self.logger.error(
-                f"Temporal feature creation failed: {
-                    str(e)}", exc_info=True)
+                f"Temporal feature creation failed: {str(e)}", exc_info=True)
             # Return empty DataFrame with original index on error
             return pd.DataFrame(index=data.index)
 
@@ -284,8 +279,7 @@ class FeatureEngineer:
 
         except Exception as e:
             self.logger.error(
-                f"Statistical feature creation failed: {
-                    str(e)}", exc_info=True)
+                f"Statistical feature creation failed: {str(e)}", exc_info=True)
             return pd.DataFrame(index=data.index)  # Return empty on error
 
         return statistical_features
@@ -349,8 +343,7 @@ class FeatureEngineer:
             # handled by _handle_missing_values.
         except Exception as e:
             self.logger.error(
-                f"Interaction feature creation failed: {
-                    str(e)}", exc_info=True)
+                f"Interaction feature creation failed: {str(e)}", exc_info=True)
             return pd.DataFrame(index=data.index)
 
         return interaction_features
@@ -358,8 +351,7 @@ class FeatureEngineer:
     def _handle_missing_values(self, df: pd.DataFrame) -> pd.DataFrame:
         """Handle missing values in the DataFrame based on configured strategies."""
         self.logger.info(
-            f"Handling missing values. Initial NaN count: {
-                df.isnull().sum().sum()}")
+            f"Handling missing values. Initial NaN count: {df.isnull().sum().sum()}")
         df_processed = df.copy()
 
         # Handle numerical NaNs
@@ -370,15 +362,13 @@ class FeatureEngineer:
                 df_processed[num_cols] = df_processed[num_cols].fillna(
                     fill_values_num)
                 self.logger.debug(
-                    f"Filled NaNs in numerical columns with mean: {
-                        fill_values_num.to_dict()}")
+                    f"Filled NaNs in numerical columns with mean: {fill_values_num.to_dict()}")
             elif self.numerical_nan_fill_strategy == 'median':
                 fill_values_num = df_processed[num_cols].median()
                 df_processed[num_cols] = df_processed[num_cols].fillna(
                     fill_values_num)
                 self.logger.debug(
-                    f"Filled NaNs in numerical columns with median: {
-                        fill_values_num.to_dict()}")
+                    f"Filled NaNs in numerical columns with median: {fill_values_num.to_dict()}")
             elif self.numerical_nan_fill_strategy == 'zero':
                 df_processed[num_cols] = df_processed[num_cols].fillna(0)
                 self.logger.debug("Filled NaNs in numerical columns with 0.")
@@ -387,12 +377,10 @@ class FeatureEngineer:
                 df_processed[num_cols] = df_processed[num_cols].fillna(
                     self.numerical_nan_fill_strategy)
                 self.logger.debug(
-                    f"Filled NaNs in numerical columns with constant: {
-                        self.numerical_nan_fill_strategy}.")
+                    f"Filled NaNs in numerical columns with constant: {self.numerical_nan_fill_strategy}.")
             else:
                 self.logger.warning(
-                    f"Unsupported numerical NaN fill strategy: {
-                        self.numerical_nan_fill_strategy}. NaNs may remain.")
+                    f"Unsupported numerical NaN fill strategy: {self.numerical_nan_fill_strategy}. NaNs may remain.")
 
         # Handle categorical NaNs
         cat_cols = df_processed.select_dtypes(
@@ -405,8 +393,7 @@ class FeatureEngineer:
                         df_processed[col] = df_processed[col].fillna(
                             mode_val[0])
                         self.logger.debug(
-                            f"Filled NaNs in categorical column '{col}' with mode: {
-                                mode_val[0]}.")
+                            f"Filled NaNs in categorical column '{col}' with mode: {mode_val[0]}.")
                     else:  # Series might be all NaN
                         df_processed[col] = df_processed[col].fillna(
                             'unknown')  # Fallback for all-NaN series
@@ -424,17 +411,18 @@ class FeatureEngineer:
                     f"Filled NaNs in categorical columns with '{fill_val_cat}'.")
             else:
                 self.logger.warning(
-                    f"Unsupported categorical NaN fill strategy: {
-                        self.categorical_nan_fill_strategy}. NaNs may remain.")
+                    f"Unsupported categorical NaN fill strategy: "
+                    f"{self.categorical_nan_fill_strategy}. NaNs may remain."
+                )
 
         final_nan_count = df_processed.isnull().sum().sum()
         self.logger.info(
             f"Missing value handling complete. Final NaN count: {final_nan_count}")
         if final_nan_count > 0:
             self.logger.warning(
-                f"NaNs still present after handling: \n{
-                    df_processed.isnull().sum()[
-                        df_processed.isnull().sum() > 0]}")
+                f"NaNs still present after handling: \n"
+                f"{df_processed.isnull().sum()[df_processed.isnull().sum() > 0]}"
+            )
         return df_processed
 
     def _scale_features(self, features: pd.DataFrame) -> pd.DataFrame:
@@ -456,15 +444,13 @@ class FeatureEngineer:
             scaler_key = 'standard_scaler'
             if scaler_key not in self.scalers:
                 self.logger.info(
-                    f"Fitting new StandardScaler for features: {
-                        list(numerical_cols)}")
+                    f"Fitting new StandardScaler for features: {list(numerical_cols)}")
                 self.scalers[scaler_key] = StandardScaler()
                 scaled_values = self.scalers[scaler_key].fit_transform(
                     features[numerical_cols])
             else:
                 self.logger.info(
-                    f"Using existing StandardScaler to transform features: {
-                        list(numerical_cols)}")
+                    f"Using existing StandardScaler to transform features: {list(numerical_cols)}")
                 try:
                     scaled_values = self.scalers[scaler_key].transform(
                         features[numerical_cols])
@@ -482,8 +468,7 @@ class FeatureEngineer:
 
         except Exception as e:
             self.logger.error(
-                f"Feature scaling failed: {
-                    str(e)}", exc_info=True)
+                f"Feature scaling failed: {str(e)}", exc_info=True)
             raise  # Re-raise to halt processing if scaling is critical
 
     def _encode_categorical_features(
@@ -550,14 +535,12 @@ class FeatureEngineer:
                     [encoded_df.drop(columns=[col]), encoded_part], axis=1)
 
             self.logger.info(
-                f"Categorical feature encoding complete. Shape after encoding: {
-                    encoded_df.shape}")
+                f"Categorical feature encoding complete. Shape after encoding: {encoded_df.shape}")
             return encoded_df
 
         except Exception as e:
             self.logger.error(
-                f"Feature encoding failed: {
-                    str(e)}", exc_info=True)
+                f"Feature encoding failed: {str(e)}", exc_info=True)
             raise  # Re-raise as this is critical
 
     def _align_target_and_features(self,
@@ -566,9 +549,9 @@ class FeatureEngineer:
                                                                       pd.Series]:
         """Aligns features and target by dropping rows where target is NaN, and ensures indices match."""
         self.logger.debug(
-            f"Aligning target and features. Initial shapes: Features {
-                features_df.shape}, Target {
-                target_series.shape}")
+            f"Aligning target and features. Initial shapes: Features {features_df.shape}, "
+            f"Target {target_series.shape}"
+        )
 
         # Ensure target is a Series and has a name for potential
         # merging/joining if needed
@@ -587,9 +570,7 @@ class FeatureEngineer:
         features_aligned = features_df.loc[target_clean.index]
 
         self.logger.debug(
-            f"Aligned shapes: Features {
-                features_aligned.shape}, Target {
-                target_clean.shape}")
+            f"Aligned shapes: Features {features_aligned.shape}, Target {target_clean.shape}")
         if len(features_aligned) != len(target_clean):
             # This should not happen if reindex/loc works correctly
             self.logger.error(
@@ -608,8 +589,7 @@ class FeatureEngineer:
         """Select most important features using statistical tests."""
         try:
             self.logger.info(
-                f"Starting feature selection. Initial number of features: {
-                    features.shape[1]}")
+                f"Starting feature selection. Initial number of features: {features.shape[1]}")
 
             if features.empty:
                 self.logger.warning(
@@ -622,8 +602,9 @@ class FeatureEngineer:
             if target.empty or len(target.unique(
             )) < 2 and self.feature_selection_score_func_name == 'f_classif':  # f_classif needs >=2 classes
                 self.logger.warning(
-                    f"Target variable for feature selection is empty or has insufficient unique values for {
-                        self.feature_selection_score_func_name}. Skipping selection.")
+                    f"Target variable for feature selection is empty or has insufficient unique values for "
+                    f"{self.feature_selection_score_func_name}. Skipping selection."
+                )
                 return features
 
             k_to_select = self.feature_selection_k
@@ -641,8 +622,9 @@ class FeatureEngineer:
                 self.feature_selection_score_func_name)
             if not score_func:
                 self.logger.warning(
-                    f"Invalid feature_selection_score_func: {
-                        self.feature_selection_score_func_name}. Defaulting to f_classif.")
+                    f"Invalid feature_selection_score_func: {self.feature_selection_score_func_name}. "
+                    f"Defaulting to f_classif."
+                )
                 score_func = f_classif
 
             # Ensure features are numeric and finite for SelectKBest
@@ -681,14 +663,14 @@ class FeatureEngineer:
                     "k_actual_for_selector is 0. SelectKBest might fail. Returning original numeric features.")
                 return numeric_features  # Or features, depending on desired fallback
 
-            selector_key = f"selector_k{k_actual_for_selector}_{
-                self.feature_selection_score_func_name}"
+            selector_key = f"selector_k{k_actual_for_selector}_{self.feature_selection_score_func_name}"
 
             current_selector: SelectKBest
             if selector_key not in self.feature_selectors:
                 self.logger.info(
-                    f"Fitting new SelectKBest (k={k_actual_for_selector}, score_func={
-                        self.feature_selection_score_func_name}).")
+                    f"Fitting new SelectKBest (k={k_actual_for_selector}, "
+                    f"score_func={self.feature_selection_score_func_name})."
+                )
                 current_selector = SelectKBest(
                     score_func=score_func, k=k_actual_for_selector)
                 try:
@@ -721,8 +703,7 @@ class FeatureEngineer:
 
         except Exception as e:
             self.logger.error(
-                f"Feature selection failed: {
-                    str(e)}", exc_info=True)
+                f"Feature selection failed: {str(e)}", exc_info=True)
             return features  # Fallback to returning all features
 
     def _create_feature_metadata(

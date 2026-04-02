@@ -131,7 +131,7 @@ function Test-NetworkValidation {
 
             # 7. Network Route Tests (if detailed output requested)
             if ($DetailedOutput) {
-                $routeResults = Test-NetworkRoute -ServerName $ServerName
+                $routeResults = Test-NetworkRoutes -ServerName $ServerName
                 $validationResults.Details += @{
                     Component = "Routes"
                     Results = $routeResults
@@ -154,7 +154,7 @@ function Test-NetworkValidation {
             }
 
             # Generate recommendations
-            $validationResults.Recommendations = Get-NetworkRecommendation -ValidationResults $validationResults.Details
+            $validationResults.Recommendations = Get-NetworkRecommendations -ValidationResults $validationResults.Details
         }
         catch {
             $validationResults.Status = "Error"
@@ -195,10 +195,12 @@ function Test-EndpointConnectivity {
             $endpointTimeout = $Timeout
 
             # Test TCP connectivity
-            $tcpTest = Invoke-Command -ComputerName $ServerName -ScriptBlock {
+            $tcpTest = Invoke-Command -ComputerName $ServerName -ArgumentList $endpointUrl, $endpointPort, $endpointTimeout -ScriptBlock {
+                param($RemoteEndpointUrl, $RemoteEndpointPort, $RemoteTimeout)
+
                 $tcpClient = New-Object System.Net.Sockets.TcpClient
-                $connection = $tcpClient.BeginConnect($using:endpointUrl, $using:endpointPort, $null, $null)
-                $success = $connection.AsyncWaitHandle.WaitOne($using:endpointTimeout * 1000, $true)
+                $connection = $tcpClient.BeginConnect($RemoteEndpointUrl, $RemoteEndpointPort, $null, $null)
+                $success = $connection.AsyncWaitHandle.WaitOne($RemoteTimeout * 1000, $true)
 
                 if ($success) {
                     $tcpClient.EndConnect($connection)
@@ -210,10 +212,12 @@ function Test-EndpointConnectivity {
 
             # Test HTTPS connectivity if TCP succeeds
             $httpsTest = if ($tcpTest) {
-                Invoke-Command -ComputerName $ServerName -ScriptBlock {
+                Invoke-Command -ComputerName $ServerName -ArgumentList $endpointUrl, $endpointTimeout -ScriptBlock {
+                    param($RemoteEndpointUrl, $RemoteTimeout)
+
                     try {
-                        $request = [System.Net.WebRequest]::Create("https://$using:endpointUrl")
-                        $request.Timeout = $using:endpointTimeout * 1000
+                        $request = [System.Net.WebRequest]::Create("https://$RemoteEndpointUrl")
+                        $request.Timeout = $RemoteTimeout * 1000
                         $request.Method = "HEAD"
 
                         $response = $request.GetResponse()
@@ -305,9 +309,11 @@ function Test-DNSResolution {
         foreach ($endpoint in $Endpoints) {
             $endpointUrl = $endpoint.Url -replace '\*', 'dc'  # Replace wildcard with 'dc' for testing
 
-            $dnsResult = Invoke-Command -ComputerName $ServerName -ScriptBlock {
+            $dnsResult = Invoke-Command -ComputerName $ServerName -ArgumentList $endpointUrl -ScriptBlock {
+                param($RemoteEndpointUrl)
+
                 try {
-                    $resolution = Resolve-DnsName -Name $using:endpointUrl -ErrorAction Stop
+                    $resolution = Resolve-DnsName -Name $RemoteEndpointUrl -ErrorAction Stop
                     return @{
                         Success = $true
                         IPs = $resolution | Where-Object { $_.Type -eq 'A' } | Select-Object -ExpandProperty IPAddress
@@ -623,8 +629,10 @@ function Test-NetworkPerformance {
             $endpointUrl = $endpoint.Url -replace '\*', 'dc'  # Replace wildcard with 'dc' for testing
 
             # Test network performance
-            $performanceTest = Invoke-Command -ComputerName $ServerName -ScriptBlock {
-                $pingResults = Test-Connection -ComputerName $using:endpointUrl -Count 10 -ErrorAction SilentlyContinue
+            $performanceTest = Invoke-Command -ComputerName $ServerName -ArgumentList $endpointUrl -ScriptBlock {
+                param($RemoteEndpointUrl)
+
+                $pingResults = Test-Connection -ComputerName $RemoteEndpointUrl -Count 10 -ErrorAction SilentlyContinue
 
                 if ($pingResults) {
                     $successCount = ($pingResults | Measure-Object).Count
@@ -645,7 +653,7 @@ function Test-NetworkPerformance {
                     for ($i = 0; $i -lt 5; $i++) {
                         $startTime = Get-Date
                         $tcpClient = New-Object System.Net.Sockets.TcpClient
-                        $connection = $tcpClient.BeginConnect($using:endpointUrl, 443, $null, $null)
+                        $connection = $tcpClient.BeginConnect($RemoteEndpointUrl, 443, $null, $null)
                         $success = $connection.AsyncWaitHandle.WaitOne(5000, $true)
                         $endTime = Get-Date
 
@@ -834,7 +842,7 @@ function Test-FirewallConfiguration {
     return $results
 }
 
-function Test-NetworkRoute {
+function Test-NetworkRoutes {
     [CmdletBinding()]
     [OutputType([hashtable])]
     param ([string]$ServerName)
@@ -925,7 +933,15 @@ function Test-NetworkRoute {
     return $results
 }
 
-function Get-NetworkRecommendation {
+function Test-NetworkRoute {
+    [CmdletBinding()]
+    [OutputType([hashtable])]
+    param ([string]$ServerName)
+
+    Test-NetworkRoutes -ServerName $ServerName
+}
+
+function Get-NetworkRecommendations {
     [CmdletBinding()]
     [OutputType([array])]
     param ([array]$ValidationResults)
@@ -1060,4 +1076,12 @@ function Get-NetworkRecommendation {
     }
 
     return $recommendations | Sort-Object -Property Priority
+}
+
+function Get-NetworkRecommendation {
+    [CmdletBinding()]
+    [OutputType([array])]
+    param ([array]$ValidationResults)
+
+    Get-NetworkRecommendations -ValidationResults $ValidationResults
 }

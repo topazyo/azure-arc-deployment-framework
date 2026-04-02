@@ -137,21 +137,21 @@ function Get-PredictiveInsights {
         }
 
         if ($forcePythonFail) {
-            try { & $PythonExecutable --version -ErrorAction SilentlyContinue -WarningAction SilentlyContinue | Out-Null } catch { Write-Verbose "Python probe failed during forced failure path for '$PythonExecutable'." }
-            try { & python3 --version -ErrorAction SilentlyContinue -WarningAction SilentlyContinue | Out-Null } catch { Write-Verbose "Fallback python3 probe failed during forced failure path." }
+            try { & $PythonExecutable --version 2>$null | Out-Null } catch { Write-Verbose "Python probe failed during forced failure path for '$PythonExecutable'." }
+            try { & python3 --version 2>$null | Out-Null } catch { Write-Verbose "Fallback python3 probe failed during forced failure path." }
             Write-Error "Python executable '$PythonExecutable' (and 'python3' if default) not found or not working. Please ensure Python is installed and in PATH, or specify the full path."
             throw "Python executable not found."
         }
 
         if (-not $pythonFound) {
             try {
-                & $PythonExecutable --version -ErrorAction SilentlyContinue -WarningAction SilentlyContinue | Out-Null
+                & $PythonExecutable --version 2>$null | Out-Null
                 if ($? -or $LASTEXITCODE -eq 0 -or $null -eq $LASTEXITCODE) { $pythonFound = $true }
             } catch { Write-Verbose "Primary Python probe failed for '$PythonExecutable'." }
 
             if (-not $pythonFound -and $PythonExecutable -eq "python") {
                 try {
-                    & python3 --version -ErrorAction SilentlyContinue -WarningAction SilentlyContinue | Out-Null
+                    & python3 --version 2>$null | Out-Null
                     if ($? -or $LASTEXITCODE -eq 0 -or $null -eq $LASTEXITCODE) {
                         $PythonExecutable = "python3"
                         $pythonFound = $true
@@ -179,7 +179,6 @@ function Get-PredictiveInsights {
 
         $arguments = @(
             "`"$aiEngineScript`"", # Ensure script path is quoted if it contains spaces
-            "-u", # Unbuffered output for predictable stdout handling
             "--servername", "`"$ServerName`"",
             "--analysistype", "`"$AnalysisType`""
         )
