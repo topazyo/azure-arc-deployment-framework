@@ -65,7 +65,17 @@ jobs:
 
       - name: Run Pester tests
         shell: pwsh
-        run: Invoke-Pester -Path ./tests/PowerShell -CI -OutputFormat NUnitXml -OutputFile test-results-ps.xml
+        run: |
+          $configuration = New-PesterConfiguration
+          $configuration.Run.Path = './tests/PowerShell'
+          $configuration.Run.PassThru = $true
+          $configuration.TestResult.Enabled = $true
+          $configuration.TestResult.OutputFormat = 'NUnitXml'
+          $configuration.TestResult.OutputPath = 'test-results-ps.xml'
+          $result = Invoke-Pester -Configuration $configuration
+          if (-not $result -or $result.FailedCount -gt 0) {
+            exit 1
+          }
 
       - name: Upload PowerShell test results
         uses: actions/upload-artifact@v4

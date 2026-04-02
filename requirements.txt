@@ -1,8 +1,2 @@
-# Install the current package in editable mode
--e .
-
-# Install development dependencies (defined in setup.py)
-.[dev]
-
-# Install optional dependencies (defined in setup.py)
-.[optional]
+# Install the local package and all CI/dev extras in a single resolver pass.
+-e .[dev,optional]
