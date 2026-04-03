@@ -1840,22 +1840,16 @@ Describe 'Test-DeploymentValidation.ps1 Coverage' {
 # ---------------------------------------------------------------------------
 Describe 'Test-ExtensionHealth.ps1 Coverage' {
     BeforeAll {
-        # Stub Az cmdlets before dot-sourcing
-        if (-not (Get-Command Get-AzConnectedMachine -ErrorAction SilentlyContinue)) {
-            Set-Item Function:global:Get-AzConnectedMachine -Value {
-                param($Name, $ErrorAction)
-                throw 'Must be mocked in tests'
-            }
-        }
-        if (-not (Get-Command Get-AzConnectedMachineExtension -ErrorAction SilentlyContinue)) {
-            Set-Item Function:global:Get-AzConnectedMachineExtension -Value {
-                param($ResourceGroupName, $MachineName, $Name, $ErrorAction)
-                throw 'Must be mocked in tests'
-            }
-        }
-        if (-not (Get-Command Get-AzActivityLog -ErrorAction SilentlyContinue)) {
-            Set-Item Function:global:Get-AzActivityLog -Value { param() @() }
-        }
+        # Always create function stubs so Pester mock targets a function, not a module cmdlet on CI
+        Set-Item Function:global:Get-AzConnectedMachine -Value {
+            param($Name, $ErrorAction)
+            throw 'Must be mocked in tests'
+        } -Force
+        Set-Item Function:global:Get-AzConnectedMachineExtension -Value {
+            param($ResourceGroupName, $MachineName, $Name, $ErrorAction)
+            throw 'Must be mocked in tests'
+        } -Force
+        Set-Item Function:global:Get-AzActivityLog -Value { param() @() } -Force
 
         . (Join-Path $script:SrcRoot 'Validation\Test-ExtensionHealth.ps1')
     }

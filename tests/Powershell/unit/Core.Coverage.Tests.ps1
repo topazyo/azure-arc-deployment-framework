@@ -289,9 +289,10 @@ Describe 'Test-ArcConnectivity.ps1 Coverage' {
 # ---------------------------------------------------------------------------
 Describe 'Get-LastHeartbeat.ps1 Coverage' {
     BeforeAll {
-        if (-not (Get-Command Invoke-AzOperationalInsightsQuery -ErrorAction SilentlyContinue)) {
-            Set-Item 'Function:global:Invoke-AzOperationalInsightsQuery' -Value { param() [PSCustomObject]@{ Results = @() } }
-        }
+        # Always create function stubs so Pester mock targets a function, not a module cmdlet on CI
+        Set-Item 'Function:global:Get-AzConnectedMachine' -Value { param() $null } -Force
+        Set-Item 'Function:global:Get-AzConnectedMachineExtension' -Value { param() @() } -Force
+        Set-Item 'Function:global:Invoke-AzOperationalInsightsQuery' -Value { param() [PSCustomObject]@{ Results = @() } } -Force
         . (Join-Path $script:SrcRoot 'core\Get-LastHeartbeat.ps1')
     }
 
@@ -395,9 +396,6 @@ Describe 'Get-LastHeartbeat.ps1 Coverage' {
     }
 
     It 'Get-ArcAgentHeartbeat returns Healthy when state.json shows recent heartbeat' {
-        if (-not (Get-Command Get-AzConnectedMachine -ErrorAction SilentlyContinue)) {
-            Set-Item 'Function:global:Get-AzConnectedMachine' -Value { param() $null }
-        }
         Mock Get-Service {
             [PSCustomObject]@{ Name='himds'; Status='Running'; StartType='Automatic' }
         } -ParameterFilter { $Name -eq 'himds' }
@@ -412,9 +410,6 @@ Describe 'Get-LastHeartbeat.ps1 Coverage' {
     }
 
     It 'Get-ArcAgentHeartbeat returns NoHeartbeat when state.json has no lastHeartbeat' {
-        if (-not (Get-Command Get-AzConnectedMachine -ErrorAction SilentlyContinue)) {
-            Set-Item 'Function:global:Get-AzConnectedMachine' -Value { param() $null }
-        }
         Mock Get-Service {
             [PSCustomObject]@{ Name='himds'; Status='Running'; StartType='Automatic' }
         } -ParameterFilter { $Name -eq 'himds' }
@@ -465,12 +460,6 @@ Describe 'Get-LastHeartbeat.ps1 Coverage' {
     }
 
     It 'Get-ArcAgentHeartbeatDetails returns result when Az mock returns machine' {
-        if (-not (Get-Command Get-AzConnectedMachine -ErrorAction SilentlyContinue)) {
-            Set-Item 'Function:global:Get-AzConnectedMachine' -Value { param() $null }
-        }
-        if (-not (Get-Command Get-AzConnectedMachineExtension -ErrorAction SilentlyContinue)) {
-            Set-Item 'Function:global:Get-AzConnectedMachineExtension' -Value { param() @() }
-        }
         Mock Get-AzConnectedMachine {
             [PSCustomObject]@{
                 Name = 'TEST-SRV'
@@ -487,18 +476,12 @@ Describe 'Get-LastHeartbeat.ps1 Coverage' {
     }
 
     It 'Get-ArcAgentHeartbeatDetails handles Az exception gracefully' {
-        if (-not (Get-Command Get-AzConnectedMachine -ErrorAction SilentlyContinue)) {
-            Set-Item 'Function:global:Get-AzConnectedMachine' -Value { param() $null }
-        }
         Mock Get-AzConnectedMachine { throw 'Not authenticated' }
         $result = Get-ArcAgentHeartbeatDetails -ServerName 'TEST-SRV'
         $result.Error | Should -Not -BeNullOrEmpty
     }
 
     It 'Get-AMAHeartbeatDetails returns result with workspace query mocked' {
-        if (-not (Get-Command Invoke-AzOperationalInsightsQuery -ErrorAction SilentlyContinue)) {
-            Set-Item 'Function:global:Invoke-AzOperationalInsightsQuery' -Value { param() [PSCustomObject]@{ Results = @() } }
-        }
         Mock Invoke-AzOperationalInsightsQuery {
             [PSCustomObject]@{ Results = @() }
         }
@@ -577,9 +560,6 @@ Describe 'Get-LastHeartbeat.ps1 Coverage' {
     }
 
     It 'Get-ArcAgentHeartbeat falls back to Azure API when no state heartbeat' {
-        if (-not (Get-Command Get-AzConnectedMachine -ErrorAction SilentlyContinue)) {
-            Set-Item 'Function:global:Get-AzConnectedMachine' -Value { param() $null }
-        }
         Mock Get-Service {
             [PSCustomObject]@{ Name = 'himds'; Status = 'Running'; StartType = 'Automatic' }
         } -ParameterFilter { $Name -eq 'himds' }
@@ -686,9 +666,7 @@ Describe 'Invoke-TroubleshootingAnalysis.ps1 Coverage' {
 Describe 'Get-ArcRegistrationStatus.ps1 Coverage' {
     BeforeAll {
         foreach ($fn in @('Get-AzConnectedMachine','Get-AzHealthResource','Get-AzPolicyState','Get-AzActivityLog','Get-LocalAgentStatus','Test-ArcConnectivity','Get-ArcExtensions','Get-ArcResourceHealth','Get-ArcComplianceStatus')) {
-            if (-not (Get-Command $fn -ErrorAction SilentlyContinue)) {
-                Set-Item "Function:global:$fn" -Value { param() @{} }
-            }
+            Set-Item "Function:global:$fn" -Value { param() @{} } -Force
         }
         . (Join-Path $script:SrcRoot 'core\Get-ArcRegistrationStatus.ps1')
     }
@@ -2345,10 +2323,8 @@ Describe 'Get-AMAConfig.ps1 additional branch coverage' {
 # ---------------------------------------------------------------------------
 Describe 'Get-ArcRegistrationStatus.ps1 additional branches' {
     BeforeAll {
-        foreach ($fn in @('Get-AzConnectedMachineExtension','Get-AzHealthResource','Get-AzPolicyState','Get-AzActivityLog')) {
-            if (-not (Get-Command $fn -ErrorAction SilentlyContinue)) {
-                Set-Item "Function:global:$fn" -Value { param() $null }
-            }
+        foreach ($fn in @('Get-AzConnectedMachine','Get-AzConnectedMachineExtension','Get-AzHealthResource','Get-AzPolicyState','Get-AzActivityLog')) {
+            Set-Item "Function:global:$fn" -Value { param() $null } -Force
         }
         if (-not (Get-Command Get-ArcRegistrationStatus -ErrorAction SilentlyContinue)) {
             . (Join-Path $script:SrcRoot 'core\Get-ArcRegistrationStatus.ps1')
@@ -3043,24 +3019,18 @@ Describe 'Invoke-ArcAnalysis helper function coverage' {
 # ---------------------------------------------------------------------------
 Describe 'Get-LastHeartbeat.ps1 sub-function direct coverage' {
     BeforeAll {
-        # Define properly-parameterised stubs so Pester's mock proxy inherits the right params
-        if (-not (Get-Command Get-AzConnectedMachine -ErrorAction SilentlyContinue)) {
-            function global:Get-AzConnectedMachine {
-                param([string]$Name, [string]$ResourceGroupName, $ErrorAction)
-                $null
-            }
+        # Always create function stubs so Pester mock targets a function, not a module cmdlet on CI
+        function global:Get-AzConnectedMachine {
+            param([string]$Name, [string]$ResourceGroupName, $ErrorAction)
+            $null
         }
-        if (-not (Get-Command Get-AzConnectedMachineExtension -ErrorAction SilentlyContinue)) {
-            function global:Get-AzConnectedMachineExtension {
-                param([string]$MachineName, [string]$Name, [string]$ResourceGroupName, $ErrorAction)
-                $null
-            }
+        function global:Get-AzConnectedMachineExtension {
+            param([string]$MachineName, [string]$Name, [string]$ResourceGroupName, $ErrorAction)
+            $null
         }
-        if (-not (Get-Command Invoke-AzOperationalInsightsQuery -ErrorAction SilentlyContinue)) {
-            function global:Invoke-AzOperationalInsightsQuery {
-                param([string]$WorkspaceId, [string]$Query, $ErrorAction)
-                $null
-            }
+        function global:Invoke-AzOperationalInsightsQuery {
+            param([string]$WorkspaceId, [string]$Query, $ErrorAction)
+            $null
         }
         . (Join-Path $script:SrcRoot 'core\Get-LastHeartbeat.ps1')
     }
