@@ -627,18 +627,13 @@ Describe 'Get-EventLogWarnings.ps1 Coverage' {
 # ---------------------------------------------------------------------------
 Describe 'Set-DataCollectionRules.ps1 Coverage' {
     BeforeAll {
-        # Pre-stub Azure cmdlets that may not be available in test environment
+        # Always create function stubs so Pester mock targets a function, not a module cmdlet on CI
         foreach ($fn in @('New-AzDataCollectionRule','New-AzDataCollectionRuleAssociation',
                           'Remove-AzDataCollectionRule','Remove-AzDataCollectionRuleAssociation',
                           'Get-AzDataCollectionRule','Update-AzDataCollectionRule')) {
-            if (-not (Get-Command $fn -ErrorAction SilentlyContinue)) {
-                Set-Item "Function:global:$fn" -Value { param() [PSCustomObject]@{ Id = '/subscriptions/sub-1/dcr-stub' } }
-            }
+            Set-Item "Function:global:$fn" -Value { param() [PSCustomObject]@{ Id = '/subscriptions/sub-1/dcr-stub' } } -Force
         }
-        # Stub Test-DataCollectionRule if not already defined
-        if (-not (Get-Command Test-DataCollectionRule -ErrorAction SilentlyContinue)) {
-            Set-Item 'Function:global:Test-DataCollectionRule' -Value { param() @{ Success = $true } }
-        }
+        Set-Item 'Function:global:Test-DataCollectionRule' -Value { param() @{ Success = $true } } -Force
         . (Join-Path $script:SrcRoot 'monitoring\Set-DataCollectionRules.ps1')
     }
 
