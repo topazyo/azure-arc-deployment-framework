@@ -195,23 +195,23 @@ def find_patterns(
         # Find correlated metric pairs
         if len(numeric_cols) >= 2:
             corr_matrix = data[numeric_cols].corr()
-            for i, col1 in enumerate(numeric_cols):
-                for j, col2 in enumerate(numeric_cols):
-                    if i < j:
-                        # Extract correlation value
-                        corr_val = float(
-                            corr_matrix.loc[col1, col2].item()
-                        )
-                        if abs(corr_val) > (1 - distance_threshold):
-                            patterns.append({
-                                'type': 'correlation',
-                                'metrics': [col1, col2],
-                                'correlation': corr_val,
-                                'strength': (
-                                    'strong'
-                                    if abs(corr_val) > 0.8 else 'moderate'
-                                )
-                            })
+            # Extract upper triangle to avoid redundant lookups
+            corr_values = corr_matrix.values
+            col_indices = list(range(len(numeric_cols)))
+            for i in col_indices:
+                for j in col_indices[i + 1:]:
+                    # Fetch correlation value once from matrix (vectorized)
+                    corr_val = float(corr_values[i, j])
+                    if abs(corr_val) > (1 - distance_threshold):
+                        patterns.append({
+                            'type': 'correlation',
+                            'metrics': [numeric_cols[i], numeric_cols[j]],
+                            'correlation': corr_val,
+                            'strength': (
+                                'strong'
+                                if abs(corr_val) > 0.8 else 'moderate'
+                            )
+                        })
 
     elif algorithm == 'clustering':
         # Simple change-point detection
