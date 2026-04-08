@@ -433,3 +433,6 @@ docs/adr/
 
 # Diagnostics output
 Diagnostics/
+
+# Local environment variable files
+.env
