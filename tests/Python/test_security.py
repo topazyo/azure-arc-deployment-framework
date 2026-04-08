@@ -555,7 +555,7 @@ class TestSecurityIntegration:
         sensitive_config = {
             "server": "prod-server",
             "auth": {
-                "api_key": "sk-1234567890abcdef",
+                "api_key": "test-placeholder-api-key-do-not-use",
                 "username": "admin",
                 "password": "supersecret"
             },
