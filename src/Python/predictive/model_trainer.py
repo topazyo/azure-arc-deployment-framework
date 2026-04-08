@@ -9,7 +9,7 @@ from sklearn.metrics import classification_report, confusion_matrix
 import joblib
 import os  # Added os import
 from datetime import datetime
-from typing import Dict, List, Tuple, Any, Optional  # Added Optional
+from typing import Dict, List, Tuple, Any, Optional
 from ..common.logging_config import get_logger
 
 

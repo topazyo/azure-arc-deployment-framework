@@ -13,10 +13,12 @@ sys.path.insert(
     0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../'))
 )
 
-from Python.predictive.predictive_analytics_engine import (  # noqa: E402
+# noqa: E402
+from Python.predictive.predictive_analytics_engine import (
     PredictiveAnalyticsEngine
 )
-from Python.common.resilience import (  # noqa: E402
+# noqa: E402
+from Python.common.resilience import (
     ExitCode,
     ErrorCategory,
     create_error_response,
