@@ -43,11 +43,15 @@ setup(
             'black>=21.5b2',
             'flake8>=3.9.0',
             'mypy>=0.910',
+            # Rate limiting for CLI operations; included in dev for security compliance
+            'ratelimit>=2.2.1',
         ],
         'optional': [
             'matplotlib>=3.4.0',
             'seaborn>=0.11.0',
             'jupyter>=1.0.0',
+            # Rate limiting library for potential future HTTP-based management endpoints
+            'ratelimit>=2.2.1',
         ],
     },
 )
