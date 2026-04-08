@@ -491,7 +491,7 @@ class SimpleRCAExplainer:
         self.logger = logging.getLogger('SimpleRCAExplainer')
 
     def _generate_factor_explanation(
-        self, cause: Dict[str, Any], incident_data: Dict[str, Any]
+        self, cause: Dict[str, Any], _: Dict[str, Any]
     ) -> str:
         # Helper to generate explanation for a single cause
         return (

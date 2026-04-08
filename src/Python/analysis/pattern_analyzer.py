@@ -101,7 +101,7 @@ class PatternAnalyzer:
             for col in numerical_cols:
                 if col == 'day_of_week':
                     continue
-                daily_agg = df.groupby(pd.to_datetime(df['timestamp']).dt.date)[col].mean()  # Aggregate to daily first
+                daily_agg = df.groupby(pd.to_datetime(df['timestamp']).dt.date)[col].mean()
                 if len(daily_agg) < 14:  # Need at least 2 weeks of daily data for weekly seasonality
                     results["seasonality_strength"][col] = 0.0
                     continue
@@ -661,7 +661,7 @@ class PatternAnalyzer:
                 current_metric_data = series_data[valid_indices]
 
                 try:
-                    slope, intercept, r_value, p_value, stderr = linregress(current_time_numeric, current_metric_data)
+                    slope, _, r_value, p_value, stderr = linregress(current_time_numeric, current_metric_data)
                     direction = 'stable'
                     if slope > slope_significance_threshold:
                         direction = 'increasing'

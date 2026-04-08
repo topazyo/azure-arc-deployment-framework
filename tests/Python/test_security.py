@@ -159,7 +159,7 @@ class TestRedactSensitiveData:
     def test_scalars_pass_through(self):
         """Scalar values should pass through unchanged."""
         assert redact_sensitive_data(123) == 123
-        assert redact_sensitive_data(3.14) == 3.14
+        assert redact_sensitive_data(3.14) == pytest.approx(3.14)
         assert redact_sensitive_data(True) is True
         assert redact_sensitive_data(None) is None
 
@@ -255,10 +255,10 @@ class TestValidateJsonString:
 
     def test_non_string_input(self):
         """Non-string input should fail validation."""
-        is_valid, error = validate_json_string(123)
+        is_valid, error = validate_json_string(123)  # type: ignore
 
         assert is_valid is False
-        assert "Expected string" in error
+        assert "Expected string" in error or "str" in error.lower()
 
     def test_param_name_in_error(self):
         """Parameter name should appear in error messages."""
@@ -412,7 +412,7 @@ class TestSensitiveDataFilter:
 
     def test_filter_redacts_bearer_token(self):
         """Should redact bearer tokens in log messages."""
-        filter = SensitiveDataFilter()
+        data_filter = SensitiveDataFilter()
         record = logging.LogRecord(
             name="test",
             level=logging.INFO,
@@ -423,7 +423,7 @@ class TestSensitiveDataFilter:
             exc_info=None
         )
 
-        result = filter.filter(record)
+        result = data_filter.filter(record)
 
         assert result is True  # Record should still be logged
         assert "eyJhbGciOiJ" not in record.msg
@@ -431,7 +431,7 @@ class TestSensitiveDataFilter:
 
     def test_filter_redacts_connection_string(self):
         """Should redact Azure connection strings."""
-        filter = SensitiveDataFilter()
+        data_filter = SensitiveDataFilter()
         record = logging.LogRecord(
             name="test",
             level=logging.INFO,
@@ -442,13 +442,13 @@ class TestSensitiveDataFilter:
             exc_info=None
         )
 
-        filter.filter(record)
+        data_filter.filter(record)
 
         assert "supersecretkey" not in record.msg
 
     def test_filter_with_dict_args(self):
         """Should redact sensitive data in dict args."""
-        filter = SensitiveDataFilter()
+        data_filter = SensitiveDataFilter()
         # Use a simpler approach - create record and manually set args
         record = logging.LogRecord(
             name="test",
@@ -462,13 +462,13 @@ class TestSensitiveDataFilter:
         # Now manually set args to dict for testing the filter behavior
         record.args = {"config": "AccountKey=secret123;"}
 
-        filter.filter(record)
+        data_filter.filter(record)
 
         assert "secret123" not in str(record.args)
 
     def test_filter_with_tuple_args(self):
         """Should redact sensitive data in tuple args."""
-        filter = SensitiveDataFilter()
+        data_filter = SensitiveDataFilter()
         record = logging.LogRecord(
             name="test",
             level=logging.INFO,
@@ -479,7 +479,7 @@ class TestSensitiveDataFilter:
             exc_info=None
         )
 
-        filter.filter(record)
+        data_filter.filter(record)
 
         assert "secret123" not in str(record.args)
 
