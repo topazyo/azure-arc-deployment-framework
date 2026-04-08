@@ -255,4 +255,4 @@ class TestPredictiveAnalyticsEngine:
             assert "overall_risk" in risk_analysis
             assert "score" in risk_analysis["overall_risk"]
             assert "recommendations" in risk_analysis
-            assert len(risk_analysis["recommendations"]) >= 0 # Can be empty if no conditions met
+            assert len(risk_analysis["recommendations"]) > 0

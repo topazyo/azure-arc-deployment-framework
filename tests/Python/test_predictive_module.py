@@ -158,7 +158,7 @@ class TestArcRemediationLearner:
         assert pattern_key in arl.success_patterns
         assert arl.success_patterns[pattern_key]['success_count'] == 1
         assert arl.success_patterns[pattern_key]['total_attempts'] == 1
-        assert arl.success_patterns[pattern_key]['success_rate'] == 1.0
+        assert arl.success_patterns[pattern_key]['success_rate'] == pytest.approx(1.0)
         assert len(arl.success_patterns[pattern_key]['contexts']) == 1
         context_summary_check = {k: sample_remediation_data['context'][k] for k in arl_config.get('remediation_learner_features', [])}
         assert arl.success_patterns[pattern_key]['contexts'][0] == context_summary_check
@@ -169,7 +169,7 @@ class TestArcRemediationLearner:
         arl.learn_from_remediation(failed_data)
         assert arl.success_patterns[pattern_key]['success_count'] == 1
         assert arl.success_patterns[pattern_key]['total_attempts'] == 2
-        assert arl.success_patterns[pattern_key]['success_rate'] == 0.5
+        assert arl.success_patterns[pattern_key]['success_rate'] == pytest.approx(0.5)
         assert len(arl.success_patterns[pattern_key]['contexts']) == 2 # Assuming it appends context for failure too for now
         # The trainer is called for successful outcomes in the current implementation of ArcRemediationLearner
         # If it's meant to be called for all outcomes, this assertion needs adjustment.
@@ -192,7 +192,7 @@ class TestArcRemediationLearner:
         rec1 = arl.get_recommendation(error_ctx1)
         assert rec1['recommended_action'] == "TestAction"
         assert rec1['source'] == 'SuccessPattern'
-        assert rec1['confidence_score'] == 0.8
+        assert rec1['confidence_score'] == pytest.approx(0.8)
 
         # Scenario 2: No high-success pattern, AIPredictor provides recommendation
         arl.success_patterns.clear() # Clear patterns
@@ -205,7 +205,7 @@ class TestArcRemediationLearner:
         error_ctx2 = {"error_type": "NewError", "cpu_usage": 0.9} # cpu_usage for predictor
         rec2 = arl.get_recommendation(error_ctx2)
         assert rec2['source'] == 'AIPredictor'
-        assert rec2['confidence_score'] == 0.7
+        assert rec2['confidence_score'] == pytest.approx(0.7)
         assert "Investigate AI Predicted High Failure Risk" in rec2['recommended_action']
 
 
@@ -518,7 +518,7 @@ class TestArcPredictor:
             # The value for the missing feature should be 0.0 as per prepare_features logic
             # Find index of missing_feature_name in ordered_names
             idx_missing = ordered_names.index(missing_feature_name)
-            assert raw_features_missing_array[0, idx_missing] == 0.0
+            assert raw_features_missing_array[0, idx_missing] == pytest.approx(0.0)
 
 
     def test_ap_all_predictions(self, comprehensive_predictive_config, trained_models_for_predictor_path, sample_telemetry_df_for_predictive):

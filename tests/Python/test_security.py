@@ -276,8 +276,8 @@ class TestParseJsonSafely:
         json_str = '{"cpu": 0.5, "memory": 0.7}'
         result = parse_json_safely(json_str)
 
-        assert result["cpu"] == 0.5
-        assert result["memory"] == 0.7
+        assert result["cpu"] == pytest.approx(0.5)
+        assert result["memory"] == pytest.approx(0.7)
 
     def test_invalid_json_raises(self):
         """Invalid JSON should raise InputValidationError."""
@@ -584,7 +584,7 @@ class TestSecurityIntegration:
         assert is_valid
 
         data = parse_json_safely(valid_json)
-        assert data["cpu_usage"] == 0.5
+        assert data["cpu_usage"] == pytest.approx(0.5)
 
     def test_secure_logger_integration(self):
         """Test secure logger filters sensitive data."""

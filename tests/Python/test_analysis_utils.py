@@ -95,7 +95,7 @@ class TestExtractFeatures:
         assert 'statistical_features' in result
         assert 'cpu' in result['statistical_features']
         assert 'mean' in result['statistical_features']['cpu']
-        assert result['statistical_features']['cpu']['mean'] == 30.0
+        assert result['statistical_features']['cpu']['mean'] == pytest.approx(30.0)
 
     def test_time_features(self):
         """Test extraction of time-based features."""

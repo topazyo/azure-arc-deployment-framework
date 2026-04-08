@@ -362,9 +362,9 @@ class TestTelemetryProcessor:
         # e.g. if config had "disk_io" but flat_features_sample didn't, matrix would have 0.0 for it.
         # This test assumes all configured features are in flat_features_sample or tests the 0.0 fill.
         # The current flat_features_sample includes all from default config for anomaly_detection_features
-        assert matrix[0,0] == 0.75
-        assert matrix[0,1] == 0.65
-        assert matrix[0,2] == 0.05
+        assert matrix[0,0] == pytest.approx(0.75)
+        assert matrix[0,1] == pytest.approx(0.65)
+        assert matrix[0,2] == pytest.approx(0.05)
 
 
     def test_tp_get_anomalous_features(self, comprehensive_config):
@@ -374,7 +374,7 @@ class TestTelemetryProcessor:
         feature_names = ["cpu", "mem", "disk"]
         anom_feats = tp._get_anomalous_features(feature_vec, feature_names)
         assert len(anom_feats) == len(feature_names)
-        assert anom_feats["cpu"] == 0.8
+        assert anom_feats["cpu"] == pytest.approx(0.8)
 
     def test_tp_calculate_derived_features(self, comprehensive_config, telemetry_df_for_processor):
         tp = TelemetryProcessor(config=comprehensive_config) # Pass full config
@@ -392,13 +392,13 @@ class TestTelemetryProcessor:
         df_no_req = df.copy()
         df_no_req['request_count'] = 0
         derived_no_req = tp._calculate_derived_features(df_no_req)
-        assert derived_no_req['error_rate'] == 0.0
+        assert derived_no_req['error_rate'] == pytest.approx(0.0)
 
         # Test insufficient data for std/slope (should be 0.0 or NaN based on implementation)
         df_short = df.head(1).copy()
         derived_short = tp._calculate_derived_features(df_short)
-        assert derived_short['cpu_usage_volatility'] == 0.0 # std of 1 point is 0 or NaN, current impl makes it 0.0
-        assert derived_short['memory_usage_trend_slope'] == 0.0 # Slope of 1 point is 0
+        assert derived_short['cpu_usage_volatility'] == pytest.approx(0.0) # std of 1 point is 0 or NaN, current impl makes it 0.0
+        assert derived_short['memory_usage_trend_slope'] == pytest.approx(0.0) # Slope of 1 point is 0
 
 
     def test_tp_calculate_period_trends(self, comprehensive_config, telemetry_df_for_processor):
@@ -416,7 +416,7 @@ class TestTelemetryProcessor:
 
         # Test with insufficient data
         trends_short = tp._calculate_period_trends(df.head(2)) # Needs 3 for linregress
-        assert trends_short["cpu_usage_avg"]["p_value"] == 1.0 # Default for insufficient
+        assert trends_short["cpu_usage_avg"]["p_value"] == pytest.approx(1.0) # Default for insufficient
         assert trends_short["cpu_usage_avg"]["significant"] == False
 
     def test_tp_detect_periodic_patterns(self, comprehensive_config, telemetry_df_for_processor):
