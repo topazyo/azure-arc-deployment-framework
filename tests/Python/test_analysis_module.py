@@ -140,6 +140,7 @@ class TestRootCauseAnalyzer:
         assert isinstance(rca.ml_model, SimpleRCAEstimator)
         assert isinstance(rca.explainer, SimpleRCAExplainer)
         assert isinstance(rca.pattern_analyzer, PatternAnalyzer)
+        assert rca.config is comprehensive_config
 
     def test_rca_analyze_incident_with_rules(self, comprehensive_config, sample_incident_data_for_rca):
         # Mock PatternAnalyzer's analyze_patterns for this unit test
@@ -153,6 +154,7 @@ class TestRootCauseAnalyzer:
         }
 
         rca = RootCauseAnalyzer(config=comprehensive_config)
+        assert rca.config is comprehensive_config  # Verify config is wired in
         rca.pattern_analyzer = mock_pa_instance # Inject the mock
 
         analysis_result = rca.analyze_incident(sample_incident_data_for_rca)
@@ -187,6 +189,7 @@ class TestRootCauseAnalyzer:
 
     def test_rca_no_matching_rules(self, comprehensive_config, sample_incident_data_for_rca):
         rca = RootCauseAnalyzer(config=comprehensive_config)
+        assert rca.config is comprehensive_config  # Verify config is wired in
         rca.pattern_analyzer = MagicMock(spec=PatternAnalyzer) # Mock pattern analyzer
         rca.pattern_analyzer.analyze_patterns.return_value = {} # Empty patterns
 
@@ -203,10 +206,12 @@ class TestPatternAnalyzer:
         # Pass only the pattern_analyzer relevant part of the config if it's nested that way in real use
         pa = PatternAnalyzer(config=comprehensive_config)
         assert pa is not None
+        assert pa.config is comprehensive_config  # Verify config is stored
         assert pa.dbscan_eps == comprehensive_config["dbscan_eps"]
 
     def test_pa_temporal_patterns(self, comprehensive_config, telemetry_df_for_pattern_analyzer):
         pa = PatternAnalyzer(config=comprehensive_config)
+        assert pa.config is comprehensive_config  # Verify config is wired in
         df = telemetry_df_for_pattern_analyzer.copy()
 
         daily_patterns = pa.analyze_daily_patterns(df)
@@ -233,6 +238,7 @@ class TestPatternAnalyzer:
 
     def test_pa_behavioral_patterns(self, comprehensive_config, telemetry_df_for_pattern_analyzer):
         pa = PatternAnalyzer(config=comprehensive_config)
+        assert pa.config is comprehensive_config  # Verify config is wired in
         # Ensure the configured behavioral_features exist in the test DataFrame
         df = telemetry_df_for_pattern_analyzer[comprehensive_config['behavioral_features']].copy()
 
@@ -249,6 +255,7 @@ class TestPatternAnalyzer:
 
     def test_pa_failure_patterns(self, comprehensive_config, telemetry_df_for_pattern_analyzer):
         pa = PatternAnalyzer(config=comprehensive_config)
+        assert pa.config is comprehensive_config  # Verify config is wired in
         df = telemetry_df_for_pattern_analyzer.copy()
 
         common_causes = pa.identify_common_failure_causes(df)
@@ -277,6 +284,7 @@ class TestPatternAnalyzer:
 
     def test_pa_performance_patterns(self, comprehensive_config, telemetry_df_for_pattern_analyzer):
         pa = PatternAnalyzer(config=comprehensive_config)
+        assert pa.config is comprehensive_config  # Verify config is wired in
         df = telemetry_df_for_pattern_analyzer.copy()
 
         resource_usage = pa.analyze_resource_usage_patterns(df)
@@ -303,9 +311,11 @@ class TestTelemetryProcessor:
     def test_tp_init(self, comprehensive_config):
         tp = TelemetryProcessor(config=comprehensive_config)
         assert tp is not None
+        assert tp.config is comprehensive_config  # Verify config is stored
 
     def test_tp_process_telemetry(self, comprehensive_config, telemetry_df_for_processor):
         tp = TelemetryProcessor(config=comprehensive_config)
+        assert tp.config is comprehensive_config  # Verify config is wired in
         telemetry_list_of_dicts = telemetry_df_for_processor.to_dict(orient='records')
         processed_output = tp.process_telemetry(telemetry_list_of_dicts) # Renamed from processed_data
         assert "processed_data" in processed_output # Cleaned DataFrame
@@ -317,7 +327,9 @@ class TestTelemetryProcessor:
         assert isinstance(processed_output["flattened_features"], dict)
 
     def test_tp_handle_missing_values(self, comprehensive_config, telemetry_df_for_processor):
-        tp_mean = TelemetryProcessor(config={"numerical_nan_fill_strategy": "mean", "categorical_nan_fill_strategy": "unknown"})
+        mean_config = {"numerical_nan_fill_strategy": "mean", "categorical_nan_fill_strategy": "unknown"}
+        tp_mean = TelemetryProcessor(config=mean_config)
+        assert tp_mean.config is mean_config  # Verify custom config is stored
         df_mean_filled = tp_mean._handle_missing_values(telemetry_df_for_processor.copy())
         assert not df_mean_filled['disk_usage'].isnull().any() # Was NaN, check if filled
         assert df_mean_filled['categorical_feat'].iloc[2] == 'unknown' # Was NaN
@@ -333,6 +345,7 @@ class TestTelemetryProcessor:
 
     def test_tp_prepare_feature_matrix(self, comprehensive_config, telemetry_df_for_processor):
         tp = TelemetryProcessor(config=comprehensive_config)
+        assert tp.config is comprehensive_config  # Verify config is wired in
         # Simulate a flat dictionary of features as expected by the new _prepare_feature_matrix
         # This flat dict would be the output of _extract_features (which itself is complex)
         flat_features_sample = {
@@ -356,6 +369,7 @@ class TestTelemetryProcessor:
 
     def test_tp_get_anomalous_features(self, comprehensive_config):
         tp = TelemetryProcessor(config=comprehensive_config)
+        assert tp.config is comprehensive_config  # Verify config is wired in
         feature_vec = np.array([0.8, 0.2, 0.5])
         feature_names = ["cpu", "mem", "disk"]
         anom_feats = tp._get_anomalous_features(feature_vec, feature_names)
@@ -364,6 +378,7 @@ class TestTelemetryProcessor:
 
     def test_tp_calculate_derived_features(self, comprehensive_config, telemetry_df_for_processor):
         tp = TelemetryProcessor(config=comprehensive_config) # Pass full config
+        assert tp.config is comprehensive_config  # Verify config is wired in
         df = telemetry_df_for_processor.copy()
         derived = tp._calculate_derived_features(df)
 
@@ -388,6 +403,7 @@ class TestTelemetryProcessor:
 
     def test_tp_calculate_period_trends(self, comprehensive_config, telemetry_df_for_processor):
         tp = TelemetryProcessor(config=comprehensive_config)
+        assert tp.config is comprehensive_config  # Verify config is wired in
         df = telemetry_df_for_processor.copy()
         # Ensure 'trend_features' from config are present in df
         trends = tp._calculate_period_trends(df)
