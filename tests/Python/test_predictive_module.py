@@ -246,9 +246,9 @@ class TestArcRemediationLearner:
                     break
             assert not retraining_message_found_early, "Retraining message logged too early"
 
-            # Call 3: Should trigger
+            # Call 3: Should trigger threshold and reset counter (reset is performed by learn_from_remediation above)
             arl.learn_from_remediation({**sample_remediation_data, "error_type": "ErrorType3", "outcome": "success"})
-            assert arl.new_data_counter.get(data_category_key, 0) == 0 # Counter reset
+            assert arl.new_data_counter.get(data_category_key, 0) == 0  # Verify counter was reset to 0 by learn_from_remediation
 
             retraining_message_found_on_trigger = False
             # Using the threshold from the config for the log message check
