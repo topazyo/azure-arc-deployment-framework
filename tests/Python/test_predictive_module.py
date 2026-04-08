@@ -248,7 +248,9 @@ class TestArcRemediationLearner:
 
             # Call 3: Should trigger threshold and reset counter (reset is performed by learn_from_remediation above)
             arl.learn_from_remediation({**sample_remediation_data, "error_type": "ErrorType3", "outcome": "success"})
-            assert arl.new_data_counter.get(data_category_key, 0) == 0  # Verify counter was reset to 0 by learn_from_remediation
+            # Read counter value into a variable first (counter was reset by learn_from_remediation, not by this read)
+            counter_after_threshold = arl.new_data_counter.get(data_category_key, 0)
+            assert counter_after_threshold == 0
 
             retraining_message_found_on_trigger = False
             # Using the threshold from the config for the log message check
