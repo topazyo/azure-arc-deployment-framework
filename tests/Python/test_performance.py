@@ -228,12 +228,12 @@ class TestRedactionPerformance:
         data = {
             "server": "PROD-001",
             "cpu_usage": 0.75,
-            "credential": "should-be-redacted",
+            "credential": "test-placeholder-credential",
             "nested": {
-                "api_key": "secret-value",
+                "api_key": "test-placeholder-api-key",
                 "healthy": True,
                 "deep": {
-                    "password": "another-secret",
+                    "password": "test-placeholder-secret",
                     "metric": 42,
                 },
             },

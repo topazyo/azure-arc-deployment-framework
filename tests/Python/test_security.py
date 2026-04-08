@@ -83,8 +83,8 @@ class TestRedactSensitiveData:
         """Should redact sensitive values in flat dictionary."""
         data = {
             "username": "admin",
-            "password": "secret123",
-            "api_key": "abc123xyz",
+            "password": "test-placeholder-secret-do-not-use",
+            "api_key": "test-placeholder-api-key-do-not-use",
             "server": "test-server"
         }
         result = redact_sensitive_data(data)
@@ -114,8 +114,8 @@ class TestRedactSensitiveData:
     def test_redact_list_of_dicts(self):
         """Should redact in lists containing dictionaries."""
         data = [
-            {"name": "server1", "password": "pass1"},
-            {"name": "server2", "password": "pass2"}
+            {"name": "server1", "password": "test-placeholder-pass1"},
+            {"name": "server2", "password": "test-placeholder-pass2"}
         ]
         result = redact_sensitive_data(data)
 
@@ -150,7 +150,7 @@ class TestRedactSensitiveData:
         for i in range(1, 30):
             current[f"level{i}"] = {}
             current = current[f"level{i}"]
-        current["password"] = "secret"
+        current["password"] = "test-placeholder-secret"
 
         # With limited depth, should not crash
         result = redact_sensitive_data(data, max_depth=10)
@@ -169,7 +169,7 @@ class TestSafeJsonForLogging:
 
     def test_basic_serialization(self):
         """Should serialize and redact data."""
-        data = {"user": "admin", "password": "secret"}
+        data = {"user": "admin", "password": "test-placeholder-secret"}
         result = safe_json_for_logging(data)
 
         parsed = json.loads(result)
@@ -557,9 +557,9 @@ class TestSecurityIntegration:
             "auth": {
                 "api_key": "test-placeholder-api-key-do-not-use",
                 "username": "admin",
-                "password": "supersecret"
+                "password": "test-placeholder-secret-do-not-use"
             },
-            "connection_string": "AccountKey=secretkey123;"
+            "connection_string": "AccountKey=test-placeholder-key;"
         }
 
         # Redact for logging
