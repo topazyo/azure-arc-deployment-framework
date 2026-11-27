@@ -436,3 +436,6 @@ Diagnostics/
 
 # Local environment variable files
 .env
+
+# oh-my-claudecode local state
+.omc/
