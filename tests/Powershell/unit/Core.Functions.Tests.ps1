@@ -232,13 +232,11 @@ Describe "Core Deployment Functions" {
         }
 
         Mock Test-Path { param($Path) return $true } # Default mock for Test-Path
-        Mock ConvertFrom-SecureString { param($SecureString) return "PlainTextSecret" } # Mock secure string conversion
 
         # Mock for the external script/command execution for azcmagent
         # We are not actually executing azcmagent, just checking the command construction and ShouldProcess
         BeforeEach {
             Mock Test-Path { param($Path) return $true }
-            Mock ConvertFrom-SecureString { param($SecureString) return "PlainTextSecret" }
             $Global:ShouldProcessPreference = $null
             $ConfirmPreference = 'None'
         }
@@ -265,7 +263,7 @@ Describe "Core Deployment Functions" {
                 -Tags $tags -CorrelationId $correlationId -Cloud $cloud -ProxyUrl $proxyUrl -ProxyBypass $proxyBypass `
                 -ServicePrincipalAppId $spAppId -ServicePrincipalSecret $spSecret -AzcmagentPath $script:azcmagentPath -Confirm:$false
 
-            $result.OnboardingCommand | Should -Match ([regex]::Escape("--service-principal-id `"$spAppId`" --service-principal-secret `"PlainTextSecret`""))
+            $result.OnboardingCommand | Should -Match ([regex]::Escape("--service-principal-id `"$spAppId`" --service-principal-secret `"<SERVICE_PRINCIPAL_SECRET>`""))
             $result.OnboardingCommand | Should -Match ([regex]::Escape("--correlation-id `"$correlationId`""))
             $result.OnboardingCommand | Should -Match ([regex]::Escape("--cloud `"$cloud`""))
             $result.OnboardingCommand | Should -Match ([regex]::Escape("--proxy-url `"$proxyUrl`""))

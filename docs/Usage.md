@@ -52,7 +52,8 @@ Predictive models are trained using Python scripts (e.g., `ArcModelTrainer` deta
     Write-Host "Run this command on MyWebServer01:"
     Write-Host $onboardingCommand.OnboardingCommand
 
-    # With optional parameters like tags, correlation ID, and Service Principal
+    # With optional parameters like tags, correlation ID, and Service Principal.
+    # The returned OnboardingCommand carries the <SERVICE_PRINCIPAL_SECRET> placeholder, never the secret.
     $securePassword = Read-Host -AsSecureString "Enter SPN Secret"
     New-ArcDeployment -ServerName "MyFileServer02" -ResourceGroupName "your-arc-rg" -SubscriptionId "your-subscription-id" -Location "westeurope" -TenantId "your-tenant-id" `
         -Tags @{OS="Windows"; Role="FileServer"} `
@@ -66,10 +67,10 @@ Predictive models are trained using Python scripts (e.g., `ArcModelTrainer` deta
     *   `-CorrelationId`: (Optional) A GUID for tracking the onboarding operation.
     *   `-Cloud`: (Optional) Specifies the Azure cloud (e.g., "AzureCloud", "AzureUSGovernment"). Defaults to "AzureCloud".
     *   `-ProxyUrl`, `-ProxyBypass`: (Optional) For configuring agent proxy settings.
-    *   `-ServicePrincipalAppId`, `-ServicePrincipalSecret`: (Optional) For onboarding using a Service Principal. The secret should be a `SecureString`.
+    *   `-ServicePrincipalAppId`, `-ServicePrincipalSecret`: (Optional) For onboarding using a Service Principal. The secret should be a `SecureString`. It is only checked for presence and is not placed in the generated command.
     *   `-AgentInstallationScriptPath`, `-AgentInstallationArguments`: (Optional) Path to a custom agent installation script and its arguments. Note: The current version only provides a placeholder for executing this script.
-*   **Output**: Returns a PSCustomObject containing the fully constructed `azcmagent connect` command (`OnboardingCommand`) and other details like `ServerName`, `ResourceGroupName`, etc.
-*   **Action Required**: The primary output is the `OnboardingCommand`. **The user must copy this command and execute it with appropriate permissions on the target server to complete the Azure Arc onboarding process.**
+*   **Output**: Returns a PSCustomObject containing the fully constructed `azcmagent connect` command (`OnboardingCommand`) and other details like `ServerName`, `ResourceGroupName`, etc. When `-ServicePrincipalAppId` and `-ServicePrincipalSecret` are supplied, the command carries the literal placeholder `<SERVICE_PRINCIPAL_SECRET>` in place of the secret. The secret is never converted to plain text or written to output.
+*   **Action Required**: The primary output is the `OnboardingCommand`. **The user must copy this command and execute it with appropriate permissions on the target server to complete the Azure Arc onboarding process.** If the command contains `<SERVICE_PRINCIPAL_SECRET>`, replace the placeholder with the service principal secret on the target server when executing it, and do not save the edited command.
 *   **Agent Installation**: The Azure Connected Machine agent must be installed on the target server *before* running the `azcmagent connect` command. This function can conceptually trigger a custom installation script if `-AgentInstallationScriptPath` is provided, but the execution is currently a placeholder.
 *   **Note**: This cmdlet supports `-WhatIf` and `-Confirm` for the conceptual execution of the agent installation script and the onboarding command (though direct execution of `azcmagent connect` is not performed by this script in the current version).
 
