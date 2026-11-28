@@ -147,7 +147,8 @@ Operational notes:
 - The cmdlet generates the onboarding command and returns it in `OnboardingCommand`.
 - If service principal onboarding is used, both `-ServicePrincipalAppId` and `-ServicePrincipalSecret` must be supplied.
 - `-ServicePrincipalSecret` is already typed as `SecureString` and must stay that way.
-- Treat the generated command as operational evidence and preserve the correlation ID when one is supplied.
+- With service principal onboarding, the generated command carries the placeholder `<SERVICE_PRINCIPAL_SECRET>` instead of the secret. Replace it with the secret on the target server when executing the command, and do not store the edited command.
+- Treat the generated command, with the placeholder still in it, as operational evidence and preserve the correlation ID when one is supplied. Never keep a copy with the secret filled in.
 
 ### Step 3: Execute onboarding on the target server
 
@@ -158,7 +159,7 @@ Execution checklist:
 1. Open an elevated PowerShell session on the target server.
 2. Confirm the Azure Connected Machine agent is installed and available.
 3. Apply any approved proxy settings required by the environment.
-4. Execute the generated onboarding command.
+4. Execute the generated onboarding command. If it contains `<SERVICE_PRINCIPAL_SECRET>`, replace the placeholder with the secret only in the command you run; record the generated command, not the edited one.
 5. Record stdout, stderr, and the timestamp of execution.
 
 ### Step 4: Record deployment evidence
@@ -406,7 +407,7 @@ Operational notes:
 
 - Apply only approved proxy values for the environment.
 - Preserve the exact proxy variant used with the deployment evidence.
-- If onboarding still fails, escalate with the generated command and proxy settings rather than paraphrasing them.
+- If onboarding still fails, escalate with the generated command (never a copy with a secret filled in) and proxy settings rather than paraphrasing them.
 
 #### Service principal onboarding example
 
@@ -432,8 +433,9 @@ $deployment.OnboardingCommand
 Operational notes:
 
 - `-ServicePrincipalSecret` must remain a `SecureString` input.
+- `OnboardingCommand` contains the placeholder `<SERVICE_PRINCIPAL_SECRET>`, not the secret. Replace the placeholder only on the target server at execution time.
 - Do not store the plain-text value in scripts, notes, or committed config files.
-- Preserve the correlation ID and the exact command variant used for incident review.
+- Preserve the correlation ID and the generated command variant, with the placeholder, for incident review.
 
 ### Remediation Telemetry And Retrain Export
 

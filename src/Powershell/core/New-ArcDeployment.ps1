@@ -32,7 +32,11 @@ Optional proxy URL passed to azcmagent.
 Optional service principal application identifier for non-interactive onboarding.
 
 .PARAMETER ServicePrincipalSecret
-Secure string secret paired with ServicePrincipalAppId.
+Secure string secret paired with ServicePrincipalAppId. It is only checked for
+presence: the secret is never converted to plain text or written to output. The
+returned command carries the placeholder <SERVICE_PRINCIPAL_SECRET> in its place,
+which the operator replaces with the secret on the target server when running
+the command.
 
 .OUTPUTS
 PSCustomObject
@@ -42,7 +46,9 @@ New-ArcDeployment -ServerName 'SERVER01' -ResourceGroupName 'arc-rg' -Subscripti
 
 .NOTES
 The returned onboarding command is operational evidence and should be preserved
-with the deployment record.
+with the deployment record. For service principal onboarding it holds the
+<SERVICE_PRINCIPAL_SECRET> placeholder, never the secret, so the preserved command
+does not contain the credential.
 #>
 function New-ArcDeployment {
     [CmdletBinding(SupportsShouldProcess = $true, ConfirmImpact = 'High')]
@@ -143,13 +149,11 @@ function New-ArcDeployment {
         # Construct azcmagent connect command
         $connectCommand = "$AzcmagentPath connect --resource-group `"$ResourceGroupName`" --subscription-id `"$SubscriptionId`" --location `"$Location`" --tenant-id `"$TenantId`""
 
-        if ($ServicePrincipalAppId) {
-            # Convert SecureString to plain text for command line - this is a sensitive operation.
-            # In a real script, ensure this is handled with utmost care, possibly avoiding plain text exposure.
-            $plainTextSecret = ConvertFrom-SecureString -SecureString $ServicePrincipalSecret -AsPlainText
-            $connectCommand += " --service-principal-id `"$ServicePrincipalAppId`" --service-principal-secret `"$plainTextSecret`""
-            # Clear the plain text secret from memory as soon as possible
-            Clear-Variable plainTextSecret -ErrorAction SilentlyContinue
+        if ($hasServicePrincipalAppId) {
+            # The secret stays a SecureString and is never converted to plain text. The
+            # command carries an inert placeholder that the operator replaces with the
+            # secret on the target server when running the command.
+            $connectCommand += " --service-principal-id `"$ServicePrincipalAppId`" --service-principal-secret `"<SERVICE_PRINCIPAL_SECRET>`""
         }
 
         if ($CorrelationId) {
