@@ -27,7 +27,10 @@ jobs:
       - name: Run flake8 lint
         run: python -m flake8 src/Python
 
+      # Run pytest even when flake8 fails, so one run reports both lint and test
+      # results. The job still fails if either step fails; this is not a bypass.
       - name: Run pytest
+        if: ${{ !cancelled() }}
         run: python -m pytest tests/Python --junitxml=test-results-python.xml
 
       - name: Upload Python test results
