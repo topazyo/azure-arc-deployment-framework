@@ -91,14 +91,56 @@ jobs:
           $configuration.TestResult.Enabled = $true
           $configuration.TestResult.OutputFormat = 'NUnitXml'
           $configuration.TestResult.OutputPath = 'test-results-ps.xml'
+          # Tests tagged KnownDefect pin a defect that a later PR fixes; the next
+          # step requires each of them to keep failing. Every other test gates.
+          # Exclusion approved 2026-11-28 (remediation decision D-2); it is a tag
+          # filter bounded by the must-fail step, not continue-on-error.
+          $configuration.Filter.ExcludeTag = 'KnownDefect'
           $result = Invoke-Pester -Configuration $configuration
-          if (-not $result -or $result.FailedCount -gt 0) {
+          # A test file that fails discovery or a block setup is counted in
+          # FailedContainersCount, not FailedCount; both fail the job.
+          if (-not $result -or $result.FailedCount -gt 0 -or $result.FailedContainersCount -gt 0) {
             exit 1
           }
+
+      - name: Verify KnownDefect tests still fail
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        run: |
+          # Every test tagged KnownDefect must fail. A tagged test that passes
+          # means its defect was fixed without removing the tag, so the fix is
+          # not yet gating; remove the tag in the fixing PR. No tagged tests
+          # selected is a pass.
+          $ErrorActionPreference = 'Continue'
+          Import-Module Pester -RequiredVersion 5.7.1 -ErrorAction Stop
+          $configuration = New-PesterConfiguration
+          $configuration.Run.Path = './tests/PowerShell'
+          $configuration.Run.PassThru = $true
+          $configuration.TestResult.Enabled = $true
+          $configuration.TestResult.OutputFormat = 'NUnitXml'
+          $configuration.TestResult.OutputPath = 'test-results-ps-known-defect.xml'
+          $configuration.Filter.Tag = 'KnownDefect'
+          $result = Invoke-Pester -Configuration $configuration
+          if (-not $result -or $result.FailedContainersCount -gt 0) {
+            Write-Error 'The KnownDefect run did not complete.'
+            exit 1
+          }
+          # Tests outside the tag filter end as NotRun and are ignored here.
+          $notFailing = @($result.Tests | Where-Object { $_.Result -in 'Passed', 'Skipped', 'Inconclusive' })
+          if ($notFailing.Count -gt 0) {
+            $notFailing | ForEach-Object { Write-Host "KnownDefect test did not fail: $($_.ExpandedPath) [$($_.Result)]" }
+            Write-Error "$($notFailing.Count) KnownDefect test(s) did not fail; remove the tag from fixed tests."
+            exit 1
+          }
+          Write-Host "KnownDefect tests selected: $($result.FailedCount); all failed as required."
+          # Pester leaves $LASTEXITCODE at the failed count; the check above is the verdict.
+          exit 0
 
       - name: Upload PowerShell test results
         uses: actions/upload-artifact@v4
         if: always()
         with:
           name: powershell-test-results
-          path: test-results-ps.xml
+          path: |
+            test-results-ps.xml
+            test-results-ps-known-defect.xml
