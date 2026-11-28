@@ -3,6 +3,7 @@ Tests for the analysis utilities module.
 """
 import pandas as pd
 import numpy as np
+import pytest
 from datetime import datetime, timedelta
 
 # Import the utilities to test
