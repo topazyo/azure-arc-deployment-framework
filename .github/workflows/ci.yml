@@ -62,9 +62,9 @@ jobs:
         shell: pwsh
         run: Install-Module -Name PSScriptAnalyzer -Force -Scope CurrentUser
 
-      - name: Install Pester
+      - name: Install Pester 5.7.1
         shell: pwsh
-        run: Install-Module -Name Pester -Force -Scope CurrentUser -MinimumVersion 5.0
+        run: Install-Module -Name Pester -RequiredVersion 5.7.1 -Force -Scope CurrentUser -SkipPublisherCheck
 
       - name: Run PSScriptAnalyzer
         shell: pwsh
@@ -84,7 +84,7 @@ jobs:
           # changes non-terminating error behavior compared to local Pester runs.
           # Reset it here so the suite exercises the intended PowerShell contracts.
           $ErrorActionPreference = 'Continue'
-          Import-Module Pester -MinimumVersion 5.0 -ErrorAction Stop
+          Import-Module Pester -RequiredVersion 5.7.1 -ErrorAction Stop
           $configuration = New-PesterConfiguration
           $configuration.Run.Path = './tests/PowerShell'
           $configuration.Run.PassThru = $true
