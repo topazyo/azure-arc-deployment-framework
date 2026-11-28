@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, develop, "audit/**"]
+    branches: [main, develop, "audit/**", "chore/pr06-gate-proof"]
   pull_request:
     branches: [main, develop]
 
